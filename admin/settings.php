@@ -1,10 +1,11 @@
 <?php
 require_once '../includes/session.php';
 requireAdmin();
+require_once '../includes/lang.php';
 require_once '../config/db.php';
 require_once '../includes/currency.php';
 
-$pageTitle = 'Settings';
+$pageTitle = __('set_title');
 
 $settings = getSettings($pdo);
 $rate     = (float)($settings['exchange_rate']      ?? 90);
@@ -54,28 +55,26 @@ require_once '../includes/header.php';
 ?>
 
 <div class="page-header">
-    <h4 class="mb-1">Settings</h4>
-    <p class="text-muted small mb-0">Exchange rate and currency configuration</p>
+    <h4 class="mb-1"><?= __('set_title') ?></h4>
+    <p class="text-muted small mb-0"><?= __('set_sub') ?></p>
 </div>
 
 <div class="row g-3">
-    <!-- Exchange Rate Form -->
     <div class="col-md-5">
         <div class="card">
             <div class="card-header fw-semibold">
-                <i class="bi bi-currency-exchange me-2"></i>Exchange Rate
+                <i class="bi bi-currency-exchange me-2"></i><?= __('set_ex_rate') ?>
             </div>
             <div class="card-body">
                 <div class="alert alert-info py-2 small mb-3">
-                    <i class="bi bi-info-circle me-1"></i>
-                    This rate is used to convert between <strong>؋ AFN</strong> and the secondary currency on the dashboard and payment screens.
+                    <i class="bi bi-info-circle me-1"></i><?= __('set_rate_note') ?>
                 </div>
 
                 <form method="POST">
                     <input type="hidden" name="action" value="update_rate">
 
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Secondary Currency</label>
+                        <label class="form-label fw-semibold"><?= __('set_sec_currency') ?></label>
                         <select name="secondary_currency" class="form-select" id="secCurSelect" onchange="updateLabel()">
                             <?php foreach (CURRENCIES as $code => $info): ?>
                                 <?php if ($code === 'AFN') continue; ?>
@@ -88,7 +87,7 @@ require_once '../includes/header.php';
 
                     <div class="mb-4">
                         <label class="form-label fw-semibold">
-                            Rate: 1 <span id="secCurLabel"><?= htmlspecialchars($secCur) ?></span> =
+                            <?= __('set_rate_label') ?> <span id="secCurLabel"><?= htmlspecialchars($secCur) ?></span> =
                             <span class="text-primary">? ؋ AFN</span>
                         </label>
                         <div class="input-group">
@@ -101,15 +100,14 @@ require_once '../includes/header.php';
                     </div>
 
                     <button type="submit" class="btn btn-primary w-100">
-                        <i class="bi bi-check-lg me-2"></i>Update Exchange Rate
+                        <i class="bi bi-check-lg me-2"></i><?= __('set_update_rate') ?>
                     </button>
                 </form>
             </div>
         </div>
 
-        <!-- Live Converter -->
         <div class="card mt-3">
-            <div class="card-header fw-semibold"><i class="bi bi-calculator me-2"></i>Quick Converter</div>
+            <div class="card-header fw-semibold"><i class="bi bi-calculator me-2"></i><?= __('set_converter') ?></div>
             <div class="card-body">
                 <div class="row g-2 align-items-end">
                     <div class="col">
@@ -123,22 +121,28 @@ require_once '../includes/header.php';
                     </div>
                 </div>
                 <p class="text-muted small mt-2 mb-0">
-                    Current: 1 <?= htmlspecialchars($secCur) ?> = <strong><?= number_format($rate, 2) ?> ؋</strong>
+                    1 <?= htmlspecialchars($secCur) ?> = <strong><?= number_format($rate, 2) ?> ؋</strong>
                 </p>
             </div>
         </div>
     </div>
 
-    <!-- Rate History -->
     <div class="col-md-7">
         <div class="card">
-            <div class="card-header fw-semibold"><i class="bi bi-clock-history me-2"></i>Rate Change History</div>
+            <div class="card-header fw-semibold"><i class="bi bi-clock-history me-2"></i><?= __('set_history') ?></div>
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0 small">
-                    <thead><tr><th>Rate</th><th>Currency</th><th>Changed By</th><th>Date & Time</th></tr></thead>
+                    <thead>
+                        <tr>
+                            <th><?= __('nav_exchange') ?></th>
+                            <th><?= __('field_currency') ?></th>
+                            <th><?= __('set_changed_by') ?></th>
+                            <th><?= __('field_date') ?></th>
+                        </tr>
+                    </thead>
                     <tbody>
                         <?php if (empty($rateLog)): ?>
-                        <tr><td colspan="4" class="text-center text-muted py-4">No rate changes yet</td></tr>
+                        <tr><td colspan="4" class="text-center text-muted py-4"><?= __('set_no_history') ?></td></tr>
                         <?php else: ?>
                         <?php foreach ($rateLog as $i => $log): ?>
                         <tr>
@@ -147,7 +151,7 @@ require_once '../includes/header.php';
                             </td>
                             <td><?= htmlspecialchars($log['currency']) ?></td>
                             <td><?= htmlspecialchars($log['full_name']) ?></td>
-                            <td class="text-muted"><?= date('d M Y  H:i', strtotime($log['changed_at'])) ?></td>
+                            <td class="text-muted"><?= date('d M Y H:i', strtotime($log['changed_at'])) ?></td>
                         </tr>
                         <?php endforeach; ?>
                         <?php endif; ?>
@@ -156,15 +160,14 @@ require_once '../includes/header.php';
             </div>
         </div>
 
-        <!-- Currency reference -->
         <div class="card mt-3">
-            <div class="card-header fw-semibold">How Currencies Work in FZL</div>
+            <div class="card-header fw-semibold"><?= __('set_how_work') ?></div>
             <div class="card-body small text-muted">
                 <ul class="mb-0 ps-3">
-                    <li class="mb-1"><strong>؋ AFN (Afghani)</strong> is the primary currency — all product prices, invoice totals, and customer debt are stored in AFN.</li>
-                    <li class="mb-1">When recording a <strong>payment in USD</strong>, the amount is converted to AFN using the current exchange rate and that AFN value reduces the customer's debt.</li>
-                    <li class="mb-1">The <strong>dashboard</strong> shows all totals in ؋ AFN and also displays the equivalent in the secondary currency for reference.</li>
-                    <li>Update the exchange rate regularly to keep conversions accurate.</li>
+                    <li class="mb-1"><?= __('set_info_1') ?></li>
+                    <li class="mb-1"><?= __('set_info_2') ?></li>
+                    <li class="mb-1"><?= __('set_info_3') ?></li>
+                    <li><?= __('set_info_4') ?></li>
                 </ul>
             </div>
         </div>

@@ -1,6 +1,12 @@
 <?php
+date_default_timezone_set('Asia/Kabul');
+
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
+}
+// Default language
+if (!isset($_SESSION['lang'])) {
+    $_SESSION['lang'] = 'en';
 }
 
 function requireLogin() {

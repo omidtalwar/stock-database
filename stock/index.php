@@ -1,14 +1,15 @@
 <?php
 require_once '../includes/session.php';
 requireLogin();
+require_once '../includes/lang.php';
 require_once '../config/db.php';
 
-$pageTitle = 'Stock Log';
+$pageTitle = __('stock_title');
 
 $filter = $_GET['type'] ?? '';
 $where  = '';
 $params = [];
-if ($filter === 'in') { $where = "WHERE sl.type = 'in'"; }
+if ($filter === 'in')  { $where = "WHERE sl.type = 'in'"; }
 if ($filter === 'out') { $where = "WHERE sl.type = 'out'"; }
 
 $logs = $pdo->prepare("
@@ -27,21 +28,21 @@ require_once '../includes/header.php';
 
 <div class="page-header d-flex align-items-center justify-content-between">
     <div>
-        <h4 class="mb-1">Stock Log</h4>
-        <p class="text-muted small mb-0">All stock movements — in and out</p>
+        <h4 class="mb-1"><?= __('stock_title') ?></h4>
+        <p class="text-muted small mb-0"><?= __('stock_sub') ?></p>
     </div>
-    <a href="add.php" class="btn btn-primary"><i class="bi bi-plus-square me-2"></i>Stock In</a>
+    <a href="add.php" class="btn btn-primary"><i class="bi bi-plus-square me-2"></i><?= __('stock_in_btn') ?></a>
 </div>
 
 <div class="card mb-3">
     <div class="card-body py-2">
         <div class="d-flex gap-2">
-            <a href="index.php" class="btn btn-sm <?= !$filter ? 'btn-dark' : 'btn-light' ?>">All</a>
+            <a href="index.php" class="btn btn-sm <?= !$filter ? 'btn-dark' : 'btn-light' ?>"><?= __('btn_all') ?></a>
             <a href="?type=in" class="btn btn-sm <?= $filter === 'in' ? 'btn-success' : 'btn-light' ?>">
-                <i class="bi bi-arrow-down-circle me-1"></i>Stock In
+                <i class="bi bi-arrow-down-circle me-1"></i><?= __('stock_in') ?>
             </a>
             <a href="?type=out" class="btn btn-sm <?= $filter === 'out' ? 'btn-danger' : 'btn-light' ?>">
-                <i class="bi bi-arrow-up-circle me-1"></i>Stock Out
+                <i class="bi bi-arrow-up-circle me-1"></i><?= __('stock_out') ?>
             </a>
         </div>
     </div>
@@ -52,19 +53,19 @@ require_once '../includes/header.php';
         <table class="table table-hover align-middle mb-0">
             <thead>
                 <tr>
-                    <th>Product</th>
-                    <th>Size</th>
-                    <th>Color</th>
-                    <th>Type</th>
-                    <th>Qty</th>
-                    <th>Notes</th>
-                    <th>By</th>
-                    <th>Date</th>
+                    <th><?= __('prod_name') ?></th>
+                    <th><?= __('field_size') ?></th>
+                    <th><?= __('field_color') ?></th>
+                    <th><?= __('stock_type') ?></th>
+                    <th><?= __('field_quantity') ?></th>
+                    <th><?= __('field_notes') ?></th>
+                    <th><?= __('field_by') ?></th>
+                    <th><?= __('field_date') ?></th>
                 </tr>
             </thead>
             <tbody>
                 <?php if (empty($logs)): ?>
-                <tr><td colspan="8" class="text-center text-muted py-5">No stock movements yet</td></tr>
+                <tr><td colspan="8" class="text-center text-muted py-5"><?= __('stock_no_data') ?></td></tr>
                 <?php else: ?>
                 <?php foreach ($logs as $log): ?>
                 <tr>
@@ -74,11 +75,11 @@ require_once '../includes/header.php';
                     <td>
                         <?php if ($log['type'] === 'in'): ?>
                             <span class="badge bg-success-subtle text-success border border-success-subtle">
-                                <i class="bi bi-arrow-down-circle me-1"></i>IN
+                                <i class="bi bi-arrow-down-circle me-1"></i><?= __('stock_in') ?>
                             </span>
                         <?php else: ?>
                             <span class="badge bg-danger-subtle text-danger border border-danger-subtle">
-                                <i class="bi bi-arrow-up-circle me-1"></i>OUT
+                                <i class="bi bi-arrow-up-circle me-1"></i><?= __('stock_out') ?>
                             </span>
                         <?php endif; ?>
                     </td>

@@ -14,3 +14,5 @@ $pdo = new PDO(
         PDO::ATTR_EMULATE_PREPARES   => false,
     ]
 );
+// Afghanistan Standard Time (UTC+4:30)
+$pdo->exec("SET time_zone = '+04:30'");

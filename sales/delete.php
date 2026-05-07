@@ -1,13 +1,14 @@
 <?php
 require_once '../includes/session.php';
 requireAdmin();
+require_once '../includes/lang.php';
 require_once '../config/db.php';
 
 $id = (int)($_GET['id'] ?? 0);
 $sale = $pdo->prepare("SELECT * FROM sales WHERE id = ?");
 $sale->execute([$id]);
 $sale = $sale->fetch();
-if (!$sale) { $_SESSION['error'] = 'Invoice not found.'; header('Location: index.php'); exit; }
+if (!$sale) { $_SESSION['error'] = __('item_not_found'); header('Location: index.php'); exit; }
 
 $items = $pdo->prepare("SELECT * FROM sale_items WHERE sale_id = ?");
 $items->execute([$id]);
@@ -26,10 +27,10 @@ try {
     // Delete sale (cascade deletes items)
     $pdo->prepare("DELETE FROM sales WHERE id = ?")->execute([$id]);
     $pdo->commit();
-    $_SESSION['success'] = 'Invoice deleted and stock/debt reversed.';
+    $_SESSION['success'] = __('sale_deleted');
 } catch (Exception $e) {
     $pdo->rollBack();
-    $_SESSION['error'] = 'Failed to delete invoice.';
+    $_SESSION['error'] = __('del_failed');
 }
 header('Location: index.php');
 exit;

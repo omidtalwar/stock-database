@@ -1,12 +1,13 @@
 <?php
 require_once '../includes/session.php';
 requireLogin();
+require_once '../includes/lang.php';
 require_once '../config/db.php';
 
-$pageTitle = 'Add Stock';
+$pageTitle = __('stock_move_title');
 
-$products    = $pdo->query("SELECT id, name, size, color, quantity FROM products ORDER BY name ASC")->fetchAll();
-$preProduct  = (int)($_GET['product_id'] ?? 0);
+$products   = $pdo->query("SELECT id, name, size, color, quantity FROM products ORDER BY name ASC")->fetchAll();
+$preProduct = (int)($_GET['product_id'] ?? 0);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $product_id = (int)($_POST['product_id'] ?? 0);
@@ -15,16 +16,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $notes      = trim($_POST['notes'] ?? '');
 
     if (!$product_id) {
-        $_SESSION['error'] = 'Select a product.';
+        $_SESSION['error'] = __('stock_select_prod');
     } elseif ($quantity <= 0) {
-        $_SESSION['error'] = 'Quantity must be greater than 0.';
+        $_SESSION['error'] = __('fill_all_fields');
     } else {
         if ($type === 'out') {
             $current = $pdo->prepare("SELECT quantity FROM products WHERE id = ?");
             $current->execute([$product_id]);
             $currentQty = (int)$current->fetchColumn();
             if ($quantity > $currentQty) {
-                $_SESSION['error'] = "Cannot remove $quantity pcs. Only $currentQty available.";
+                $_SESSION['error'] = sprintf(__('stock_not_enough'), $quantity, $currentQty);
                 header('Location: add.php?product_id=' . $product_id);
                 exit;
             }
@@ -34,7 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $pdo->prepare("INSERT INTO stock_logs (product_id, type, quantity, notes, created_by) VALUES (?, ?, ?, ?, ?)")
             ->execute([$product_id, $type, $quantity, $notes, $_SESSION['user_id']]);
-        $_SESSION['success'] = 'Stock ' . ($type === 'in' ? 'added' : 'removed') . " ($quantity pcs).";
+        $_SESSION['success'] = ($type === 'in' ? __('stock_in') : __('stock_out')) . " — $quantity pcs";
         header('Location: index.php');
         exit;
     }
@@ -44,20 +45,22 @@ require_once '../includes/header.php';
 ?>
 
 <div class="page-header">
-    <a href="index.php" class="text-muted small"><i class="bi bi-arrow-left me-1"></i>Back to Stock Log</a>
-    <h4 class="mt-1 mb-0">Stock Movement</h4>
+    <a href="index.php" class="text-muted small">
+        <i class="bi bi-arrow-<?= isRTL() ? 'right' : 'left' ?> me-1"></i><?= __('nav_stock') ?>
+    </a>
+    <h4 class="mt-1 mb-0"><?= __('stock_move_title') ?></h4>
 </div>
 
 <div class="row justify-content-center">
     <div class="col-md-6">
         <div class="card">
-            <div class="card-header fw-semibold">Add / Remove Stock</div>
+            <div class="card-header fw-semibold"><?= __('stock_add_remove') ?></div>
             <div class="card-body">
                 <form method="POST">
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Product <span class="text-danger">*</span></label>
+                        <label class="form-label fw-semibold"><?= __('nav_products') ?> <span class="text-danger">*</span></label>
                         <select name="product_id" id="productSelect" class="form-select" required onchange="showStock()">
-                            <option value="">— Select Product —</option>
+                            <option value=""><?= __('stock_select_prod') ?></option>
                             <?php foreach ($products as $p): ?>
                             <option value="<?= $p['id'] ?>" data-stock="<?= $p['quantity'] ?>"
                                 <?= ($preProduct == $p['id'] || ($_POST['product_id'] ?? 0) == $p['id']) ? 'selected' : '' ?>>
@@ -71,37 +74,38 @@ require_once '../includes/header.php';
                         <div id="stockInfo" class="text-muted small mt-1"></div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Type</label>
+                        <label class="form-label fw-semibold"><?= __('field_type') ?></label>
                         <div class="d-flex gap-2">
                             <div class="form-check form-check-inline">
                                 <input class="form-check-input" type="radio" name="type" id="typeIn" value="in"
                                        <?= ($_POST['type'] ?? 'in') === 'in' ? 'checked' : '' ?>>
                                 <label class="form-check-label text-success fw-semibold" for="typeIn">
-                                    <i class="bi bi-arrow-down-circle me-1"></i>Stock In (Incoming)
+                                    <i class="bi bi-arrow-down-circle me-1"></i><?= __('stock_in') ?>
                                 </label>
                             </div>
                             <div class="form-check form-check-inline">
                                 <input class="form-check-input" type="radio" name="type" id="typeOut" value="out"
                                        <?= ($_POST['type'] ?? '') === 'out' ? 'checked' : '' ?>>
                                 <label class="form-check-label text-danger fw-semibold" for="typeOut">
-                                    <i class="bi bi-arrow-up-circle me-1"></i>Stock Out (Manual)
+                                    <i class="bi bi-arrow-up-circle me-1"></i><?= __('stock_out') ?>
                                 </label>
                             </div>
                         </div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Quantity <span class="text-danger">*</span></label>
+                        <label class="form-label fw-semibold"><?= __('field_quantity') ?> <span class="text-danger">*</span></label>
                         <input type="number" name="quantity" class="form-control" min="1" required
                                value="<?= htmlspecialchars($_POST['quantity'] ?? '') ?>">
                     </div>
                     <div class="mb-4">
-                        <label class="form-label fw-semibold">Notes</label>
-                        <input type="text" name="notes" class="form-control" placeholder="e.g. New shipment, Damaged goods..."
+                        <label class="form-label fw-semibold"><?= __('field_notes') ?></label>
+                        <input type="text" name="notes" class="form-control"
+                               placeholder="<?= __('stock_notes_hint') ?>"
                                value="<?= htmlspecialchars($_POST['notes'] ?? '') ?>">
                     </div>
                     <div class="d-flex gap-2">
-                        <button type="submit" class="btn btn-primary px-4"><i class="bi bi-check-lg me-2"></i>Save</button>
-                        <a href="index.php" class="btn btn-light">Cancel</a>
+                        <button type="submit" class="btn btn-primary px-4"><i class="bi bi-check-lg me-2"></i><?= __('stock_save') ?></button>
+                        <a href="index.php" class="btn btn-light"><?= __('btn_cancel') ?></a>
                     </div>
                 </form>
             </div>
@@ -115,7 +119,7 @@ function showStock() {
     const opt   = sel.options[sel.selectedIndex];
     const stock = opt?.dataset.stock;
     const info  = document.getElementById('stockInfo');
-    info.textContent = stock !== undefined ? `Current stock: ${stock} pcs` : '';
+    info.textContent = stock !== undefined ? ('<?= __('stock_curr_stock') ?>: ' + stock + ' pcs') : '';
 }
 document.addEventListener('DOMContentLoaded', showStock);
 </script>
