@@ -32,7 +32,7 @@ $secCur   = $settings['secondary_currency'] ?? 'USD';
 
 $pageTitle = '#' . str_pad($id, 4, '0', STR_PAD_LEFT);
 
-$shareUrl = 'https://' . $_SERVER['HTTP_HOST'] . '/sales/view.php?id=' . $id;
+$shareUrl = 'https://' . $_SERVER['HTTP_HOST'] . '/sales/share.php?id=' . $id;
 $waMsg    = "🧾 Invoice {$pageTitle}\n"
            . "👤 " . $sale['customer_name'] . ($sale['shop_name'] ? " — " . $sale['shop_name'] : '') . "\n"
            . "💰 Total: " . formatAFN($sale['total_amount']) . "\n"
