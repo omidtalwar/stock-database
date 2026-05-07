@@ -1,8 +1,5 @@
 <?php
-define('DB_HOST', 'localhost');
-define('DB_USER', 'ictswwsc_fzlstocks');
-define('DB_PASS', 'Fzlstocks$529189');
-define('DB_NAME', 'ictswwsc_fzlstocks');
+require_once __DIR__ . '/secrets.php';
 
 $pdo = new PDO(
     "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4",

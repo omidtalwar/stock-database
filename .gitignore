@@ -1,0 +1,9 @@
+# Secrets — never commit these
+config/secrets.php
+
+# Uploads / user-generated files
+uploads/
+
+# OS junk
+.DS_Store
+Thumbs.db
