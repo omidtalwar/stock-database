@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once '../includes/session.php';
 requireLogin();
 require_once '../includes/lang.php';
@@ -31,7 +31,7 @@ require_once '../includes/header.php';
         <h4 class="mb-1"><?= __('cust_title') ?></h4>
         <p class="text-muted small mb-0"><?= __('cust_sub') ?></p>
     </div>
-    <a href="/fzl/customers/add.php" class="btn btn-primary">
+    <a href="/customers/add.php" class="btn btn-primary">
         <i class="bi bi-person-plus me-2"></i><?= __('cust_add') ?>
     </a>
 </div>

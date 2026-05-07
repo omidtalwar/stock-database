@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 $currentPage = basename($_SERVER['PHP_SELF'], '.php');
 $currentDir  = basename(dirname($_SERVER['PHP_SELF']));
 $user        = currentUser();
@@ -21,8 +21,8 @@ function navItem(string $href, string $icon, string $label, bool $active): strin
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FZL — <?= htmlspecialchars($pageTitle ?? 'Management') ?></title>
-<link rel="icon" type="image/svg+xml" href="/fzl/favicon.svg">
-<link rel="shortcut icon" href="/fzl/favicon.svg">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.svg">
 <link href="<?= $_bsCSS ?>" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
 <style>
@@ -385,20 +385,20 @@ if (!empty($_SESSION['error'])) {
 
     <nav class="sidebar-nav">
         <div class="nav-section"><?= __('nav_main') ?></div>
-        <?= navItem('/fzl/dashboard.php', 'grid-1x2', __('nav_dashboard'), $currentPage === 'dashboard') ?>
+        <?= navItem('/dashboard.php', 'grid-1x2', __('nav_dashboard'), $currentPage === 'dashboard') ?>
 
         <div class="nav-section"><?= __('nav_business') ?></div>
-        <?= navItem('/fzl/customers/index.php', 'people',      __('nav_customers'), $currentDir === 'customers') ?>
-        <?= navItem('/fzl/products/index.php',  'box-seam',    __('nav_products'),  $currentDir === 'products') ?>
-        <?= navItem('/fzl/sales/index.php',     'receipt',     __('nav_sales'),     $currentDir === 'sales') ?>
-        <?= navItem('/fzl/payments/index.php',  'cash-coin',   __('nav_payments'),  $currentDir === 'payments') ?>
-        <?= navItem('/fzl/stock/index.php',     'archive',     __('nav_stock'),     $currentDir === 'stock') ?>
+        <?= navItem('/customers/index.php', 'people',      __('nav_customers'), $currentDir === 'customers') ?>
+        <?= navItem('/products/index.php',  'box-seam',    __('nav_products'),  $currentDir === 'products') ?>
+        <?= navItem('/sales/index.php',     'receipt',     __('nav_sales'),     $currentDir === 'sales') ?>
+        <?= navItem('/payments/index.php',  'cash-coin',   __('nav_payments'),  $currentDir === 'payments') ?>
+        <?= navItem('/stock/index.php',     'archive',     __('nav_stock'),     $currentDir === 'stock') ?>
 
         <?php if (isAdmin()): ?>
         <div class="nav-section"><?= __('nav_admin') ?></div>
-        <?= navItem('/fzl/admin/users.php',    'person-gear',       __('nav_users'),    $currentDir === 'admin' && $currentPage === 'users') ?>
-        <?= navItem('/fzl/admin/reports.php',  'bar-chart',         __('nav_reports'),  $currentDir === 'admin' && $currentPage === 'reports') ?>
-        <?= navItem('/fzl/admin/settings.php', 'currency-exchange', __('nav_exchange'), $currentDir === 'admin' && $currentPage === 'settings') ?>
+        <?= navItem('/admin/users.php',    'person-gear',       __('nav_users'),    $currentDir === 'admin' && $currentPage === 'users') ?>
+        <?= navItem('/admin/reports.php',  'bar-chart',         __('nav_reports'),  $currentDir === 'admin' && $currentPage === 'reports') ?>
+        <?= navItem('/admin/settings.php', 'currency-exchange', __('nav_exchange'), $currentDir === 'admin' && $currentPage === 'settings') ?>
         <?php endif; ?>
     </nav>
 
@@ -410,7 +410,7 @@ if (!empty($_SESSION['error'])) {
             <div class="s-name text-truncate"><?= htmlspecialchars($user['full_name']) ?></div>
             <div class="s-role"><?= ucfirst($user['role']) ?></div>
         </div>
-        <a href="/fzl/auth/logout.php" class="s-logout" title="<?= __('sign_out') ?>">
+        <a href="/auth/logout.php" class="s-logout" title="<?= __('sign_out') ?>">
             <i class="bi bi-box-arrow-<?= isRTL() ? 'left' : 'right' ?>"></i>
         </a>
     </div>
@@ -431,7 +431,7 @@ if (!empty($_SESSION['error'])) {
                 <a href="?setlang=en" class="lang-btn <?= currentLang() === 'en' ? 'active' : '' ?>">🇬🇧 EN</a>
                 <a href="?setlang=ps" class="lang-btn <?= currentLang() === 'ps' ? 'active' : '' ?>">🇦🇫 PS</a>
             </div>
-            <a href="/fzl/auth/logout.php" class="btn btn-sm btn-outline-danger d-none d-md-flex align-items-center">
+            <a href="/auth/logout.php" class="btn btn-sm btn-outline-danger d-none d-md-flex align-items-center">
                 <i class="bi bi-box-arrow-<?= isRTL() ? 'left' : 'right' ?> me-1"></i><?= __('sign_out') ?>
             </a>
         </div>

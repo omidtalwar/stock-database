@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once '../includes/session.php';
 requireLogin();
 require_once '../includes/lang.php';
@@ -18,7 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->prepare("INSERT INTO customers (name, phone, shop_name, notes) VALUES (?, ?, ?, ?)")
             ->execute([$name, $phone, $shop_name, $notes]);
         $_SESSION['success'] = htmlspecialchars($name) . ' — ' . __('btn_save');
-        header('Location: /fzl/customers/index.php');
+        header('Location: /customers/index.php');
         exit;
     }
 }

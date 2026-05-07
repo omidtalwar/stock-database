@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once 'includes/session.php';
 requireLogin();
 require_once 'config/db.php';
@@ -444,22 +444,22 @@ body { font-family: 'Segoe UI Variable', 'Noto Naskh Arabic', 'Segoe UI', system
 
     <nav class="sidebar-nav">
         <div class="nav-section"><?= __('nav_main') ?></div>
-        <a href="/fzl/dashboard.php" class="nav-item active">
+        <a href="/dashboard.php" class="nav-item active">
             <i class="bi bi-grid-1x2"></i> <?= __('nav_dashboard') ?>
         </a>
 
         <div class="nav-section"><?= __('nav_business') ?></div>
-        <a href="/fzl/customers/index.php" class="nav-item"><i class="bi bi-people"></i> <?= __('nav_customers') ?></a>
-        <a href="/fzl/products/index.php"  class="nav-item"><i class="bi bi-box-seam"></i> <?= __('nav_products') ?></a>
-        <a href="/fzl/sales/index.php"     class="nav-item"><i class="bi bi-receipt"></i> <?= __('nav_sales') ?></a>
-        <a href="/fzl/payments/index.php"  class="nav-item"><i class="bi bi-cash-coin"></i> <?= __('nav_payments') ?></a>
-        <a href="/fzl/stock/index.php"     class="nav-item"><i class="bi bi-archive"></i> <?= __('nav_stock') ?></a>
+        <a href="/customers/index.php" class="nav-item"><i class="bi bi-people"></i> <?= __('nav_customers') ?></a>
+        <a href="/products/index.php"  class="nav-item"><i class="bi bi-box-seam"></i> <?= __('nav_products') ?></a>
+        <a href="/sales/index.php"     class="nav-item"><i class="bi bi-receipt"></i> <?= __('nav_sales') ?></a>
+        <a href="/payments/index.php"  class="nav-item"><i class="bi bi-cash-coin"></i> <?= __('nav_payments') ?></a>
+        <a href="/stock/index.php"     class="nav-item"><i class="bi bi-archive"></i> <?= __('nav_stock') ?></a>
 
         <?php if (isAdmin()): ?>
         <div class="nav-section"><?= __('nav_admin') ?></div>
-        <a href="/fzl/admin/users.php"    class="nav-item"><i class="bi bi-person-gear"></i> <?= __('nav_users') ?></a>
-        <a href="/fzl/admin/reports.php"  class="nav-item"><i class="bi bi-bar-chart"></i> <?= __('nav_reports') ?></a>
-        <a href="/fzl/admin/settings.php" class="nav-item"><i class="bi bi-currency-exchange"></i> <?= __('nav_exchange') ?></a>
+        <a href="/admin/users.php"    class="nav-item"><i class="bi bi-person-gear"></i> <?= __('nav_users') ?></a>
+        <a href="/admin/reports.php"  class="nav-item"><i class="bi bi-bar-chart"></i> <?= __('nav_reports') ?></a>
+        <a href="/admin/settings.php" class="nav-item"><i class="bi bi-currency-exchange"></i> <?= __('nav_exchange') ?></a>
         <?php endif; ?>
     </nav>
 
@@ -471,7 +471,7 @@ body { font-family: 'Segoe UI Variable', 'Noto Naskh Arabic', 'Segoe UI', system
             <div class="footer-name"><?= htmlspecialchars($user['full_name']) ?></div>
             <div class="footer-role"><?= ucfirst($user['role']) ?></div>
         </div>
-        <a href="/fzl/auth/logout.php" class="logout-btn" title="<?= __('sign_out') ?>">
+        <a href="/auth/logout.php" class="logout-btn" title="<?= __('sign_out') ?>">
             <i class="bi bi-box-arrow-<?= isRTL() ? 'left' : 'right' ?>"></i>
         </a>
     </div>
@@ -491,7 +491,7 @@ body { font-family: 'Segoe UI Variable', 'Noto Naskh Arabic', 'Segoe UI', system
                 <a href="?setlang=en" class="lang-btn <?= currentLang() === 'en' ? 'active' : '' ?>">🇬🇧 EN</a>
                 <a href="?setlang=ps" class="lang-btn <?= currentLang() === 'ps' ? 'active' : '' ?>">🇦🇫 PS</a>
             </div>
-            <a href="/fzl/auth/logout.php" style="color:var(--w11-muted);text-decoration:none;font-size:0.8rem;">
+            <a href="/auth/logout.php" style="color:var(--w11-muted);text-decoration:none;font-size:0.8rem;">
                 <i class="bi bi-box-arrow-<?= isRTL() ? 'left' : 'right' ?>"></i> <?= __('sign_out') ?>
             </a>
         </div>
@@ -516,7 +516,7 @@ body { font-family: 'Segoe UI Variable', 'Noto Naskh Arabic', 'Segoe UI', system
                 </div>
                 <?php if (isAdmin()): ?>
                 <div class="divider-v"></div>
-                <a href="/fzl/admin/settings.php" class="chip-btn"><?= __('btn_update') ?></a>
+                <a href="/admin/settings.php" class="chip-btn"><?= __('btn_update') ?></a>
                 <?php endif; ?>
             </div>
         </div>
@@ -613,7 +613,7 @@ body { font-family: 'Segoe UI Variable', 'Noto Naskh Arabic', 'Segoe UI', system
             <div class="card">
                 <div class="card-header">
                     <span><?= __('dash_recent_inv') ?></span>
-                    <a href="/fzl/sales/index.php" class="link-btn"><i class="bi bi-arrow-<?= isRTL() ? 'left' : 'right' ?>"></i> <?= __('btn_view_all') ?></a>
+                    <a href="/sales/index.php" class="link-btn"><i class="bi bi-arrow-<?= isRTL() ? 'left' : 'right' ?>"></i> <?= __('btn_view_all') ?></a>
                 </div>
                 <div style="overflow-x:auto;">
                     <table class="w11-table">
@@ -630,7 +630,7 @@ body { font-family: 'Segoe UI Variable', 'Noto Naskh Arabic', 'Segoe UI', system
                         <tbody>
                             <?php if (empty($recentSales)): ?>
                             <tr class="empty-row">
-                                <td colspan="6"><?= __('dash_no_inv') ?> — <a href="/fzl/sales/create.php" style="color:var(--w11-blue)"><?= __('dash_create_first') ?></a></td>
+                                <td colspan="6"><?= __('dash_no_inv') ?> — <a href="/sales/create.php" style="color:var(--w11-blue)"><?= __('dash_create_first') ?></a></td>
                             </tr>
                             <?php else: ?>
                             <?php foreach ($recentSales as $s): ?>
@@ -652,7 +652,7 @@ body { font-family: 'Segoe UI Variable', 'Noto Naskh Arabic', 'Segoe UI', system
                                     <?php endif; ?>
                                 </td>
                                 <td style="color:var(--w11-muted);font-size:0.78rem;"><?= date('d M', strtotime($s['created_at'])) ?></td>
-                                <td><a href="/fzl/sales/view.php?id=<?= $s['id'] ?>" class="view-btn"><i class="bi bi-eye"></i></a></td>
+                                <td><a href="/sales/view.php?id=<?= $s['id'] ?>" class="view-btn"><i class="bi bi-eye"></i></a></td>
                             </tr>
                             <?php endforeach; ?>
                             <?php endif; ?>
@@ -668,7 +668,7 @@ body { font-family: 'Segoe UI Variable', 'Noto Naskh Arabic', 'Segoe UI', system
                 <div class="card">
                     <div class="card-header">
                         <span><?= __('dash_top_debtors') ?></span>
-                        <a href="/fzl/customers/index.php" class="link-btn"><i class="bi bi-arrow-<?= isRTL() ? 'left' : 'right' ?>"></i> <?= __('btn_all') ?></a>
+                        <a href="/customers/index.php" class="link-btn"><i class="bi bi-arrow-<?= isRTL() ? 'left' : 'right' ?>"></i> <?= __('btn_all') ?></a>
                     </div>
                     <?php if (empty($topDebtors)): ?>
                         <div style="text-align:center;padding:28px;color:var(--w11-muted);font-size:0.82rem;"><?= __('dash_no_debts') ?></div>
@@ -693,10 +693,10 @@ body { font-family: 'Segoe UI Variable', 'Noto Naskh Arabic', 'Segoe UI', system
                 <div class="card">
                     <div class="card-header"><span><?= __('dash_quick') ?></span></div>
                     <div class="quick-grid">
-                        <a href="/fzl/sales/create.php"  class="qa-btn primary"><i class="bi bi-plus-circle"></i><?= __('dash_new_inv') ?></a>
-                        <a href="/fzl/payments/add.php"  class="qa-btn green">  <i class="bi bi-cash"></i><?= __('dash_rec_pay') ?></a>
-                        <a href="/fzl/customers/add.php" class="qa-btn purple"> <i class="bi bi-person-plus"></i><?= __('dash_add_cust') ?></a>
-                        <a href="/fzl/stock/add.php"     class="qa-btn amber">  <i class="bi bi-plus-square"></i><?= __('dash_stock_in') ?></a>
+                        <a href="/sales/create.php"  class="qa-btn primary"><i class="bi bi-plus-circle"></i><?= __('dash_new_inv') ?></a>
+                        <a href="/payments/add.php"  class="qa-btn green">  <i class="bi bi-cash"></i><?= __('dash_rec_pay') ?></a>
+                        <a href="/customers/add.php" class="qa-btn purple"> <i class="bi bi-person-plus"></i><?= __('dash_add_cust') ?></a>
+                        <a href="/stock/add.php"     class="qa-btn amber">  <i class="bi bi-plus-square"></i><?= __('dash_stock_in') ?></a>
                     </div>
                 </div>
 

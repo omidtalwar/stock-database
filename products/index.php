@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once '../includes/session.php';
 requireLogin();
 require_once '../includes/lang.php';
@@ -85,7 +85,7 @@ require_once '../includes/header.php';
                         <a href="edit.php?id=<?= $p['id'] ?>" class="btn btn-sm btn-light me-1" title="<?= __('btn_edit') ?>">
                             <i class="bi bi-pencil"></i>
                         </a>
-                        <a href="/fzl/stock/add.php?product_id=<?= $p['id'] ?>" class="btn btn-sm btn-outline-success me-1" title="<?= __('stock_in_btn') ?>">
+                        <a href="/stock/add.php?product_id=<?= $p['id'] ?>" class="btn btn-sm btn-outline-success me-1" title="<?= __('stock_in_btn') ?>">
                             <i class="bi bi-plus-square"></i>
                         </a>
                         <?php if (isAdmin()): ?>

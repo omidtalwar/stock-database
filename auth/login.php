@@ -1,8 +1,8 @@
-<?php
+﻿<?php
 require_once '../includes/session.php';
 
 if (isset($_SESSION['user_id'])) {
-    header('Location: /fzl/dashboard.php');
+    header('Location: /dashboard.php');
     exit;
 }
 
@@ -25,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['username']  = $user['username'];
             $_SESSION['full_name'] = $user['full_name'];
             $_SESSION['role']      = $user['role'];
-            header('Location: /fzl/dashboard.php');
+            header('Location: /dashboard.php');
             exit;
         } else {
             $error = __('incorrect_login');

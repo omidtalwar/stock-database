@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once '../includes/session.php';
 requireLogin();
 require_once '../includes/lang.php';
@@ -45,7 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $_SESSION['success'] = formatMoney($amount, $currency)
                 . ($currency !== 'AFN' ? ' (' . formatAFN($amountAfn) . ')' : '');
-            header("Location: /fzl/customers/view.php?id=$customer_id");
+            header("Location: /customers/view.php?id=$customer_id");
             exit;
         }
     }
@@ -66,7 +66,7 @@ require_once '../includes/header.php';
     <?= __('pay_rate_label') ?>: <strong>1 <?= htmlspecialchars($secCur) ?> = <?= number_format($rate, 2) ?> ؋</strong>
     &nbsp;—&nbsp;
     <?php if (isAdmin()): ?>
-    <a href="/fzl/admin/settings.php"><?= __('btn_update') ?></a>
+    <a href="/admin/settings.php"><?= __('btn_update') ?></a>
     <?php else: ?>
     <span class="text-muted"><?= __('pay_cash') ?></span>
     <?php endif; ?>

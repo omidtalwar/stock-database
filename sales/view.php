@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once '../includes/session.php';
 requireLogin();
 require_once '../includes/lang.php';
@@ -165,7 +165,7 @@ require_once '../includes/header.php';
                 </div>
                 <?php if ($sale['balance'] > 0): ?>
                 <div class="mt-3">
-                    <a href="/fzl/payments/add.php?customer_id=<?= $sale['customer_id'] ?>" class="btn btn-success w-100 btn-sm">
+                    <a href="/payments/add.php?customer_id=<?= $sale['customer_id'] ?>" class="btn btn-success w-100 btn-sm">
                         <i class="bi bi-cash me-2"></i><?= __('pay_add') ?>
                     </a>
                 </div>
@@ -215,7 +215,7 @@ require_once '../includes/header.php';
             <div class="card-body">
                 <div class="d-flex flex-wrap gap-2">
                     <?php foreach ($saleImages as $img): ?>
-                    <?php $imgUrl = '/fzl/uploads/sale-images/' . htmlspecialchars($img); ?>
+                    <?php $imgUrl = '/uploads/sale-images/' . htmlspecialchars($img); ?>
                     <a href="<?= $imgUrl ?>" target="_blank" rel="noopener"
                        style="display:block;width:96px;height:96px;border-radius:8px;overflow:hidden;border:1px solid rgba(0,0,0,0.1);background:#f2f2f2;">
                         <img src="<?= $imgUrl ?>" alt="Sale image"

@@ -1,3 +1,3 @@
-<?php
-header('Location: /fzl/auth/login.php');
+﻿<?php
+header('Location: /auth/login.php');
 exit;

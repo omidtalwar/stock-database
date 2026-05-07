@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once '../includes/session.php';
 requireLogin();
 require_once '../includes/lang.php';
@@ -436,7 +436,7 @@ require_once '../includes/header.php';
             <div class="card-body py-2 small text-muted">
                 <i class="bi bi-currency-exchange me-1"></i>
                 <?= __('dash_rate_label') ?>: <strong>1 <?= htmlspecialchars($secCur) ?> = <?= number_format($rate, 2) ?> ؋</strong>
-                <?php if (isAdmin()): ?>&nbsp;<a href="/fzl/admin/settings.php"><?= __('btn_update') ?></a><?php endif; ?>
+                <?php if (isAdmin()): ?>&nbsp;<a href="/admin/settings.php"><?= __('btn_update') ?></a><?php endif; ?>
             </div>
         </div>
     </div>
@@ -665,7 +665,7 @@ function startUpload(file) {
     fd.append('image', file);
 
     var xhr = new XMLHttpRequest();
-    xhr.open('POST', '/fzl/sales/upload-temp-image.php');
+    xhr.open('POST', '/sales/upload-temp-image.php');
 
     xhr.upload.addEventListener('progress', function(e) {
         if (!e.lengthComputable) return;

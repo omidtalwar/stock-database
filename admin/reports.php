@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once '../includes/session.php';
 requireAdmin();
 require_once '../includes/lang.php';
@@ -86,7 +86,7 @@ require_once '../includes/header.php';
     </div>
     <div class="d-flex gap-2 align-items-center">
         <span class="text-muted small"><?= __('set_rate_label') ?> 1 <?= htmlspecialchars($secCur) ?> = <?= number_format($rate, 2) ?> ؋
-            <?php if (isAdmin()): ?>&nbsp;<a href="/fzl/admin/settings.php" class="small"><?= __('btn_update') ?></a><?php endif; ?>
+            <?php if (isAdmin()): ?>&nbsp;<a href="/admin/settings.php" class="small"><?= __('btn_update') ?></a><?php endif; ?>
         </span>
         <a href="report-print.php?from=<?= urlencode($from) ?>&to=<?= urlencode($to) ?>"
            target="_blank" class="btn btn-sm btn-outline-secondary">
@@ -291,7 +291,7 @@ require_once '../includes/header.php';
                                 <div class="text-muted" style="font-size:0.72rem;">≈ <?= formatMoney(fromAFN($c['total'], $rate), $secCur) ?></div>
                             </td>
                             <td>
-                                <a href="/fzl/customers/view.php?id=<?= $c['id'] ?>" class="btn btn-sm btn-light">
+                                <a href="/customers/view.php?id=<?= $c['id'] ?>" class="btn btn-sm btn-light">
                                     <i class="bi bi-eye"></i>
                                 </a>
                             </td>
@@ -391,10 +391,10 @@ require_once '../includes/header.php';
                             <td class="fw-bold text-danger">؋ <?= number_format($d['total_debt'], 0) ?></td>
                             <td class="text-muted"><?= formatMoney(fromAFN($d['total_debt'], $rate), $secCur) ?></td>
                             <td>
-                                <a href="/fzl/customers/view.php?id=<?= $d['id'] ?>" class="btn btn-sm btn-light me-1">
+                                <a href="/customers/view.php?id=<?= $d['id'] ?>" class="btn btn-sm btn-light me-1">
                                     <i class="bi bi-eye"></i>
                                 </a>
-                                <a href="/fzl/payments/add.php?customer=<?= $d['id'] ?>" class="btn btn-sm btn-outline-success">
+                                <a href="/payments/add.php?customer=<?= $d['id'] ?>" class="btn btn-sm btn-outline-success">
                                     <i class="bi bi-cash me-1"></i>Pay
                                 </a>
                             </td>

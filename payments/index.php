@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once '../includes/session.php';
 requireLogin();
 require_once '../includes/lang.php';
@@ -78,7 +78,7 @@ $payPeriodLabels = [
     <i class="bi bi-currency-exchange me-1"></i>
     <?= __('pay_rate_label') ?>: <strong>1 <?= htmlspecialchars($secCur) ?> = <?= number_format($rate, 2) ?> ؋</strong>
     <?php if (isAdmin()): ?>
-    &nbsp;—&nbsp;<a href="/fzl/admin/settings.php"><?= __('btn_update') ?></a>
+    &nbsp;—&nbsp;<a href="/admin/settings.php"><?= __('btn_update') ?></a>
     <?php endif; ?>
 </div>
 
@@ -144,7 +144,7 @@ $payPeriodLabels = [
                 <tr>
                     <td class="text-muted small d-none d-md-table-cell"><?= $i + 1 ?></td>
                     <td>
-                        <a href="/fzl/customers/view.php?id=<?= $p['customer_id'] ?>" class="fw-semibold text-decoration-none">
+                        <a href="/customers/view.php?id=<?= $p['customer_id'] ?>" class="fw-semibold text-decoration-none">
                             <?= htmlspecialchars($p['customer_name']) ?>
                         </a>
                         <div class="text-muted" style="font-size:0.75rem;">

@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 date_default_timezone_set('Asia/Kabul');
 
 if (session_status() === PHP_SESSION_NONE) {
@@ -11,7 +11,7 @@ if (!isset($_SESSION['lang'])) {
 
 function requireLogin() {
     if (!isset($_SESSION['user_id'])) {
-        header('Location: /fzl/auth/login.php');
+        header('Location: /auth/login.php');
         exit;
     }
 }
@@ -20,7 +20,7 @@ function requireAdmin() {
     requireLogin();
     if ($_SESSION['role'] !== 'admin') {
         $_SESSION['error'] = 'Access denied. Admin only.';
-        header('Location: /fzl/dashboard.php');
+        header('Location: /dashboard.php');
         exit;
     }
 }
