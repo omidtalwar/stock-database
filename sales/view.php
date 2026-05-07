@@ -32,6 +32,14 @@ $secCur   = $settings['secondary_currency'] ?? 'USD';
 
 $pageTitle = '#' . str_pad($id, 4, '0', STR_PAD_LEFT);
 
+$shareUrl = 'https://' . $_SERVER['HTTP_HOST'] . '/sales/view.php?id=' . $id;
+$waMsg    = "🧾 Invoice {$pageTitle}\n"
+           . "👤 " . $sale['customer_name'] . ($sale['shop_name'] ? " — " . $sale['shop_name'] : '') . "\n"
+           . "💰 Total: " . formatAFN($sale['total_amount']) . "\n"
+           . ($sale['balance'] > 0 ? "⚠️ Balance due: " . formatAFN($sale['balance']) . "\n" : "✅ Fully paid\n")
+           . "🔗 " . $shareUrl;
+$waLink   = 'https://wa.me/?text=' . urlencode($waMsg);
+
 function toShamsi(int $gy, int $gm, int $gd): array {
     $g_d_m = [0,31,59,90,120,151,181,212,243,273,304,334];
     if ($gy > 1600) { $jy = 979; $gy -= 1600; } else { $jy = 0; $gy -= 621; }
@@ -66,10 +74,35 @@ require_once '../includes/header.php';
         <h4 class="mt-1 mb-0"><?= __('sale_title') ?> #<?= str_pad($id, 4, '0', STR_PAD_LEFT) ?></h4>
         <span class="text-muted small"><?= date('d F Y, h:i A', strtotime($sale['created_at'])) ?></span>
     </div>
-    <div class="d-flex gap-2">
+    <div class="d-flex gap-2 flex-wrap">
         <button onclick="window.print()" class="btn btn-sm btn-outline-secondary">
             <i class="bi bi-printer me-1"></i><?= __('btn_print') ?>
         </button>
+
+        <div class="dropdown">
+            <button class="btn btn-sm btn-primary dropdown-toggle" id="shareDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="bi bi-share me-1"></i>Share
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow-sm" aria-labelledby="shareDropdown">
+                <li>
+                    <a class="dropdown-item" href="<?= htmlspecialchars($waLink) ?>" target="_blank" rel="noopener">
+                        <i class="bi bi-whatsapp me-2 text-success"></i>Send on WhatsApp
+                    </a>
+                </li>
+                <li>
+                    <button class="dropdown-item" onclick="copyShareLink(this)">
+                        <i class="bi bi-link-45deg me-2 text-primary"></i>Copy Link
+                    </button>
+                </li>
+                <li><hr class="dropdown-divider"></li>
+                <li>
+                    <button class="dropdown-item" onclick="window.print()">
+                        <i class="bi bi-file-earmark-pdf me-2 text-danger"></i>Save as PDF
+                    </button>
+                </li>
+            </ul>
+        </div>
+
         <?php if (isAdmin()): ?>
         <a href="delete.php?id=<?= $id ?>" class="btn btn-sm btn-outline-danger"
            onclick="return confirm('<?= htmlspecialchars(addslashes(__('sale_del_confirm'))) ?>')">
@@ -231,12 +264,34 @@ require_once '../includes/header.php';
     </div>
 </div>
 
+<div id="copy-toast" style="
+    position:fixed; bottom:1.5rem; left:50%; transform:translateX(-50%) translateY(80px);
+    background:#1e1e1e; color:#fff; padding:.5rem 1.25rem; border-radius:2rem;
+    font-size:.875rem; z-index:9999; opacity:0; transition:all .25s ease; pointer-events:none;">
+    <i class="bi bi-check2 me-1"></i> Link copied!
+</div>
+
 <style>
 @media print {
-    .sidebar, .topbar, .btn, .page-header a, .alert { display: none !important; }
+    .sidebar, .topbar, .btn, .page-header a, .alert, .dropdown { display: none !important; }
     .main-wrap { margin: 0 !important; }
     .content-area { padding: 0 !important; }
 }
 </style>
+
+<script>
+function copyShareLink(btn) {
+    const url = <?= json_encode($shareUrl) ?>;
+    navigator.clipboard.writeText(url).then(() => {
+        const toast = document.getElementById('copy-toast');
+        toast.style.opacity = '1';
+        toast.style.transform = 'translateX(-50%) translateY(0)';
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateX(-50%) translateY(80px)';
+        }, 2000);
+    });
+}
+</script>
 
 <?php require_once '../includes/footer.php'; ?>
