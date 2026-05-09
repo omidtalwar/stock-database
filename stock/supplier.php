@@ -43,6 +43,18 @@ if (!$stats || !$stats['txn_count']) {
     exit;
 }
 
+// Running balance map: cumulative unpaid from oldest → newest transaction
+$runningRows = $pdo->prepare(
+    "SELECT id, balance FROM stock_logs WHERE supplier = ? ORDER BY created_at ASC, id ASC"
+);
+$runningRows->execute([$supplierName]);
+$runningMap = [];
+$cumulative = 0;
+foreach ($runningRows->fetchAll() as $r) {
+    $cumulative += (float)$r['balance'];
+    $runningMap[(int)$r['id']] = $cumulative;
+}
+
 // Pagination
 $totalRows  = (int)$stats['txn_count'];
 $perPage    = 10;
@@ -167,6 +179,7 @@ $pct = $stats['total_purchased'] > 0
                     <th class="text-end">Total</th>
                     <th class="text-end">Paid</th>
                     <th class="text-end">Balance</th>
+                    <th class="text-end">Ending Balance</th>
                     <th class="text-center">Bill</th>
                     <th><?= __('field_notes') ?></th>
                     <th><?= __('field_by') ?></th>
@@ -209,6 +222,11 @@ $pct = $stats['total_purchased'] > 0
                     <td class="text-end text-success fw-semibold text-nowrap"><?= $log['paid_amount'] ? '؋'.number_format($log['paid_amount'], 0) : '—' ?></td>
                     <td class="text-end fw-semibold text-nowrap <?= $log['balance'] > 0 ? 'text-danger' : 'text-muted' ?>">
                         <?= $log['balance'] > 0 ? '؋'.number_format($log['balance'], 0) : '—' ?>
+                    </td>
+                    <?php $ending = $runningMap[(int)$log['id']] ?? 0; ?>
+                    <td class="text-end fw-bold text-nowrap <?= $ending > 0 ? 'text-danger' : 'text-success' ?>"
+                        title="Total unpaid up to this transaction">
+                        <?= $ending > 0 ? '؋'.number_format($ending, 0) : '<span class="text-success">Settled</span>' ?>
                     </td>
                     <td class="text-center">
                         <?php if ($log['bill_image']): ?>
