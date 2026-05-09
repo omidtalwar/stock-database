@@ -72,11 +72,12 @@ require_once '../includes/header.php';
                     <th><?= __('field_notes') ?></th>
                     <th><?= __('field_by') ?></th>
                     <th><?= __('field_date') ?></th>
+                    <?php if (isAdmin()): ?><th><?= __('field_actions') ?></th><?php endif; ?>
                 </tr>
             </thead>
             <tbody>
                 <?php if (empty($logs)): ?>
-                <tr><td colspan="8" class="text-center text-muted py-5"><?= __('stock_no_data') ?></td></tr>
+                <tr><td colspan="<?= isAdmin() ? 9 : 8 ?>" class="text-center text-muted py-5"><?= __('stock_no_data') ?></td></tr>
                 <?php else: ?>
                 <?php foreach ($logs as $log): ?>
                 <tr>
@@ -98,6 +99,19 @@ require_once '../includes/header.php';
                     <td class="text-muted small"><?= htmlspecialchars($log['notes'] ?: '—') ?></td>
                     <td class="text-muted small"><?= htmlspecialchars($log['created_by']) ?></td>
                     <td class="text-muted small"><?= date('d M Y', strtotime($log['created_at'])) ?></td>
+                    <?php if (isAdmin()): ?>
+                    <td>
+                        <a href="edit.php?id=<?= $log['id'] ?>" class="btn btn-sm btn-light me-1" title="<?= __('btn_edit') ?>">
+                            <i class="bi bi-pencil"></i>
+                        </a>
+                        <a href="delete.php?id=<?= $log['id'] ?>"
+                           class="btn btn-sm btn-outline-danger"
+                           title="<?= __('btn_delete') ?>"
+                           onclick="return confirm('<?= htmlspecialchars(addslashes(__('confirm_delete'))) ?>')">
+                            <i class="bi bi-trash"></i>
+                        </a>
+                    </td>
+                    <?php endif; ?>
                 </tr>
                 <?php endforeach; ?>
                 <?php endif; ?>
