@@ -11,26 +11,85 @@
 
     (function () {
         let deferredPrompt = null;
-        const btn = document.getElementById('fzl-install-btn');
 
-        window.addEventListener('beforeinstallprompt', e => {
-            e.preventDefault();
-            deferredPrompt = e;
-            if (btn) btn.style.display = 'flex';
-        });
+        const btn        = document.getElementById('fzl-install-btn');
+        const modal      = document.getElementById('fzl-install-modal');
+        const closeBtn   = document.getElementById('fzl-modal-close');
+        const nativeBtn  = document.getElementById('fzl-native-btn');
+        const stepsEl    = document.getElementById('fzl-install-steps');
 
-        btn?.addEventListener('click', async () => {
+        // Detect platform
+        const ua       = navigator.userAgent;
+        const isIOS    = /iphone|ipad|ipod/i.test(ua);
+        const isSafari = /safari/i.test(ua) && !/chrome/i.test(ua);
+        const isAndroid = /android/i.test(ua);
+
+        function getSteps() {
+            if (deferredPrompt) return null; // will use native button
+            if (isIOS && isSafari) return `
+                <b>On iPhone / iPad (Safari):</b><br>
+                1. Tap the <b>Share</b> button <span style="font-size:1.1em;">⎦↑</span> at the bottom of Safari<br>
+                2. Scroll down and tap <b>"Add to Home Screen"</b><br>
+                3. Tap <b>Add</b> — the app icon will appear on your home screen`;
+            if (isAndroid) return `
+                <b>On Android (Chrome):</b><br>
+                1. Tap the <b>⋮ menu</b> in the top-right corner<br>
+                2. Tap <b>"Add to Home screen"</b> or <b>"Install app"</b><br>
+                3. Tap <b>Install</b>`;
+            return `
+                <b>On Chrome / Edge (Desktop):</b><br>
+                1. Look for the <b>install icon</b> <span style="font-size:1.1em;">⊕</span> in the address bar (right side)<br>
+                2. Click it and then click <b>Install</b><br><br>
+                <b>Or:</b> Open the browser menu → <b>"Install FZL…"</b>`;
+        }
+
+        function openModal() {
+            const steps = getSteps();
+            if (deferredPrompt) {
+                stepsEl.innerHTML = '<b>Click below to install FZL on your device:</b>';
+                nativeBtn.style.display = 'block';
+            } else {
+                stepsEl.innerHTML = steps;
+                nativeBtn.style.display = 'none';
+            }
+            modal.style.display = 'flex';
+        }
+
+        function closeModal() { modal.style.display = 'none'; }
+
+        btn?.addEventListener('click', openModal);
+        closeBtn?.addEventListener('click', closeModal);
+        modal?.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+
+        nativeBtn?.addEventListener('click', async () => {
             if (!deferredPrompt) return;
             deferredPrompt.prompt();
             const { outcome } = await deferredPrompt.userChoice;
-            if (outcome === 'accepted') btn.style.display = 'none';
+            if (outcome === 'accepted') {
+                closeModal();
+                btn.style.display = 'none';
+            }
+            deferredPrompt = null;
+            nativeBtn.style.display = 'none';
+        });
+
+        // Capture native install prompt when browser offers it
+        window.addEventListener('beforeinstallprompt', e => {
+            e.preventDefault();
+            deferredPrompt = e;
+        });
+
+        // Hide button once app is installed
+        window.addEventListener('appinstalled', () => {
+            if (btn) btn.style.display = 'none';
+            closeModal();
             deferredPrompt = null;
         });
 
-        window.addEventListener('appinstalled', () => {
+        // Also hide if already running in standalone (already installed)
+        if (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone) {
             if (btn) btn.style.display = 'none';
-            deferredPrompt = null;
-        });
+        }
     })();
 
     // ── Sidebar toggle ──

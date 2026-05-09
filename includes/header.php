@@ -464,12 +464,30 @@ if (!empty($_SESSION['error'])) {
         <span class="topbar-page"><?= htmlspecialchars($pageTitle ?? 'Page') ?></span>
         <div class="topbar-right">
             <span class="topbar-date"><?= date('d M Y') ?></span>
-            <!-- PWA install button — shown only when browser fires beforeinstallprompt -->
+            <!-- PWA install button — always visible -->
             <button id="fzl-install-btn" title="Install App"
-                style="display:none;align-items:center;gap:6px;padding:4px 11px;border-radius:6px;border:1px solid var(--w11-blue);background:var(--w11-blue-light);color:var(--w11-blue);font-size:0.78rem;font-weight:600;cursor:pointer;white-space:nowrap;">
+                style="display:flex;align-items:center;gap:6px;padding:4px 11px;border-radius:6px;border:1px solid var(--w11-blue);background:var(--w11-blue-light);color:var(--w11-blue);font-size:0.78rem;font-weight:600;cursor:pointer;white-space:nowrap;">
                 <i class="bi bi-download"></i>
                 <span class="d-none d-sm-inline">Install App</span>
             </button>
+
+            <!-- Install instructions modal -->
+            <div id="fzl-install-modal" style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.45);backdrop-filter:blur(4px);align-items:center;justify-content:center;padding:16px;">
+                <div style="background:#fff;border-radius:14px;padding:28px 24px;max-width:380px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,0.18);position:relative;">
+                    <button id="fzl-modal-close" style="position:absolute;top:12px;right:14px;background:none;border:none;font-size:1.3rem;color:#888;cursor:pointer;">&#x2715;</button>
+                    <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
+                        <div style="width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,#0067C0,#003E92);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:0.95rem;letter-spacing:1px;flex-shrink:0;">FZL</div>
+                        <div>
+                            <div style="font-weight:700;font-size:1rem;">Install FZL</div>
+                            <div style="font-size:0.78rem;color:#666;">Add to your desktop or home screen</div>
+                        </div>
+                    </div>
+                    <div id="fzl-install-steps" style="font-size:0.85rem;color:#333;line-height:1.7;"></div>
+                    <button id="fzl-native-btn" style="display:none;width:100%;margin-top:18px;padding:10px;border-radius:8px;border:none;background:#0067C0;color:#fff;font-weight:700;font-size:0.9rem;cursor:pointer;">
+                        <i class="bi bi-download me-2"></i>Install Now
+                    </button>
+                </div>
+            </div>
             <!-- Language switcher -->
             <div class="lang-switch">
                 <a href="?setlang=en" class="lang-btn <?= currentLang() === 'en' ? 'active' : '' ?>">🇬🇧 EN</a>
