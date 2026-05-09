@@ -14,11 +14,22 @@ if ($search) {
     $params = ["%$search%", "%$search%", "%$search%"];
 }
 
+$countStmt = $pdo->prepare("SELECT COUNT(*) FROM customers c $where");
+$countStmt->execute($params);
+$totalRows  = (int)$countStmt->fetchColumn();
+
+$perPage    = 10;
+$page       = max(1, (int)($_GET['page'] ?? 1));
+$totalPages = max(1, (int)ceil($totalRows / $perPage));
+$page       = min($page, $totalPages);
+$offset     = ($page - 1) * $perPage;
+
 $customers = $pdo->prepare("
     SELECT c.*,
            (SELECT COUNT(*) FROM sales s WHERE s.customer_id = c.id) AS sale_count
     FROM customers c $where
     ORDER BY c.total_debt DESC, c.name ASC
+    LIMIT $perPage OFFSET $offset
 ");
 $customers->execute($params);
 $customers = $customers->fetchAll();
@@ -113,6 +124,32 @@ require_once '../includes/header.php';
             </tbody>
         </table>
     </div>
+    <?php if ($totalPages > 1): ?>
+    <div class="card-footer d-flex align-items-center justify-content-between gap-2 flex-wrap py-2">
+        <span class="text-muted small">
+            <?= __('field_total') ?>: <?= $totalRows ?> &mdash;
+            <?= __('period_showing') ?> <?= $offset + 1 ?>–<?= min($offset + $perPage, $totalRows) ?>
+        </span>
+        <nav><ul class="pagination pagination-sm mb-0">
+            <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
+                <a class="page-link" href="?<?= http_build_query(array_merge($_GET, ['page' => $page - 1])) ?>">&#8249;</a>
+            </li>
+            <?php
+            $start = max(1, $page - 2);
+            $end   = min($totalPages, $page + 2);
+            if ($start > 1): ?><li class="page-item disabled"><span class="page-link">…</span></li><?php endif;
+            for ($i = $start; $i <= $end; $i++): ?>
+            <li class="page-item <?= $i === $page ? 'active' : '' ?>">
+                <a class="page-link" href="?<?= http_build_query(array_merge($_GET, ['page' => $i])) ?>"><?= $i ?></a>
+            </li>
+            <?php endfor;
+            if ($end < $totalPages): ?><li class="page-item disabled"><span class="page-link">…</span></li><?php endif; ?>
+            <li class="page-item <?= $page >= $totalPages ? 'disabled' : '' ?>">
+                <a class="page-link" href="?<?= http_build_query(array_merge($_GET, ['page' => $page + 1])) ?>">&#8250;</a>
+            </li>
+        </ul></nav>
+    </div>
+    <?php endif; ?>
 </div>
 
 <?php require_once '../includes/footer.php'; ?>

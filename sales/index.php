@@ -25,6 +25,32 @@ if ($search) {
     $params      = ["%$search%", "%$search%"];
 }
 
+// Aggregate totals over the full filtered set (before pagination)
+$totalsStmt = $pdo->prepare("
+    SELECT COUNT(*) AS cnt,
+           COALESCE(SUM(s.total_amount), 0) AS sum_total,
+           COALESCE(SUM(s.paid_amount),  0) AS sum_paid,
+           COALESCE(SUM(s.balance),      0) AS sum_balance,
+           SUM(CASE WHEN s.balance = 0 THEN 1 ELSE 0 END) AS fully_paid
+    FROM sales s
+    JOIN customers c ON c.id = s.customer_id
+    WHERE 1=1 $periodWhere $searchWhere
+");
+$totalsStmt->execute($params);
+$totals = $totalsStmt->fetch();
+
+$totalRows  = (int)$totals['cnt'];
+$sumTotal   = (float)$totals['sum_total'];
+$sumPaid    = (float)$totals['sum_paid'];
+$sumBalance = (float)$totals['sum_balance'];
+$fullyPaid  = (int)$totals['fully_paid'];
+
+$perPage    = 10;
+$page       = max(1, (int)($_GET['page'] ?? 1));
+$totalPages = max(1, (int)ceil($totalRows / $perPage));
+$page       = min($page, $totalPages);
+$offset     = ($page - 1) * $perPage;
+
 $sales = $pdo->prepare("
     SELECT s.id, s.total_amount, s.paid_amount, s.balance, s.created_at, s.notes,
            c.name AS customer_name, c.shop_name,
@@ -34,14 +60,10 @@ $sales = $pdo->prepare("
     JOIN users u ON u.id = s.created_by
     WHERE 1=1 $periodWhere $searchWhere
     ORDER BY s.created_at DESC
+    LIMIT $perPage OFFSET $offset
 ");
 $sales->execute($params);
 $sales = $sales->fetchAll();
-
-// Summary totals for the filtered period
-$sumTotal   = array_sum(array_column($sales, 'total_amount'));
-$sumPaid    = array_sum(array_column($sales, 'paid_amount'));
-$sumBalance = array_sum(array_column($sales, 'balance'));
 
 require_once '../includes/header.php';
 ?>
@@ -86,7 +108,7 @@ $searchParam = $search ? '&search=' . urlencode($search) : '';
             <div class="card-body py-2">
                 <div class="text-muted small mb-1"><?= __('field_total') ?></div>
                 <div class="fw-bold">؋ <?= number_format($sumTotal, 0) ?></div>
-                <div class="text-muted" style="font-size:0.72rem;"><?= count($sales) ?> <?= __('rep_invoices') ?></div>
+                <div class="text-muted" style="font-size:0.72rem;"><?= $totalRows ?> <?= __('rep_invoices') ?></div>
             </div>
         </div>
     </div>
@@ -110,7 +132,7 @@ $searchParam = $search ? '&search=' . urlencode($search) : '';
         <div class="card text-center">
             <div class="card-body py-2">
                 <div class="text-muted small mb-1"><?= __('sale_fully_paid') ?></div>
-                <div class="fw-bold text-primary"><?= count(array_filter($sales, fn($s) => $s['balance'] == 0)) ?></div>
+                <div class="fw-bold text-primary"><?= $fullyPaid ?></div>
             </div>
         </div>
     </div>
@@ -181,6 +203,32 @@ $searchParam = $search ? '&search=' . urlencode($search) : '';
             </tbody>
         </table>
     </div>
+    <?php if ($totalPages > 1): ?>
+    <div class="card-footer d-flex align-items-center justify-content-between gap-2 flex-wrap py-2">
+        <span class="text-muted small">
+            <?= __('field_total') ?>: <?= $totalRows ?> &mdash;
+            <?= __('period_showing') ?> <?= $offset + 1 ?>–<?= min($offset + $perPage, $totalRows) ?>
+        </span>
+        <nav><ul class="pagination pagination-sm mb-0">
+            <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
+                <a class="page-link" href="?<?= http_build_query(array_merge($_GET, ['page' => $page - 1])) ?>">&#8249;</a>
+            </li>
+            <?php
+            $start = max(1, $page - 2);
+            $end   = min($totalPages, $page + 2);
+            if ($start > 1): ?><li class="page-item disabled"><span class="page-link">…</span></li><?php endif;
+            for ($i = $start; $i <= $end; $i++): ?>
+            <li class="page-item <?= $i === $page ? 'active' : '' ?>">
+                <a class="page-link" href="?<?= http_build_query(array_merge($_GET, ['page' => $i])) ?>"><?= $i ?></a>
+            </li>
+            <?php endfor;
+            if ($end < $totalPages): ?><li class="page-item disabled"><span class="page-link">…</span></li><?php endif; ?>
+            <li class="page-item <?= $page >= $totalPages ? 'disabled' : '' ?>">
+                <a class="page-link" href="?<?= http_build_query(array_merge($_GET, ['page' => $page + 1])) ?>">&#8250;</a>
+            </li>
+        </ul></nav>
+    </div>
+    <?php endif; ?>
 </div>
 
 <?php require_once '../includes/footer.php'; ?>

@@ -22,6 +22,23 @@ $periodWhere = match($period) {
     default => "",
 };
 
+// Aggregate totals over full filtered set (before pagination)
+$totalsRow = $pdo->query("
+    SELECT COUNT(*) AS cnt,
+           COALESCE(SUM(CASE WHEN p.amount_afn > 0 THEN p.amount_afn ELSE p.amount END), 0) AS sum_afn
+    FROM payments p
+    WHERE 1=1 $periodWhere
+")->fetch();
+$totalRows = (int)$totalsRow['cnt'];
+$totalAfn  = (float)$totalsRow['sum_afn'];
+$debt      = (float)$pdo->query("SELECT COALESCE(SUM(total_debt),0) FROM customers")->fetchColumn();
+
+$perPage    = 10;
+$page       = max(1, (int)($_GET['page'] ?? 1));
+$totalPages = max(1, (int)ceil($totalRows / $perPage));
+$page       = min($page, $totalPages);
+$offset     = ($page - 1) * $perPage;
+
 $payments = $pdo->query("
     SELECT p.*, c.name AS customer_name, c.shop_name, u.full_name AS created_by
     FROM payments p
@@ -29,6 +46,7 @@ $payments = $pdo->query("
     JOIN users u ON u.id = p.created_by
     WHERE 1=1 $periodWhere
     ORDER BY p.created_at DESC
+    LIMIT $perPage OFFSET $offset
 ")->fetchAll();
 
 foreach ($payments as &$p) {
@@ -37,8 +55,6 @@ foreach ($payments as &$p) {
     }
 }
 unset($p);
-$totalAfn = array_sum(array_column($payments, 'amount_afn'));
-$debt     = (float)$pdo->query("SELECT COALESCE(SUM(total_debt),0) FROM customers")->fetchColumn();
 
 require_once '../includes/header.php';
 ?>
@@ -111,7 +127,7 @@ $payPeriodLabels = [
                     <?= __('pay_records') ?>
                     <span class="badge bg-primary-subtle text-primary border border-primary-subtle ms-1" style="font-size:0.65rem;"><?= $payPeriodLabels[$period] ?></span>
                 </div>
-                <div class="fw-bold fs-5"><?= count($payments) ?></div>
+                <div class="fw-bold fs-5"><?= $totalRows ?></div>
             </div>
         </div>
     </div>
@@ -176,6 +192,32 @@ $payPeriodLabels = [
             </tbody>
         </table>
     </div>
+    <?php if ($totalPages > 1): ?>
+    <div class="card-footer d-flex align-items-center justify-content-between gap-2 flex-wrap py-2">
+        <span class="text-muted small">
+            <?= __('field_total') ?>: <?= $totalRows ?> &mdash;
+            <?= __('period_showing') ?> <?= $offset + 1 ?>–<?= min($offset + $perPage, $totalRows) ?>
+        </span>
+        <nav><ul class="pagination pagination-sm mb-0">
+            <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
+                <a class="page-link" href="?<?= http_build_query(array_merge($_GET, ['page' => $page - 1])) ?>">&#8249;</a>
+            </li>
+            <?php
+            $start = max(1, $page - 2);
+            $end   = min($totalPages, $page + 2);
+            if ($start > 1): ?><li class="page-item disabled"><span class="page-link">…</span></li><?php endif;
+            for ($i = $start; $i <= $end; $i++): ?>
+            <li class="page-item <?= $i === $page ? 'active' : '' ?>">
+                <a class="page-link" href="?<?= http_build_query(array_merge($_GET, ['page' => $i])) ?>"><?= $i ?></a>
+            </li>
+            <?php endfor;
+            if ($end < $totalPages): ?><li class="page-item disabled"><span class="page-link">…</span></li><?php endif; ?>
+            <li class="page-item <?= $page >= $totalPages ? 'disabled' : '' ?>">
+                <a class="page-link" href="?<?= http_build_query(array_merge($_GET, ['page' => $page + 1])) ?>">&#8250;</a>
+            </li>
+        </ul></nav>
+    </div>
+    <?php endif; ?>
 </div>
 
 <?php require_once '../includes/footer.php'; ?>
