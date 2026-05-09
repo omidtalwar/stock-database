@@ -352,6 +352,35 @@ a:hover { color: var(--w11-blue-hover); }
 }
 .sidebar-overlay.show { display: block; }
 
+/* ── Page transition progress bar ── */
+#fzl-bar {
+    position: fixed; top: 0; left: 0; right: 0;
+    height: 3px; z-index: 99999;
+    background: linear-gradient(90deg, var(--w11-blue) 0%, #60B0FF 50%, var(--w11-blue) 100%);
+    background-size: 200% 100%;
+    width: 0%; opacity: 0;
+    border-radius: 0 2px 2px 0;
+    box-shadow: 0 0 10px rgba(0,103,192,0.5);
+    will-change: width, opacity;
+    pointer-events: none;
+}
+#fzl-bar.indeterminate {
+    animation: fzl-bar-shimmer 1.4s linear infinite;
+}
+@keyframes fzl-bar-shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* ── Page content fade-in ── */
+.content-area {
+    animation: fzl-page-in 0.22s ease both;
+}
+@keyframes fzl-page-in {
+    from { opacity: 0; transform: translateY(7px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
 /* ── RTL nav section uppercase fix ── */
 <?php if (isRTL()): ?>
 .nav-section { text-transform: none; letter-spacing: 0; font-size: 0.72rem; }
@@ -359,6 +388,8 @@ a:hover { color: var(--w11-blue-hover); }
 </style>
 </head>
 <body>
+
+<div id="fzl-bar"></div>
 
 <?php
 if (!empty($_SESSION['success'])) {
