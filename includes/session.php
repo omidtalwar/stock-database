@@ -2,7 +2,30 @@
 date_default_timezone_set('Asia/Kabul');
 
 if (session_status() === PHP_SESSION_NONE) {
+    $__lifetime = 365 * 24 * 60 * 60; // 1 year
+
+    ini_set('session.gc_maxlifetime', $__lifetime);
+
+    session_set_cookie_params([
+        'lifetime' => $__lifetime,
+        'path'     => '/',
+        'secure'   => !empty($_SERVER['HTTPS']),
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
+
     session_start();
+
+    // Refresh cookie expiry on every request so it never expires while the user is active
+    if (isset($_SESSION['user_id'])) {
+        setcookie(session_name(), session_id(), [
+            'expires'  => time() + $__lifetime,
+            'path'     => '/',
+            'secure'   => !empty($_SERVER['HTTPS']),
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+    }
 }
 // Default language
 if (!isset($_SESSION['lang'])) {

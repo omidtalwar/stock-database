@@ -9,9 +9,11 @@ $pageTitle = __('sale_create_title');
 
 // ── Auto-migrate new columns ──
 foreach ([
-    "ALTER TABLE sales ADD COLUMN bill_no   VARCHAR(100) NULL AFTER id",
-    "ALTER TABLE sales ADD COLUMN sale_date DATE         NULL AFTER bill_no",
-    "ALTER TABLE sales ADD COLUMN images    TEXT         NULL",
+    "ALTER TABLE sales ADD COLUMN bill_no       VARCHAR(100) NULL AFTER id",
+    "ALTER TABLE sales ADD COLUMN sale_date     DATE         NULL AFTER bill_no",
+    "ALTER TABLE sales ADD COLUMN images        TEXT         NULL",
+    "ALTER TABLE sale_items ADD COLUMN custom_name VARCHAR(255) NULL",
+    "ALTER TABLE sale_items MODIFY product_id   INT          NULL",
 ] as $_sql) {
     try { $pdo->exec($_sql); } catch (\PDOException $e) {}
 }
@@ -51,16 +53,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($items))  $errors[] = __('sale_add_product');
 
     foreach ($items as $item) {
-        $pid = (int)($item['product_id'] ?? 0);
-        $qty = (int)($item['quantity']   ?? 0);
-        if ($pid <= 0 || $qty <= 0) continue;
-        $prod = null;
-        foreach ($products as $p) { if ($p['id'] == $pid) { $prod = $p; break; } }
-        if (!$prod) { $errors[] = 'Invalid product.'; break; }
-        if ($qty > $prod['quantity']) { $errors[] = sprintf(__('stock_not_enough'), $qty, $prod['quantity']); break; }
-        $sub       = $qty * $prod['price'];
-        $total    += $sub;
-        $lineItems[] = ['product_id' => $pid, 'quantity' => $qty, 'unit_price' => $prod['price'], 'subtotal' => $sub];
+        $pid       = (int)($item['product_id'] ?? 0);
+        $qty       = (int)($item['quantity']   ?? 0);
+        $unitPrice = (float)($item['unit_price'] ?? 0);
+        $custName  = trim($item['product_name'] ?? '');
+        if ($qty <= 0 || $unitPrice <= 0) continue;
+
+        if ($pid > 0) {
+            // Known product — validate stock
+            $prod = null;
+            foreach ($products as $p) { if ($p['id'] == $pid) { $prod = $p; break; } }
+            if (!$prod) { $errors[] = 'Invalid product.'; break; }
+            if ($qty > (int)$prod['quantity']) { $errors[] = sprintf(__('stock_not_enough'), $qty, $prod['quantity']); break; }
+        } else {
+            // Custom item — no stock check, just needs a name
+            if (!$custName) { $errors[] = 'Please enter a name for the custom item.'; break; }
+        }
+
+        $sub    = $qty * $unitPrice;
+        $total += $sub;
+        $lineItems[] = [
+            'product_id'  => $pid ?: null,
+            'quantity'    => $qty,
+            'unit_price'  => $unitPrice,
+            'subtotal'    => $sub,
+            'custom_name' => $custName ?: null,
+        ];
     }
 
     if (empty($lineItems) && empty($errors)) $errors[] = __('sale_click_add');
@@ -76,11 +94,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $saleId = $pdo->lastInsertId();
 
             foreach ($lineItems as $li) {
-                $pdo->prepare("INSERT INTO sale_items (sale_id,product_id,quantity,unit_price,subtotal) VALUES (?,?,?,?,?)")
-                    ->execute([$saleId, $li['product_id'], $li['quantity'], $li['unit_price'], $li['subtotal']]);
-                $pdo->prepare("UPDATE products SET quantity = quantity - ? WHERE id = ?")->execute([$li['quantity'], $li['product_id']]);
-                $pdo->prepare("INSERT INTO stock_logs (product_id,type,quantity,notes,created_by) VALUES (?,'out',?,?,?)")
-                    ->execute([$li['product_id'], $li['quantity'], 'Sale #'.str_pad($saleId,4,'0',STR_PAD_LEFT), $_SESSION['user_id']]);
+                $pdo->prepare("INSERT INTO sale_items (sale_id,product_id,quantity,unit_price,subtotal,custom_name) VALUES (?,?,?,?,?,?)")
+                    ->execute([$saleId, $li['product_id'], $li['quantity'], $li['unit_price'], $li['subtotal'], $li['custom_name']]);
+                if ($li['product_id']) {
+                    $pdo->prepare("UPDATE products SET quantity = quantity - ? WHERE id = ?")->execute([$li['quantity'], $li['product_id']]);
+                    $pdo->prepare("INSERT INTO stock_logs (product_id,type,quantity,notes,created_by) VALUES (?,'out',?,?,?)")
+                        ->execute([$li['product_id'], $li['quantity'], 'Sale #'.str_pad($saleId,4,'0',STR_PAD_LEFT), $_SESSION['user_id']]);
+                }
             }
 
             $pdo->prepare("UPDATE customers SET total_debt = total_debt + ? WHERE id = ?")->execute([$balance, $customer_id]);
@@ -248,31 +268,14 @@ require_once '../includes/header.php';
     <!-- ── Left column ── -->
     <div class="col-lg-8">
 
-        <!-- Customer -->
-        <div class="card mb-3">
-            <div class="card-header fw-semibold"><?= __('sale_select_cust') ?></div>
-            <div class="card-body">
-                <select name="customer_id" class="form-select" required>
-                    <option value=""><?= __('sale_choose_cust') ?></option>
-                    <?php foreach ($customers as $c): ?>
-                    <option value="<?= $c['id'] ?>"
-                        <?= ($preCustomer == $c['id'] || ($_POST['customer_id'] ?? 0) == $c['id']) ? 'selected' : '' ?>>
-                        <?= htmlspecialchars($c['name']) ?> — <?= htmlspecialchars($c['shop_name']) ?>
-                    </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-        </div>
-
-        <!-- Invoice Details (NEW) -->
+        <!-- ① Invoice Details -->
         <div class="card mb-3">
             <div class="card-header fw-semibold d-flex align-items-center gap-2">
                 <i class="bi bi-file-earmark-text" style="color:#0067C0;"></i>
                 Invoice Details
             </div>
             <div class="card-body">
-
-                <div class="row g-3 mb-3">
+                <div class="row g-3">
                     <!-- Bill No -->
                     <div class="col-sm-6">
                         <label class="form-label small fw-semibold">Bill No</label>
@@ -285,7 +288,7 @@ require_once '../includes/header.php';
                         <div class="form-text">Auto-suggested — you can change it.</div>
                     </div>
 
-                    <!-- Date — Shamsi (Solar Hijri) primary input -->
+                    <!-- Date — Solar Hijri -->
                     <div class="col-sm-6">
                         <label class="form-label small fw-semibold d-flex align-items-center gap-2">
                             Date
@@ -309,9 +312,7 @@ require_once '../includes/header.php';
                                     class="form-select form-select-sm" style="width:132px;"
                                     onchange="syncShamsiDate()">
                                 <?php foreach ($jMonths as $i => $nm): ?>
-                                <option value="<?= $i+1 ?>" <?= $defJm === $i+1 ? 'selected' : '' ?>>
-                                    <?= $nm ?>
-                                </option>
+                                <option value="<?= $i+1 ?>" <?= $defJm === $i+1 ? 'selected' : '' ?>><?= $nm ?></option>
                                 <?php endforeach; ?>
                             </select>
                             <span class="text-muted">/</span>
@@ -324,37 +325,31 @@ require_once '../includes/header.php';
                                value="<?= htmlspecialchars($_POST['sale_date'] ?? date('Y-m-d')) ?>">
                         <div id="gregorianBadge" class="mt-1 text-muted" style="font-size:0.71rem;"></div>
                     </div>
-                </div>
 
-                <!-- Image Upload -->
-                <div>
-                    <label class="form-label small fw-semibold mb-1">
-                        Attach Images
-                        <span class="text-muted fw-normal ms-1">(up to 3 · JPG, PNG, WebP · max 5 MB each)</span>
-                    </label>
-
-                    <div id="dropZone" class="inv-drop-zone">
-                        <i class="bi bi-cloud-upload fs-5 text-primary mb-1"></i>
-                        <div id="dzText">
-                            Drop images here or <strong>click to browse</strong>
-                            <span class="text-muted ms-1" id="dzRemaining">(3 remaining)</span>
-                        </div>
+                    <!-- Customer -->
+                    <div class="col-12">
+                        <label class="form-label small fw-semibold"><?= __('sale_select_cust') ?> <span class="text-danger">*</span></label>
+                        <select name="customer_id" class="form-select form-select-sm" required>
+                            <option value=""><?= __('sale_choose_cust') ?></option>
+                            <?php foreach ($customers as $c): ?>
+                            <option value="<?= $c['id'] ?>"
+                                <?= ($preCustomer == $c['id'] || ($_POST['customer_id'] ?? 0) == $c['id']) ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($c['name']) ?> — <?= htmlspecialchars($c['shop_name']) ?>
+                            </option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
-                    <input type="file" id="imageFileInput"
-                           accept="image/jpeg,image/png,image/webp,image/gif"
-                           multiple style="display:none;">
-
-                    <div id="imgPreviewGrid" class="img-preview-grid"></div>
-                    <div id="imgHiddenInputs"></div>
                 </div>
-
             </div>
         </div>
 
-        <!-- Products -->
-        <div class="card">
+        <!-- ② Products -->
+        <div class="card mb-3">
             <div class="card-header d-flex align-items-center justify-content-between">
-                <span class="fw-semibold"><?= __('sale_products') ?></span>
+                <span class="fw-semibold d-flex align-items-center gap-2">
+                    <i class="bi bi-box-seam" style="color:#0067C0;"></i>
+                    <?= __('sale_products') ?>
+                </span>
                 <button type="button" class="btn btn-sm btn-primary" id="addRow">
                     <i class="bi bi-plus-circle me-1"></i><?= __('sale_add_product') ?>
                 </button>
@@ -363,9 +358,9 @@ require_once '../includes/header.php';
                 <table class="table align-middle mb-0" id="itemsTable">
                     <thead>
                         <tr>
-                            <th><?= __('nav_products') ?></th>
-                            <th style="width:110px;"><?= __('field_quantity') ?></th>
-                            <th style="width:110px;"><?= __('field_price') ?></th>
+                            <th><?= __('nav_products') ?> / Size</th>
+                            <th style="width:90px;"><?= __('field_quantity') ?></th>
+                            <th style="width:120px;"><?= __('field_price') ?> (؋)</th>
                             <th style="width:110px;"><?= __('field_total') ?></th>
                             <th style="width:46px;"></th>
                         </tr>
@@ -376,7 +371,29 @@ require_once '../includes/header.php';
                         </tr>
                     </tbody>
                 </table>
-            </div><!-- /.table-responsive -->
+            </div>
+        </div>
+
+        <!-- ③ Attach Image -->
+        <div class="card mb-3">
+            <div class="card-header fw-semibold d-flex align-items-center gap-2">
+                <i class="bi bi-image" style="color:#0067C0;"></i>
+                Attach Images
+                <span class="text-muted fw-normal ms-1 small">(up to 3 · JPG, PNG, WebP · max 5 MB each)</span>
+            </div>
+            <div class="card-body">
+                <div id="dropZone" class="inv-drop-zone">
+                    <i class="bi bi-cloud-upload fs-5 text-primary mb-1"></i>
+                    <div>Drop images here or <strong>click to browse</strong>
+                        <span class="text-muted ms-1" id="dzRemaining">(3 remaining)</span>
+                    </div>
+                </div>
+                <input type="file" id="imageFileInput"
+                       accept="image/jpeg,image/png,image/webp,image/gif"
+                       multiple style="display:none;">
+                <div id="imgPreviewGrid" class="img-preview-grid"></div>
+                <div id="imgHiddenInputs"></div>
+            </div>
         </div>
 
     </div><!-- /col-lg-8 -->
@@ -445,12 +462,10 @@ require_once '../includes/header.php';
 </form>
 
 <script>
-/* ──────────────────────────────────────────
-   Products row logic (unchanged)
-────────────────────────────────────────── */
+/* ── Products row logic ── */
 const PRODUCTS = <?= json_encode(array_map(fn($p) => [
     'id'    => $p['id'],
-    'label' => $p['name'].($p['size']?' ('.$p['size'].')':'').($p['color']?' - '.$p['color']:''),
+    'label' => $p['name'].($p['size'] ? ' ('.$p['size'].')' : '').($p['color'] ? ' - '.$p['color'] : ''),
     'price' => (float)$p['price'],
     'stock' => (int)$p['quantity'],
 ], $products)) ?>;
@@ -459,52 +474,100 @@ const RATE_INV    = <?= $rate ?>;
 const SEC_CUR_INV = <?= json_encode($secCur) ?>;
 const SEC_SYM_INV = <?= json_encode($secSymbol) ?>;
 const EMPTY_MSG   = <?= json_encode(__('sale_click_add')) ?>;
-const SEL_PROD    = <?= json_encode(__('prod_size_select')) ?>;
+
+// Fast lookup by label
+const PROD_MAP = {};
+PRODUCTS.forEach(p => { PROD_MAP[p.label] = p; });
+
+// Build the shared datalist once
+const _dl = document.createElement('datalist');
+_dl.id = 'prod-master-list';
+PRODUCTS.forEach(p => {
+    const o = document.createElement('option');
+    o.value = p.label;
+    _dl.appendChild(o);
+});
+document.body.appendChild(_dl);
 
 let rowCount = 0;
 
-function buildProductOptions(selectedId = '') {
-    let opts = '<option value="">' + SEL_PROD + '</option>';
-    PRODUCTS.forEach(p => {
-        opts += `<option value="${p.id}" data-price="${p.price}" data-stock="${p.stock}"
-                  ${p.id == selectedId ? 'selected' : ''}>${p.label} [${p.stock} pcs]</option>`;
-    });
-    return opts;
-}
-
-function addRow(pid = '', qty = 1) {
+function addRow() {
     document.getElementById('emptyRow')?.remove();
     rowCount++;
     const idx = rowCount;
     const row = document.createElement('tr');
     row.id = `row_${idx}`;
     row.innerHTML = `
-        <td>
-            <select name="items[${idx}][product_id]" class="form-select form-select-sm product-select"
-                    onchange="updateRow(${idx})" required>${buildProductOptions(pid)}</select>
+        <td style="min-width:200px;">
+            <input list="prod-master-list"
+                   name="items[${idx}][product_name]"
+                   class="form-control form-control-sm prod-name-input"
+                   placeholder="Select or type product / size…"
+                   autocomplete="off"
+                   oninput="matchProduct(${idx}, this)">
+            <input type="hidden" name="items[${idx}][product_id]" class="prod-id-hidden" value="">
+            <div class="prod-stock-info text-muted mt-1" style="font-size:0.7rem;"></div>
         </td>
-        <td><input type="number" name="items[${idx}][quantity]" class="form-control form-control-sm qty-input"
-                   value="${qty}" min="1" oninput="updateRow(${idx})" required></td>
-        <td><input type="text"   class="form-control form-control-sm price-display"    readonly value="؋ 0"></td>
-        <td><input type="text"   class="form-control form-control-sm subtotal-display fw-semibold" readonly value="؋ 0"></td>
-        <td><button type="button" class="btn btn-sm btn-light text-danger"
-                    onclick="removeRow(${idx})"><i class="bi bi-x-lg"></i></button></td>
-    `;
+        <td>
+            <input type="number" name="items[${idx}][quantity]"
+                   class="form-control form-control-sm qty-input"
+                   value="1" min="1" oninput="updateRow(${idx})" required>
+        </td>
+        <td>
+            <input type="number" name="items[${idx}][unit_price]"
+                   class="form-control form-control-sm price-input"
+                   value="0" min="0" step="1"
+                   oninput="updateRow(${idx})" placeholder="0">
+        </td>
+        <td>
+            <input type="text" class="form-control form-control-sm subtotal-display fw-semibold"
+                   readonly value="؋ 0" tabindex="-1">
+        </td>
+        <td>
+            <button type="button" class="btn btn-sm btn-light text-danger"
+                    onclick="removeRow(${idx})"><i class="bi bi-x-lg"></i></button>
+        </td>`;
     document.getElementById('itemsBody').appendChild(row);
-    if (pid) updateRow(idx);
+    row.querySelector('.prod-name-input').focus();
+}
+
+function matchProduct(idx, input) {
+    const row       = document.getElementById(`row_${idx}`);
+    const val       = input.value.trim();
+    const prod      = PROD_MAP[val] || null;
+    const pidInput  = row.querySelector('.prod-id-hidden');
+    const priceEl   = row.querySelector('.price-input');
+    const stockInfo = row.querySelector('.prod-stock-info');
+    const qtyEl     = row.querySelector('.qty-input');
+
+    if (prod) {
+        pidInput.value  = prod.id;
+        priceEl.value   = prod.price;
+        qtyEl.max       = prod.stock;
+        stockInfo.innerHTML = `<i class="bi bi-archive me-1"></i>Stock: <b>${prod.stock}</b> pcs`;
+        stockInfo.style.color = prod.stock > 0 ? '' : 'var(--w11-red,#C42B1C)';
+    } else {
+        pidInput.value  = '';
+        qtyEl.removeAttribute('max');
+        stockInfo.innerHTML = val
+            ? '<i class="bi bi-pencil me-1"></i>Custom item — set price manually'
+            : '';
+        stockInfo.style.color = '#888';
+    }
+    updateRow(idx);
 }
 
 function updateRow(idx) {
-    const row   = document.getElementById(`row_${idx}`);
-    const sel   = row.querySelector('.product-select');
-    const opt   = sel.options[sel.selectedIndex];
-    const price = parseFloat(opt?.dataset.price || 0);
-    const stock = parseInt(opt?.dataset.stock  || 0);
-    const qty   = parseInt(row.querySelector('.qty-input').value || 0);
-    if (qty > stock && stock > 0) row.querySelector('.qty-input').value = stock;
-    const finalQty = Math.min(qty, stock);
+    const row    = document.getElementById(`row_${idx}`);
+    const price  = parseFloat(row.querySelector('.price-input').value || 0);
+    const qty    = parseInt(row.querySelector('.qty-input').value    || 0);
+    const pid    = row.querySelector('.prod-id-hidden').value;
+    const prod   = pid ? PRODUCTS.find(p => p.id == pid) : null;
+
+    // Cap qty to stock for known products
+    if (prod && qty > prod.stock) row.querySelector('.qty-input').value = prod.stock;
+    const finalQty = parseInt(row.querySelector('.qty-input').value || 0);
     const sub = price * finalQty;
-    row.querySelector('.price-display').value    = '؋ ' + price.toLocaleString('en-AF', {maximumFractionDigits:0});
     row.querySelector('.subtotal-display').value = '؋ ' + sub.toLocaleString('en-AF', {maximumFractionDigits:0});
     updateSummary();
 }
@@ -547,8 +610,7 @@ function updateSummary() {
     }
 }
 
-document.getElementById('addRow').addEventListener('click', () => addRow());
-addRow();
+document.getElementById('addRow').addEventListener('click', addRow);
 
 /* ──────────────────────────────────────────
    Solar Hijri ↔ Gregorian conversion
