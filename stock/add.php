@@ -22,6 +22,10 @@ foreach ([
 
 $products    = $pdo->query("SELECT id, name, size, color, quantity FROM products ORDER BY name ASC")->fetchAll();
 $preProduct  = (int)($_GET['product_id'] ?? 0);
+$preSupplier = trim($_GET['supplier'] ?? '');
+$knownSuppliers = $pdo->query(
+    "SELECT DISTINCT supplier FROM stock_logs WHERE supplier IS NOT NULL AND supplier != '' ORDER BY supplier ASC"
+)->fetchAll(PDO::FETCH_COLUMN);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $pid          = (int)($_POST['product_id']   ?? 0);
@@ -175,9 +179,16 @@ $prodJs = array_map(fn($p) => [
                         Supplier / Wholesaler
                         <span class="text-muted fw-normal ms-1 small">(optional)</span>
                     </label>
-                    <input type="text" name="supplier" class="form-control"
+                    <input list="supplier-list"
+                           type="text" name="supplier" class="form-control"
                            placeholder="e.g. Ahmed Traders, Kabul Market…"
-                           value="<?= htmlspecialchars($_POST['supplier'] ?? '') ?>">
+                           autocomplete="off"
+                           value="<?= htmlspecialchars($_POST['supplier'] ?? $preSupplier) ?>">
+                    <datalist id="supplier-list">
+                        <?php foreach ($knownSuppliers as $s): ?>
+                        <option value="<?= htmlspecialchars($s) ?>"></option>
+                        <?php endforeach; ?>
+                    </datalist>
                 </div>
 
                 <!-- Type -->
