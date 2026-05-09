@@ -85,6 +85,13 @@ $_bsIcons = 'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FZL — <?= __('nav_dashboard') ?></title>
 <link href="<?= $_bsIcons ?>" rel="stylesheet">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="apple-touch-icon" href="/icon.php?size=192">
+<meta name="theme-color" content="#0067C0">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="FZL">
 <style>
 :root {
     --w11-blue:       #0067C0;
@@ -426,9 +433,48 @@ body { font-family: 'Segoe UI Variable', 'Noto Naskh Arabic', 'Segoe UI', system
     .bottom-grid { grid-template-columns: 1fr; }
     .stat-grid { grid-template-columns: 1fr 1fr; }
 }
+
+/* ── Page transition bar ── */
+#fzl-bar {
+    position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 99999;
+    background: linear-gradient(90deg,#0067C0,#60B0FF,#0067C0);
+    background-size: 200% 100%;
+    width: 0%; opacity: 0; border-radius: 0 2px 2px 0;
+    box-shadow: 0 0 10px rgba(0,103,192,0.5); pointer-events: none;
+}
+#fzl-bar.go { animation: fzl-shimmer 1.4s linear infinite; }
+@keyframes fzl-shimmer { to { background-position: -200% 0; } }
+
+/* ── Install modal ── */
+#fzl-install-modal {
+    display: none; position: fixed; inset: 0; z-index: 99998;
+    background: rgba(0,0,0,0.45); backdrop-filter: blur(4px);
+    align-items: center; justify-content: center; padding: 16px;
+}
+#fzl-install-modal.open { display: flex; }
 </style>
 </head>
 <body>
+
+<div id="fzl-bar"></div>
+
+<!-- Install modal -->
+<div id="fzl-install-modal">
+    <div style="background:#fff;border-radius:14px;padding:28px 24px;max-width:380px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,0.18);position:relative;">
+        <button id="fzl-modal-close" style="position:absolute;top:12px;right:14px;background:none;border:none;font-size:1.3rem;color:#888;cursor:pointer;">&#x2715;</button>
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
+            <div style="width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,#0067C0,#003E92);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:0.95rem;letter-spacing:1px;flex-shrink:0;">FZL</div>
+            <div>
+                <div style="font-weight:700;font-size:1rem;">Install FZL</div>
+                <div style="font-size:0.78rem;color:#666;">Add to your desktop or home screen</div>
+            </div>
+        </div>
+        <div id="fzl-install-steps" style="font-size:0.85rem;color:#333;line-height:1.8;"></div>
+        <button id="fzl-native-btn" style="display:none;width:100%;margin-top:18px;padding:10px;border-radius:8px;border:none;background:#0067C0;color:#fff;font-weight:700;font-size:0.9rem;cursor:pointer;">
+            &#8659; Install Now
+        </button>
+    </div>
+</div>
 
 <?= flash() ?>
 
@@ -487,6 +533,10 @@ body { font-family: 'Segoe UI Variable', 'Noto Naskh Arabic', 'Segoe UI', system
         <span class="topbar-page"><?= __('nav_dashboard') ?></span>
         <div class="topbar-right">
             <span><?= date('d M Y') ?></span>
+            <button id="fzl-install-btn" title="Install App"
+                style="display:flex;align-items:center;gap:6px;padding:4px 11px;border-radius:6px;border:1px solid #0067C0;background:#EFF6FC;color:#0067C0;font-size:0.78rem;font-weight:600;cursor:pointer;white-space:nowrap;">
+                &#8659; <span class="d-sm-inline" style="display:none;">Install App</span>
+            </button>
             <div class="lang-switch">
                 <a href="?setlang=en" class="lang-btn <?= currentLang() === 'en' ? 'active' : '' ?>">🇬🇧 EN</a>
                 <a href="?setlang=ps" class="lang-btn <?= currentLang() === 'ps' ? 'active' : '' ?>">🇦🇫 PS</a>
@@ -707,14 +757,118 @@ body { font-family: 'Segoe UI Variable', 'Noto Naskh Arabic', 'Segoe UI', system
 </div>
 
 <script>
+// ── Sidebar ──
 const ham  = document.getElementById('hamburger');
 const side = document.getElementById('sidebar');
 ham?.addEventListener('click', () => side.classList.toggle('open'));
 document.addEventListener('click', e => {
-    if (side.classList.contains('open') && !side.contains(e.target) && e.target !== ham) {
+    if (side.classList.contains('open') && !side.contains(e.target) && e.target !== ham)
         side.classList.remove('open');
-    }
 });
+
+// ── Service Worker ──
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+
+// ── Progress bar ──
+(function () {
+    const bar = document.getElementById('fzl-bar');
+    let active = false, timer = null;
+
+    function startBar() {
+        if (active) return; active = true;
+        clearTimeout(timer);
+        bar.style.transition = 'none'; bar.style.width = '0%'; bar.style.opacity = '1';
+        bar.classList.add('go');
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+            bar.style.transition = 'width 1.4s cubic-bezier(0.08,0.82,0.17,1)';
+            bar.style.width = '82%';
+        }));
+        timer = setTimeout(abortBar, 10000);
+    }
+    function completeBar() {
+        clearTimeout(timer);
+        bar.classList.remove('go');
+        bar.style.transition = 'width 0.12s ease'; bar.style.width = '100%';
+        setTimeout(() => {
+            bar.style.transition = 'opacity 0.3s ease'; bar.style.opacity = '0';
+            setTimeout(() => { bar.style.width = '0%'; active = false; }, 320);
+        }, 130);
+    }
+    function abortBar() {
+        bar.classList.remove('go');
+        bar.style.transition = 'opacity 0.25s ease'; bar.style.opacity = '0';
+        setTimeout(() => { bar.style.width = '0%'; active = false; }, 260);
+    }
+    completeBar();
+    document.addEventListener('click', e => {
+        const a = e.target.closest('a[href]');
+        if (!a) return;
+        const h = a.getAttribute('href');
+        if (!h || h.startsWith('#') || h.startsWith('javascript:') || h.startsWith('mailto:')
+            || a.target === '_blank' || e.ctrlKey || e.metaKey || e.shiftKey) return;
+        if (/^https?:\/\//i.test(h) && !h.includes(location.hostname)) return;
+        startBar();
+    });
+    document.addEventListener('submit', () => startBar());
+    window.addEventListener('beforeunload', () => {
+        bar.classList.remove('go');
+        bar.style.transition = 'width 0.08s ease'; bar.style.width = '100%'; bar.style.opacity = '1';
+    });
+})();
+
+// ── PWA Install ──
+(function () {
+    let prompt = null;
+    const btn       = document.getElementById('fzl-install-btn');
+    const modal     = document.getElementById('fzl-install-modal');
+    const closeBtn  = document.getElementById('fzl-modal-close');
+    const nativeBtn = document.getElementById('fzl-native-btn');
+    const stepsEl   = document.getElementById('fzl-install-steps');
+
+    const ua = navigator.userAgent;
+    const isIOS    = /iphone|ipad|ipod/i.test(ua);
+    const isSafari = /safari/i.test(ua) && !/chrome/i.test(ua);
+    const isAndroid = /android/i.test(ua);
+
+    function steps() {
+        if (prompt) return null;
+        if (isIOS && isSafari) return '<b>On iPhone / iPad (Safari):</b><br>1. Tap the <b>Share &#8679;</b> button at the bottom<br>2. Tap <b>"Add to Home Screen"</b><br>3. Tap <b>Add</b>';
+        if (isAndroid)         return '<b>On Android (Chrome):</b><br>1. Tap the <b>&#8942; menu</b> (top-right)<br>2. Tap <b>"Add to Home screen"</b><br>3. Tap <b>Install</b>';
+        return '<b>On Chrome / Edge:</b><br>1. Look for <b>&#8853;</b> in the address bar (right side)<br>2. Click it → <b>Install</b><br><br><i>Or: browser menu → "Install FZL…"</i>';
+    }
+
+    function openModal() {
+        const s = steps();
+        if (prompt) {
+            stepsEl.innerHTML = '<b>Click below to install FZL on your device:</b>';
+            nativeBtn.style.display = 'block';
+        } else {
+            stepsEl.innerHTML = s;
+            nativeBtn.style.display = 'none';
+        }
+        modal.classList.add('open');
+    }
+    function closeModal() { modal.classList.remove('open'); }
+
+    btn?.addEventListener('click', openModal);
+    closeBtn?.addEventListener('click', closeModal);
+    modal?.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+
+    nativeBtn?.addEventListener('click', async () => {
+        if (!prompt) return;
+        prompt.prompt();
+        const { outcome } = await prompt.userChoice;
+        if (outcome === 'accepted') { closeModal(); btn.style.display = 'none'; }
+        prompt = null; nativeBtn.style.display = 'none';
+    });
+
+    window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); prompt = e; });
+    window.addEventListener('appinstalled', () => { btn.style.display = 'none'; closeModal(); prompt = null; });
+
+    // Hide if already running as installed app
+    if (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone)
+        btn.style.display = 'none';
+})();
 </script>
 </body>
 </html>
