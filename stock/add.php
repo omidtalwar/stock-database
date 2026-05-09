@@ -67,11 +67,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($errors)) {
         $grandTotal = array_sum(array_column($rows, 'rowTotal'));
 
+        // Payment is tracked on the first row only (not split across rows).
+        // All other rows get paid=0, balance=0.
+        // Aggregates: SUM(total_amount)=grandTotal, SUM(paid)=paidTotal, SUM(balance)=grandTotal-paidTotal ✓
+        $isFirst = true;
+
         $pdo->beginTransaction();
         try {
             foreach ($rows as $r) {
-                $rowPaid    = $grandTotal > 0 ? round(($r['rowTotal'] / $grandTotal) * $paidTotal, 2) : 0;
-                $rowBalance = max(0, $r['rowTotal'] - $rowPaid);
+                if ($isFirst) {
+                    $rowPaid    = $paidTotal;
+                    $rowBalance = max(0, $grandTotal - $paidTotal);
+                    $isFirst    = false;
+                } else {
+                    $rowPaid    = 0;
+                    $rowBalance = 0;
+                }
 
                 if ($r['pid']) {
                     $op = $type === 'in' ? 'quantity + ?' : 'quantity - ?';
@@ -211,6 +222,12 @@ require_once '../includes/header.php';
             </table>
         </div>
         <input type="hidden" id="grandTotalHidden" name="_grand_total" value="0">
+        <!-- Inline datalists (inside form for full browser compatibility) -->
+        <datalist id="prod-list-inline">
+            <?php foreach ($prodJs as $p): ?>
+            <option value="<?= htmlspecialchars($p['label']) ?>"></option>
+            <?php endforeach; ?>
+        </datalist>
     </div>
 
     <!-- ── Payment + Notes + Bill ── -->
@@ -290,77 +307,60 @@ require_once '../includes/header.php';
 
 </form>
 
-<!-- Datalist for products (shared across all rows) -->
-<datalist id="prod-list">
-    <?php foreach ($prodJs as $p): ?>
-    <option value="<?= htmlspecialchars($p['label']) ?>"></option>
-    <?php endforeach; ?>
-</datalist>
-
 <script>
 const PRODS    = <?= json_encode($prodJs) ?>;
 const PROD_MAP = {};
 PRODS.forEach(p => { PROD_MAP[p.label] = p; });
 
+const SUPPLIER_LIST = <?= json_encode($knownSuppliers) ?>;
+
 let rowIdx = 0;
 
-function rowHTML() {
-    rowIdx++;
-    return `
-    <td>
-        <input list="prod-list" name="custom_product[]"
-               class="form-control form-control-sm prod-input"
-               placeholder="Product (optional — defaults to 'Stock')"
-               autocomplete="off" oninput="matchProd(this)">
-        <input type="hidden" name="product_id[]" class="prod-id" value="">
-        <div class="prod-info text-muted mt-1" style="font-size:0.7rem;"></div>
-    </td>
-    <td>
-        <div class="input-group input-group-sm" style="min-width:90px;">
-            <input type="number" name="quantity[]" class="form-control row-qty"
-                   min="1" placeholder="0" oninput="calcRowTotal(this.closest('tr'))">
-            <span class="input-group-text" style="font-size:.75rem;">pcs</span>
-        </div>
-    </td>
-    <td>
-        <input type="number" name="bundle_count[]" class="form-control form-control-sm row-bundles"
-               min="0" placeholder="—" style="min-width:70px;"
-               oninput="calcRowTotal(this.closest('tr'))">
-    </td>
-    <td>
-        <select name="pricing_type[]" class="form-select form-select-sm row-pricing"
-                onchange="calcRowTotal(this.closest('tr'))">
-            <option value="per_pcs">/ pcs</option>
-            <option value="per_bundle">/ bundle</option>
-        </select>
-    </td>
-    <td>
-        <div class="input-group input-group-sm" style="min-width:100px;">
-            <span class="input-group-text">؋</span>
-            <input type="number" name="unit_price[]" class="form-control row-price"
-                   min="0" step="1" placeholder="0"
-                   oninput="calcRowTotal(this.closest('tr'))">
-        </div>
-    </td>
-    <td>
-        <div class="input-group input-group-sm" style="min-width:100px;">
-            <span class="input-group-text">؋</span>
-            <input type="number" name="total_amount[]" class="form-control row-total calc-field"
-                   min="0" step="1" placeholder="0"
-                   oninput="onRowTotalManual(this.closest('tr'))">
-        </div>
-    </td>
-    <td>
-        <button type="button" class="btn btn-sm btn-light text-danger px-2" onclick="removeRow(this)" title="Remove">
-            <i class="bi bi-x-lg"></i>
-        </button>
-    </td>`;
+function rowHTML(idx) {
+    return '<td style="min-width:200px;">'
+        + '<input list="prod-list-inline" name="custom_product[]"'
+        + ' class="form-control form-control-sm prod-input"'
+        + ' placeholder="Product name (leave empty for Stock)"'
+        + ' autocomplete="off" oninput="matchProd(this)">'
+        + '<input type="hidden" name="product_id[]" class="prod-id" value="">'
+        + '<div class="prod-info text-muted" style="font-size:0.7rem;min-height:14px;"></div>'
+        + '</td>'
+        + '<td style="min-width:100px;">'
+        + '<div class="input-group input-group-sm">'
+        + '<input type="number" name="quantity[]" class="form-control row-qty" min="1" placeholder="0" oninput="calcRowTotal(this.closest(\'tr\'))">'
+        + '<span class="input-group-text" style="font-size:.72rem;">pcs</span>'
+        + '</div></td>'
+        + '<td style="min-width:80px;">'
+        + '<input type="number" name="bundle_count[]" class="form-control form-control-sm row-bundles" min="0" placeholder="—" oninput="calcRowTotal(this.closest(\'tr\'))">'
+        + '</td>'
+        + '<td style="min-width:105px;">'
+        + '<select name="pricing_type[]" class="form-select form-select-sm row-pricing" onchange="calcRowTotal(this.closest(\'tr\'))">'
+        + '<option value="per_pcs">/ pcs</option>'
+        + '<option value="per_bundle">/ bundle</option>'
+        + '</select></td>'
+        + '<td style="min-width:110px;">'
+        + '<div class="input-group input-group-sm">'
+        + '<span class="input-group-text">&#1547;</span>'
+        + '<input type="number" name="unit_price[]" class="form-control row-price" min="0" step="1" placeholder="0" oninput="calcRowTotal(this.closest(\'tr\'))">'
+        + '</div></td>'
+        + '<td style="min-width:110px;">'
+        + '<div class="input-group input-group-sm">'
+        + '<span class="input-group-text">&#1547;</span>'
+        + '<input type="number" name="total_amount[]" class="form-control row-total calc-field" min="0" step="1" placeholder="0" oninput="onRowTotalManual(this.closest(\'tr\'))">'
+        + '</div></td>'
+        + '<td><button type="button" class="btn btn-sm btn-light text-danger px-2" onclick="removeRow(this)" title="Remove"><i class="bi bi-x-lg"></i></button></td>';
 }
 
 function addRow() {
-    const tr = document.createElement('tr');
-    tr.innerHTML = rowHTML();
-    document.getElementById('prodRows').appendChild(tr);
+    rowIdx++;
+    document.getElementById('prodRows').insertAdjacentHTML('beforeend', '<tr>' + rowHTML(rowIdx) + '</tr>');
+}
+
+function removeRow(btn) {
+    const tbody = document.getElementById('prodRows');
+    if (tbody.rows.length <= 1) return;
+    btn.closest('tr').remove();
+    calcGrandTotal();
 }
 
 function removeRow(btn) {
