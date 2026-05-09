@@ -23,6 +23,13 @@ function navItem(string $href, string $icon, string $label, bool $active): strin
 <title>FZL — <?= htmlspecialchars($pageTitle ?? 'Management') ?></title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="shortcut icon" href="/favicon.svg">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0067C0">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="FZL">
+<link rel="apple-touch-icon" href="/icon.php?size=192">
 <link href="<?= $_bsCSS ?>" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
 <style>
@@ -457,6 +464,12 @@ if (!empty($_SESSION['error'])) {
         <span class="topbar-page"><?= htmlspecialchars($pageTitle ?? 'Page') ?></span>
         <div class="topbar-right">
             <span class="topbar-date"><?= date('d M Y') ?></span>
+            <!-- PWA install button — shown only when browser fires beforeinstallprompt -->
+            <button id="fzl-install-btn" title="Install App"
+                style="display:none;align-items:center;gap:6px;padding:4px 11px;border-radius:6px;border:1px solid var(--w11-blue);background:var(--w11-blue-light);color:var(--w11-blue);font-size:0.78rem;font-weight:600;cursor:pointer;white-space:nowrap;">
+                <i class="bi bi-download"></i>
+                <span class="d-none d-sm-inline">Install App</span>
+            </button>
             <!-- Language switcher -->
             <div class="lang-switch">
                 <a href="?setlang=en" class="lang-btn <?= currentLang() === 'en' ? 'active' : '' ?>">🇬🇧 EN</a>

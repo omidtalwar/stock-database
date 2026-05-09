@@ -1,0 +1,15 @@
+{
+    "name": "FZL — Cloth Wholesale System",
+    "short_name": "FZL",
+    "description": "Cloth Wholesale Operating System",
+    "start_url": "/dashboard.php",
+    "scope": "/",
+    "display": "standalone",
+    "orientation": "any",
+    "theme_color": "#0067C0",
+    "background_color": "#F3F3F3",
+    "icons": [
+        { "src": "/icon.php?size=192", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+        { "src": "/icon.php?size=512", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    ]
+}

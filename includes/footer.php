@@ -4,6 +4,35 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 (function () {
+    // ── PWA: Service Worker + Install prompt ──
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+
+    (function () {
+        let deferredPrompt = null;
+        const btn = document.getElementById('fzl-install-btn');
+
+        window.addEventListener('beforeinstallprompt', e => {
+            e.preventDefault();
+            deferredPrompt = e;
+            if (btn) btn.style.display = 'flex';
+        });
+
+        btn?.addEventListener('click', async () => {
+            if (!deferredPrompt) return;
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+            if (outcome === 'accepted') btn.style.display = 'none';
+            deferredPrompt = null;
+        });
+
+        window.addEventListener('appinstalled', () => {
+            if (btn) btn.style.display = 'none';
+            deferredPrompt = null;
+        });
+    })();
+
     // ── Sidebar toggle ──
     const sidebar = document.getElementById('sidebar');
     const overlay = document.getElementById('overlay');
