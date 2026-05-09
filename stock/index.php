@@ -24,6 +24,7 @@ foreach ([
 $stats = $pdo->query("
     SELECT
         COALESCE(SUM(CASE WHEN type='in' THEN quantity     ELSE 0 END), 0)         AS total_in_qty,
+        COALESCE(SUM(CASE WHEN type='in' THEN bundle_count ELSE 0 END), 0)        AS total_in_bundles,
         COALESCE(SUM(CASE WHEN type='in' THEN total_amount ELSE 0 END), 0)         AS total_purchased,
         COALESCE(SUM(CASE WHEN type='in' THEN paid_amount  ELSE 0 END), 0)         AS total_paid,
         COALESCE(SUM(CASE WHEN type='in' THEN balance      ELSE 0 END), 0)         AS total_unpaid,
@@ -70,6 +71,11 @@ require_once '../includes/header.php';
     <div class="col-6 col-sm-3">
         <div class="card stat-card" style="background:rgba(0,103,192,0.07);">
             <div class="stat-val text-primary"><?= number_format($stats['total_in_qty']) ?> <small style="font-size:.75rem;font-weight:500;">pcs</small></div>
+            <?php if ($stats['total_in_bundles'] > 0): ?>
+            <div style="font-size:.82rem;font-weight:600;color:#0067C0;opacity:.8;margin-top:2px;">
+                <?= number_format($stats['total_in_bundles']) ?> <span style="font-weight:500;">bundles</span>
+            </div>
+            <?php endif; ?>
             <div class="stat-lbl" style="color:#0067C0;">Stock Received</div>
         </div>
     </div>
