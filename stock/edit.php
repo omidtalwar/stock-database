@@ -3,6 +3,7 @@ require_once '../includes/session.php';
 requireAdmin();
 require_once '../includes/lang.php';
 require_once '../config/db.php';
+require_once '../includes/currency.php';
 
 $id = (int)($_GET['id'] ?? 0);
 $stmt = $pdo->prepare("
@@ -40,6 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $notes       = trim($_POST['notes']          ?? '');
     $supplier    = trim($_POST['supplier']       ?? '');
     $billImage   = trim($_POST['bill_image']      ?? $log['bill_image'] ?? '');
+    $currency    = array_key_exists($_POST['currency'] ?? '', CURRENCIES) ? $_POST['currency'] : ($log['currency'] ?? 'AFN');
 
     $errors = [];
     if ($qty <= 0) $errors[] = 'Quantity must be greater than 0.';
@@ -71,13 +73,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     product_id = ?, custom_product = ?, type = ?, quantity = ?,
                     bundle_count = ?, pricing_type = ?, unit_price = ?,
                     total_amount = ?, paid_amount = ?, balance = ?,
-                    supplier = ?, notes = ?, bill_image = ?
+                    supplier = ?, notes = ?, bill_image = ?, currency = ?
                 WHERE id = ?
             ")->execute([
                 $pid ?: null, $customProd ?: null, $type, $qty,
                 $bundleCount ?: null, $pricingType, $unitPrice,
                 $totalAmount, $paidAmount, $balance,
-                $supplier ?: null, $notes ?: null, $billImage ?: null,
+                $supplier ?: null, $notes ?: null, $billImage ?: null, $currency,
                 $id,
             ]);
 
@@ -105,9 +107,11 @@ function fcheck($key, $val, $log) {
 }
 function fsel($key, $val, $log) {
     $v = $_POST[$key] ?? $log[$key] ?? '';
+    if ($v === '' || $v === null) $v = ($key === 'currency' ? 'AFN' : '');
     return $v === $val ? 'selected' : '';
 }
 
+$formToken = generateFormToken('stock_edit');
 require_once '../includes/header.php';
 
 // Build initial product input value
@@ -150,6 +154,7 @@ $initProdId = $_POST['product_id'] ?? ($log['product_id'] ?? '');
 </div>
 
 <form method="POST" id="stockForm">
+<input type="hidden" name="_form_token" value="<?= htmlspecialchars($formToken) ?>">
 <div class="row g-3">
 
     <!-- ── Left col ── -->
@@ -183,15 +188,27 @@ $initProdId = $_POST['product_id'] ?? ($log['product_id'] ?? '');
                     <div id="prodInfo" class="mt-1 text-muted" style="font-size:0.72rem;"></div>
                 </div>
 
-                <!-- Supplier -->
-                <div class="mb-3">
-                    <label class="form-label fw-semibold">
-                        Supplier / Wholesaler
-                        <span class="text-muted fw-normal ms-1 small">(optional)</span>
-                    </label>
-                    <input type="text" name="supplier" class="form-control"
-                           placeholder="e.g. Ahmed Traders, Kabul Market…"
-                           value="<?= fv('supplier', $log) ?>">
+                <!-- Supplier + Currency -->
+                <div class="row g-3 mb-3">
+                    <div class="col-sm-8">
+                        <label class="form-label fw-semibold">
+                            Supplier / Wholesaler
+                            <span class="text-muted fw-normal ms-1 small">(optional)</span>
+                        </label>
+                        <input type="text" name="supplier" class="form-control"
+                               placeholder="e.g. Ahmed Traders, Kabul Market…"
+                               value="<?= fv('supplier', $log) ?>">
+                    </div>
+                    <div class="col-sm-4">
+                        <label class="form-label fw-semibold"><i class="bi bi-currency-exchange me-1 text-primary"></i>Currency</label>
+                        <select name="currency" id="currencySelect" class="form-select" onchange="onCurrencyChange()">
+                            <?php foreach (CURRENCIES as $code => $cur): ?>
+                            <option value="<?= $code ?>" <?= fsel('currency', $code, $log) ?>>
+                                <?= htmlspecialchars($cur['symbol'] . ' ' . $code) ?>
+                            </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
                 </div>
 
                 <!-- Type -->
@@ -255,7 +272,7 @@ $initProdId = $_POST['product_id'] ?? ($log['product_id'] ?? '');
                     <div class="col-sm-6">
                         <label class="form-label fw-semibold">Unit Price <span class="text-muted fw-normal small">(optional)</span></label>
                         <div class="input-group">
-                            <span class="input-group-text">؋</span>
+                            <span class="input-group-text"><span class="cur-sym">؋</span></span>
                             <input type="number" name="unit_price" id="unitPrice" class="form-control"
                                    min="0" step="1" placeholder="0" oninput="calcTotal()"
                                    value="<?= fv('unit_price', $log) ?>">
@@ -265,7 +282,7 @@ $initProdId = $_POST['product_id'] ?? ($log['product_id'] ?? '');
                     <div class="col-sm-6">
                         <label class="form-label fw-semibold">Total Amount</label>
                         <div class="input-group">
-                            <span class="input-group-text">؋</span>
+                            <span class="input-group-text"><span class="cur-sym">؋</span></span>
                             <input type="number" name="total_amount" id="totalAmount"
                                    class="form-control calc-field"
                                    min="0" step="1" placeholder="0" oninput="onTotalManual()"
@@ -333,7 +350,7 @@ $initProdId = $_POST['product_id'] ?? ($log['product_id'] ?? '');
                 <div class="mb-3">
                     <label class="form-label fw-semibold">Paid Amount <span class="text-muted fw-normal small">(optional)</span></label>
                     <div class="input-group input-group-sm">
-                        <span class="input-group-text">؋</span>
+                        <span class="input-group-text"><span class="cur-sym">؋</span></span>
                         <input type="number" name="paid_amount" id="paidAmount" class="form-control"
                                min="0" step="1" placeholder="0" oninput="calcBalance()"
                                value="<?= fv('paid_amount', $log) ?>">
@@ -372,6 +389,26 @@ $initProdId = $_POST['product_id'] ?? ($log['product_id'] ?? '');
 const PRODS   = <?= json_encode($prodJs) ?>;
 const PROD_MAP = {};
 PRODS.forEach(p => { PROD_MAP[p.label] = p; });
+
+const CURRENCIES = <?= json_encode(array_map(fn($c) => ['symbol' => $c['symbol'], 'decimals' => $c['decimals']], CURRENCIES)) ?>;
+
+function curSym() {
+    const sel = document.getElementById('currencySelect');
+    return sel ? (CURRENCIES[sel.value]?.symbol || '؋') : '؋';
+}
+function curDec() {
+    const sel = document.getElementById('currencySelect');
+    return sel ? (CURRENCIES[sel.value]?.decimals ?? 0) : 0;
+}
+function fmtMoney(amount) {
+    const dec = curDec();
+    return curSym() + ' ' + amount.toLocaleString('en-US', {minimumFractionDigits: dec, maximumFractionDigits: dec});
+}
+function onCurrencyChange() {
+    const sym = curSym();
+    document.querySelectorAll('.cur-sym').forEach(el => el.textContent = sym);
+    calcBalance();
+}
 
 // Init product info display
 (function() {
@@ -439,8 +476,8 @@ function calcBalance() {
     const total   = parseFloat(document.getElementById('totalAmount').value) || 0;
     const paid    = parseFloat(document.getElementById('paidAmount').value)  || 0;
     const balance = Math.max(0, total - paid);
-    document.getElementById('summTotal').textContent   = '؋ ' + total.toLocaleString('en-AF', {maximumFractionDigits:0});
-    document.getElementById('summBalance').textContent = '؋ ' + balance.toLocaleString('en-AF', {maximumFractionDigits:0});
+    document.getElementById('summTotal').textContent   = fmtMoney(total);
+    document.getElementById('summBalance').textContent = fmtMoney(balance);
 }
 
 document.getElementById('qty').addEventListener('input',        () => { manualTotal = false; calcTotal(); });
@@ -449,11 +486,18 @@ document.getElementById('unitPrice').addEventListener('input',  () => { manualTo
 
 // Init
 onTypeChange();
+onCurrencyChange();
 calcBalance();
 
 // Update pricing label from current select value
 document.getElementById('pricingLabel').textContent =
     document.getElementById('pricingType').value === 'per_bundle' ? '/ bundle' : '/ pcs';
+
+// Prevent duplicate submission
+document.getElementById('stockForm').addEventListener('submit', function() {
+    const btn = this.querySelector('[type=submit]');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Saving…'; }
+});
 
 // ── Bill image upload ──
 const billDrop  = document.getElementById('billDrop');

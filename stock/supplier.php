@@ -3,6 +3,7 @@ require_once '../includes/session.php';
 requireLogin();
 require_once '../includes/lang.php';
 require_once '../config/db.php';
+require_once '../includes/currency.php';
 
 $supplierName = trim($_GET['name'] ?? '');
 if ($supplierName === '') { header('Location: index.php'); exit; }
@@ -19,12 +20,15 @@ foreach ([
     "ALTER TABLE stock_logs ADD COLUMN paid_amount    DECIMAL(10,2) NULL DEFAULT 0",
     "ALTER TABLE stock_logs ADD COLUMN balance        DECIMAL(10,2) NULL DEFAULT 0",
     "ALTER TABLE stock_logs ADD COLUMN bill_image     TEXT          NULL",
+    "ALTER TABLE stock_logs ADD COLUMN currency       VARCHAR(10)   NULL DEFAULT 'AFN'",
 ] as $_sql) { try { $pdo->exec($_sql); } catch (\PDOException $e) {} }
 
 // Handle "Make Payment" POST
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'payment') {
-    $payAmt   = (float)($_POST['payment_amount'] ?? 0);
-    $payNotes = trim($_POST['payment_notes'] ?? '');
+    $payAmt      = (float)($_POST['payment_amount'] ?? 0);
+    $payNotes    = trim($_POST['payment_notes'] ?? '');
+    $payBill     = trim($_POST['bill_image'] ?? '');
+    $payCurrency = array_key_exists($_POST['pay_currency'] ?? '', CURRENCIES) ? $_POST['pay_currency'] : 'AFN';
 
     if ($payAmt <= 0) {
         $_SESSION['error'] = 'Payment amount must be greater than 0.';
@@ -35,11 +39,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'payme
             INSERT INTO stock_logs
                 (product_id, custom_product, type, quantity, bundle_count, pricing_type,
                  unit_price, total_amount, paid_amount, balance,
-                 supplier, notes, bill_image, created_by)
-            VALUES (NULL, '_payment_', 'in', 0, NULL, 'per_pcs', 0, 0, ?, ?, ?, ?, NULL, ?)
-        ")->execute([$payAmt, -$payAmt, $supplierName, $payNotes ?: null, $_SESSION['user_id']]);
+                 supplier, notes, bill_image, currency, created_by)
+            VALUES (NULL, '_payment_', 'in', 0, NULL, 'per_pcs', 0, 0, ?, ?, ?, ?, ?, ?, ?)
+        ")->execute([$payAmt, -$payAmt, $supplierName, $payNotes ?: null, $payBill ?: null, $payCurrency, $_SESSION['user_id']]);
 
-        $_SESSION['success'] = 'Payment of ؋'.number_format($payAmt, 0).' recorded.';
+        $curSym = CURRENCIES[$payCurrency]['symbol'] ?? $payCurrency;
+        $_SESSION['success'] = 'Payment of '.$curSym.number_format($payAmt, 0).' recorded.';
         header('Location: supplier.php?name='.urlencode($supplierName));
         exit;
     }
@@ -335,54 +340,84 @@ $pct = $stats['total_purchased'] > 0
     <?php endif; ?>
 </div>
 
-<!-- Make Payment Modal -->
+<!-- Make Payment Modal — rendered here, teleported to <body> by JS to avoid stacking-context z-index issues -->
 <div class="modal fade" id="paymentModal" tabindex="-1" aria-labelledby="paymentModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header border-0 pb-0">
+        <div class="modal-content shadow-lg">
+            <div class="modal-header border-0 pb-1">
                 <h5 class="modal-title fw-bold d-flex align-items-center gap-2" id="paymentModalLabel">
-                    <i class="bi bi-cash-coin text-success"></i>
-                    Make Payment
+                    <i class="bi bi-cash-coin text-success"></i> Make Payment
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <form method="POST">
+            <form method="POST" id="paymentForm">
                 <input type="hidden" name="action" value="payment">
-                <div class="modal-body pt-2">
+                <input type="hidden" name="bill_image" id="payBillVal" value="">
+                <div class="modal-body">
 
+                    <!-- Balance banner -->
                     <div class="p-3 rounded mb-3 d-flex justify-content-between align-items-center"
                          style="background:rgba(196,43,28,0.06);border:1px solid rgba(196,43,28,0.15);">
                         <div>
-                            <div class="small text-muted">Current Balance Owed</div>
+                            <div class="small text-muted mb-1">Current Balance Owed</div>
                             <div class="fw-bold fs-5 text-danger">؋ <?= number_format(max(0, $stats['total_unpaid']), 0) ?></div>
                         </div>
-                        <i class="bi bi-exclamation-circle-fill text-danger fs-4 opacity-50"></i>
+                        <i class="bi bi-exclamation-circle-fill text-danger fs-3 opacity-40"></i>
                     </div>
 
+                    <!-- Currency + Amount -->
+                    <div class="row g-2 mb-3">
+                        <div class="col-4">
+                            <label class="form-label fw-semibold"><i class="bi bi-currency-exchange me-1 text-primary"></i>Currency</label>
+                            <select name="pay_currency" id="payCurrencySelect" class="form-select" onchange="onPayCurrencyChange()">
+                                <?php foreach (CURRENCIES as $code => $cur): ?>
+                                <option value="<?= $code ?>"><?= htmlspecialchars($cur['symbol'].' '.$code) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-8">
+                            <label class="form-label fw-semibold">Payment Amount <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text fw-bold"><span class="pay-cur-sym">؋</span></span>
+                                <input type="number" name="payment_amount" id="payAmount"
+                                       class="form-control form-control-lg fw-bold"
+                                       min="0.01" step="0.01" placeholder="0" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-text mb-3" style="margin-top:-8px;">
+                        <a href="#" id="payFullLink">
+                            Pay full balance — ؋<?= number_format(max(0, $stats['total_unpaid']), 0) ?>
+                        </a>
+                    </div>
+
+                    <!-- Notes -->
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Payment Amount <span class="text-danger">*</span></label>
-                        <div class="input-group">
-                            <span class="input-group-text fw-semibold">؋</span>
-                            <input type="number" name="payment_amount" class="form-control form-control-lg fw-semibold"
-                                   min="1" step="1" placeholder="0" required
-                                   max="<?= max(0, $stats['total_unpaid']) ?>">
-                        </div>
-                        <div class="form-text">
-                            <a href="#" onclick="document.querySelector('[name=payment_amount]').value=<?= max(0, (int)$stats['total_unpaid']) ?>;return false;">
-                                Pay full balance (؋<?= number_format(max(0, $stats['total_unpaid']), 0) ?>)
-                            </a>
-                        </div>
+                        <label class="form-label fw-semibold">Notes <span class="text-muted fw-normal small">(optional)</span></label>
+                        <input type="text" name="payment_notes" class="form-control"
+                               placeholder="e.g. Cash, bank transfer, cheque…">
                     </div>
 
+                    <!-- Receipt upload -->
                     <div class="mb-1">
-                        <label class="form-label fw-semibold">Notes <span class="text-muted fw-normal">(optional)</span></label>
-                        <input type="text" name="payment_notes" class="form-control"
-                               placeholder="e.g. Cash payment, bank transfer, cheque…">
+                        <label class="form-label fw-semibold">
+                            Receipt / Proof of Payment
+                            <span class="text-muted fw-normal small">(optional)</span>
+                        </label>
+                        <div id="payDrop" class="pay-drop-zone">
+                            <i class="bi bi-cloud-upload text-primary d-block mb-1" style="font-size:1.4rem;"></i>
+                            <div id="payDropText" style="font-size:.82rem;">Drop receipt here or <strong>click to browse</strong></div>
+                            <div id="payUploadStatus" class="small mt-1" style="min-height:16px;"></div>
+                            <img id="payThumb" style="display:none;width:100%;max-height:120px;object-fit:contain;border-radius:6px;margin-top:8px;" alt="receipt">
+                        </div>
+                        <input type="file" id="payFileInput"
+                               accept="image/jpeg,image/png,image/webp,image/gif,application/pdf"
+                               style="display:none;">
                     </div>
 
                 </div>
                 <div class="modal-footer border-0 pt-0">
-                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-success fw-semibold px-4">
                         <i class="bi bi-check-circle me-2"></i>Record Payment
                     </button>
@@ -391,5 +426,97 @@ $pct = $stats['total_purchased'] > 0
         </div>
     </div>
 </div>
+
+<style>
+.pay-drop-zone {
+    border: 2px dashed rgba(16,124,16,0.35); border-radius: 10px;
+    padding: 18px 12px; text-align: center; cursor: pointer;
+    background: rgba(16,124,16,0.02); transition: border-color .2s, background .2s;
+    user-select: none;
+}
+.pay-drop-zone:hover, .pay-drop-zone.drag-over { border-color:#107C10; background:rgba(16,124,16,0.07); }
+.pay-drop-zone.has-file { border-style:solid; border-color:rgba(16,124,16,0.5); background:rgba(16,124,16,0.05); }
+</style>
+
+<script>
+const PAY_CURRENCIES = <?= json_encode(array_map(fn($c) => ['symbol' => $c['symbol'], 'decimals' => $c['decimals']], CURRENCIES)) ?>;
+
+function onPayCurrencyChange() {
+    const sel = document.getElementById('payCurrencySelect');
+    const sym = sel ? (PAY_CURRENCIES[sel.value]?.symbol || '؋') : '؋';
+    document.querySelectorAll('.pay-cur-sym').forEach(el => el.textContent = sym);
+}
+
+// Teleport modal to <body> so it escapes any transformed/stacking-context ancestor
+document.addEventListener('DOMContentLoaded', function () {
+    const modal = document.getElementById('paymentModal');
+    if (modal && modal.parentElement !== document.body) {
+        document.body.appendChild(modal);
+    }
+
+    // Pay-full shortcut
+    document.getElementById('payFullLink').addEventListener('click', function (e) {
+        e.preventDefault();
+        document.getElementById('payAmount').value = <?= max(0, (float)$stats['total_unpaid']) ?>;
+    });
+
+    // Receipt upload
+    const drop      = document.getElementById('payDrop');
+    const fileInput = document.getElementById('payFileInput');
+    const thumb     = document.getElementById('payThumb');
+    const status    = document.getElementById('payUploadStatus');
+    const valInput  = document.getElementById('payBillVal');
+
+    drop.addEventListener('click', () => fileInput.click());
+    drop.addEventListener('dragover',  e => { e.preventDefault(); drop.classList.add('drag-over'); });
+    drop.addEventListener('dragleave', () => drop.classList.remove('drag-over'));
+    drop.addEventListener('drop', e => {
+        e.preventDefault(); drop.classList.remove('drag-over');
+        const f = e.dataTransfer.files[0];
+        if (f) handleFile(f);
+    });
+    fileInput.addEventListener('change', () => {
+        if (fileInput.files[0]) handleFile(fileInput.files[0]);
+        fileInput.value = '';
+    });
+
+    function handleFile(file) {
+        status.textContent = 'Uploading…'; status.style.color = '';
+        drop.classList.remove('has-file');
+        thumb.style.display = 'none';
+
+        if (file.type.startsWith('image/')) {
+            const fr = new FileReader();
+            fr.onload = e => { thumb.src = e.target.result; thumb.style.display = 'block'; };
+            fr.readAsDataURL(file);
+        }
+
+        const fd = new FormData(); fd.append('image', file);
+        fetch('/stock/upload-bill.php', { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    valInput.value = res.filename;
+                    status.textContent = '✓ ' + file.name;
+                    status.style.color = '#107C10';
+                    drop.classList.add('has-file');
+                } else {
+                    status.textContent = '✗ ' + (res.error || 'Upload failed');
+                    status.style.color = '#C42B1C';
+                }
+            })
+            .catch(() => { status.textContent = '✗ Network error'; status.style.color = '#C42B1C'; });
+    }
+
+    // Clear upload + form state when modal closes
+    document.getElementById('paymentModal').addEventListener('hidden.bs.modal', function () {
+        valInput.value = ''; thumb.style.display = 'none'; thumb.src = '';
+        status.textContent = ''; drop.classList.remove('has-file');
+        document.getElementById('payAmount').value = '';
+        document.getElementById('payCurrencySelect').value = 'AFN';
+        onPayCurrencyChange();
+    });
+});
+</script>
 
 <?php require_once '../includes/footer.php'; ?>

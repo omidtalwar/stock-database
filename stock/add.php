@@ -3,6 +3,7 @@ require_once '../includes/session.php';
 requireLogin();
 require_once '../includes/lang.php';
 require_once '../config/db.php';
+require_once '../includes/currency.php';
 
 $pageTitle = __('stock_move_title');
 
@@ -17,14 +18,23 @@ foreach ([
     "ALTER TABLE stock_logs ADD COLUMN paid_amount    DECIMAL(10,2) NULL DEFAULT 0",
     "ALTER TABLE stock_logs ADD COLUMN balance        DECIMAL(10,2) NULL DEFAULT 0",
     "ALTER TABLE stock_logs ADD COLUMN bill_image     TEXT          NULL",
+    "ALTER TABLE stock_logs ADD COLUMN currency       VARCHAR(10)   NULL DEFAULT 'AFN'",
 ] as $_sql) { try { $pdo->exec($_sql); } catch (\PDOException $e) {} }
 
 $products       = $pdo->query("SELECT id, name, size, color, quantity FROM products ORDER BY name ASC")->fetchAll();
 $knownSuppliers = $pdo->query("SELECT DISTINCT supplier FROM stock_logs WHERE supplier IS NOT NULL AND supplier != '' ORDER BY supplier ASC")->fetchAll(PDO::FETCH_COLUMN);
 $preSupplier    = trim($_GET['supplier'] ?? '');
+$secCur         = getSecondaryCurrency($pdo);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Duplicate-submission guard
+    if (!validateFormToken('stock_add')) {
+        $_SESSION['error'] = 'Duplicate submission detected. Your data was already saved.';
+        header('Location: index.php'); exit;
+    }
+
     $type      = in_array($_POST['type'] ?? '', ['in','out']) ? $_POST['type'] : 'in';
+    $currency  = array_key_exists($_POST['currency'] ?? '', CURRENCIES) ? $_POST['currency'] : 'AFN';
     $supplier  = trim($_POST['supplier']   ?? '');
     $notes     = trim($_POST['notes']      ?? '');
     $billImage = trim($_POST['bill_image'] ?? '');
@@ -93,13 +103,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     INSERT INTO stock_logs
                         (product_id, custom_product, type, quantity, bundle_count, pricing_type,
                          unit_price, total_amount, paid_amount, balance,
-                         supplier, notes, bill_image, created_by)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                         supplier, notes, bill_image, currency, created_by)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ")->execute([
                     $r['pid'] ?: null, $r['customProd'] ?: null, $type, $r['qty'],
                     $r['bundle'] ?: null, $r['pricing'], $r['unitPrice'],
                     $r['rowTotal'], $rowPaid, $rowBalance,
-                    $supplier ?: null, $notes ?: null, $billImage ?: null, $_SESSION['user_id'],
+                    $supplier ?: null, $notes ?: null, $billImage ?: null, $currency, $_SESSION['user_id'],
                 ]);
             }
             $pdo->commit();
@@ -120,6 +130,7 @@ $prodJs = array_map(fn($p) => [
     'stock' => (int)$p['quantity'],
 ], $products);
 
+$formToken = generateFormToken('stock_add');
 require_once '../includes/header.php';
 ?>
 
@@ -151,12 +162,13 @@ require_once '../includes/header.php';
 </div>
 
 <form method="POST" id="stockForm">
+<input type="hidden" name="_form_token" value="<?= htmlspecialchars($formToken) ?>">
 
-    <!-- ── Supplier + Type ── -->
+    <!-- ── Supplier + Currency + Type ── -->
     <div class="card mb-3">
         <div class="card-body py-3">
             <div class="row g-3 align-items-end">
-                <div class="col-sm-6">
+                <div class="col-sm-5">
                     <label class="form-label fw-semibold mb-1">Supplier / Wholesaler <span class="text-muted fw-normal small">(optional)</span></label>
                     <input list="supplier-list" type="text" name="supplier" class="form-control"
                            placeholder="e.g. Ahmed Traders…" autocomplete="off"
@@ -167,7 +179,17 @@ require_once '../includes/header.php';
                         <?php endforeach; ?>
                     </datalist>
                 </div>
-                <div class="col-sm-6">
+                <div class="col-sm-3">
+                    <label class="form-label fw-semibold mb-1"><i class="bi bi-currency-exchange me-1 text-primary"></i>Currency</label>
+                    <select name="currency" id="currencySelect" class="form-select" onchange="onCurrencyChange()">
+                        <?php foreach (CURRENCIES as $code => $cur): ?>
+                        <option value="<?= $code ?>" <?= ($code === ($_POST['currency'] ?? 'AFN')) ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($cur['symbol'] . ' ' . $code . ' — ' . $cur['name']) ?>
+                        </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-sm-4">
                     <label class="form-label fw-semibold mb-1"><?= __('field_type') ?></label>
                     <div class="d-flex gap-4 pt-1">
                         <div class="form-check">
@@ -247,7 +269,7 @@ require_once '../includes/header.php';
                     <hr class="my-2">
                     <label class="form-label fw-semibold small mb-1">Paid Amount <span class="text-muted fw-normal">(optional)</span></label>
                     <div class="input-group input-group-sm mb-3">
-                        <span class="input-group-text">؋</span>
+                        <span class="input-group-text"><span class="cur-sym">؋</span></span>
                         <input type="number" name="paid_amount" id="paidAmount" class="form-control"
                                min="0" step="1" placeholder="0" oninput="calcBalance()"
                                value="<?= htmlspecialchars($_POST['paid_amount'] ?? '0') ?>">
@@ -312,11 +334,31 @@ const PRODS    = <?= json_encode($prodJs) ?>;
 const PROD_MAP = {};
 PRODS.forEach(p => { PROD_MAP[p.label] = p; });
 
-const SUPPLIER_LIST = <?= json_encode($knownSuppliers) ?>;
+const CURRENCIES = <?= json_encode(array_map(fn($c) => ['symbol' => $c['symbol'], 'decimals' => $c['decimals']], CURRENCIES)) ?>;
 
 let rowIdx = 0;
 
+function curSym() {
+    const sel = document.getElementById('currencySelect');
+    return sel ? (CURRENCIES[sel.value]?.symbol || '؋') : '؋';
+}
+function curDec() {
+    const sel = document.getElementById('currencySelect');
+    return sel ? (CURRENCIES[sel.value]?.decimals ?? 0) : 0;
+}
+function fmtMoney(amount) {
+    const dec = curDec();
+    return curSym() + ' ' + amount.toLocaleString('en-US', {minimumFractionDigits: dec, maximumFractionDigits: dec});
+}
+
+function onCurrencyChange() {
+    const sym = curSym();
+    document.querySelectorAll('.cur-sym').forEach(el => el.textContent = sym);
+    calcGrandTotal();
+}
+
 function rowHTML(idx) {
+    const sym = curSym();
     return '<td style="min-width:200px;">'
         + '<input list="prod-list-inline" name="custom_product[]"'
         + ' class="form-control form-control-sm prod-input"'
@@ -340,13 +382,13 @@ function rowHTML(idx) {
         + '</select></td>'
         + '<td style="min-width:110px;">'
         + '<div class="input-group input-group-sm">'
-        + '<span class="input-group-text">&#1547;</span>'
-        + '<input type="number" name="unit_price[]" class="form-control row-price" min="0" step="1" placeholder="0" oninput="calcRowTotal(this.closest(\'tr\'))">'
+        + '<span class="input-group-text"><span class="cur-sym">' + sym + '</span></span>'
+        + '<input type="number" name="unit_price[]" class="form-control row-price" min="0" step="0.01" placeholder="0" oninput="calcRowTotal(this.closest(\'tr\'))">'
         + '</div></td>'
         + '<td style="min-width:110px;">'
         + '<div class="input-group input-group-sm">'
-        + '<span class="input-group-text">&#1547;</span>'
-        + '<input type="number" name="total_amount[]" class="form-control row-total calc-field" min="0" step="1" placeholder="0" oninput="onRowTotalManual(this.closest(\'tr\'))">'
+        + '<span class="input-group-text"><span class="cur-sym">' + sym + '</span></span>'
+        + '<input type="number" name="total_amount[]" class="form-control row-total calc-field" min="0" step="0.01" placeholder="0" oninput="onRowTotalManual(this.closest(\'tr\'))">'
         + '</div></td>'
         + '<td><button type="button" class="btn btn-sm btn-light text-danger px-2" onclick="removeRow(this)" title="Remove"><i class="bi bi-x-lg"></i></button></td>';
 }
@@ -354,13 +396,6 @@ function rowHTML(idx) {
 function addRow() {
     rowIdx++;
     document.getElementById('prodRows').insertAdjacentHTML('beforeend', '<tr>' + rowHTML(rowIdx) + '</tr>');
-}
-
-function removeRow(btn) {
-    const tbody = document.getElementById('prodRows');
-    if (tbody.rows.length <= 1) return;
-    btn.closest('tr').remove();
-    calcGrandTotal();
 }
 
 function removeRow(btn) {
@@ -393,7 +428,7 @@ function calcRowTotal(tr) {
     if (pricing === 'per_bundle' && bundles > 0) total = bundles * price;
     else if (pricing === 'per_pcs' && qty > 0)   total = qty * price;
 
-    tr.querySelector('.row-total').value = total > 0 ? total.toFixed(0) : '';
+    tr.querySelector('.row-total').value = total > 0 ? total.toFixed(curDec()) : '';
     calcGrandTotal();
 }
 
@@ -405,8 +440,8 @@ function onRowTotalManual(tr) {
 function calcGrandTotal() {
     let grand = 0;
     document.querySelectorAll('.row-total').forEach(el => { grand += parseFloat(el.value) || 0; });
-    document.getElementById('grandTotalDisplay').textContent = '؋ ' + grand.toLocaleString('en-AF', {maximumFractionDigits:0});
-    document.getElementById('grandTotalHidden').value = grand.toFixed(0);
+    document.getElementById('grandTotalDisplay').textContent = fmtMoney(grand);
+    document.getElementById('grandTotalHidden').value = grand.toFixed(2);
     calcBalance();
 }
 
@@ -414,8 +449,8 @@ function calcBalance() {
     const grand = parseFloat(document.getElementById('grandTotalHidden').value) || 0;
     const paid  = parseFloat(document.getElementById('paidAmount').value)       || 0;
     const bal   = Math.max(0, grand - paid);
-    document.getElementById('summTotal').textContent   = '؋ ' + grand.toLocaleString('en-AF', {maximumFractionDigits:0});
-    document.getElementById('summBalance').textContent = '؋ ' + bal.toLocaleString('en-AF', {maximumFractionDigits:0});
+    document.getElementById('summTotal').textContent   = fmtMoney(grand);
+    document.getElementById('summBalance').textContent = fmtMoney(bal);
 }
 
 function onTypeChange() {
@@ -465,7 +500,17 @@ function uploadBill(file) {
 
 // Init
 onTypeChange();
-addRow(); // start with one empty row
+addRow();
+onCurrencyChange();
+
+// Prevent duplicate submission
+document.getElementById('stockForm').addEventListener('submit', function() {
+    const btn = this.querySelector('[type=submit]');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Saving…';
+    }
+});
 </script>
 
 <?php require_once '../includes/footer.php'; ?>

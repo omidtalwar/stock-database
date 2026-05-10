@@ -464,6 +464,25 @@ if (!empty($_SESSION['error'])) {
         <span class="topbar-page"><?= htmlspecialchars($pageTitle ?? 'Page') ?></span>
         <div class="topbar-right">
             <span class="topbar-date"><?= date('d M Y') ?></span>
+            <?php
+            // Currency badge — only when DB is available and currency module is loaded
+            if (isset($pdo) && defined('CURRENCIES')) {
+                try {
+                    $__pairs    = $pdo->query("SELECT `key`,`value` FROM settings WHERE `key` IN ('secondary_currency','exchange_rate')")->fetchAll(PDO::FETCH_KEY_PAIR);
+                    $__secCur   = $__pairs['secondary_currency'] ?? 'USD';
+                    $__rate     = (float)($__pairs['exchange_rate'] ?? 90);
+                    $__sym      = CURRENCIES[$__secCur]['symbol'] ?? $__secCur;
+                    echo '<a href="/admin/settings.php" title="1 '.$__secCur.' = ؋'.number_format($__rate,0).'"
+                        style="display:flex;align-items:center;gap:5px;padding:3px 10px;border-radius:6px;
+                               background:rgba(0,103,192,0.08);border:1px solid rgba(0,103,192,0.18);
+                               color:#0067C0;font-size:0.75rem;font-weight:700;text-decoration:none;white-space:nowrap;">
+                        <i class="bi bi-currency-exchange" style="font-size:.8rem;"></i>
+                        '.htmlspecialchars($__sym.' '.$__secCur).'
+                        <span style="font-weight:400;opacity:.7;">= ؋'.number_format($__rate,0).'</span>
+                    </a>';
+                } catch (\Throwable $__e) {}
+            }
+            ?>
             <!-- PWA install button — always visible -->
             <button id="fzl-install-btn" title="Install App"
                 style="display:flex;align-items:center;gap:6px;padding:4px 11px;border-radius:6px;border:1px solid var(--w11-blue);background:var(--w11-blue-light);color:var(--w11-blue);font-size:0.78rem;font-weight:600;cursor:pointer;white-space:nowrap;">

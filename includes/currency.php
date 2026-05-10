@@ -1,8 +1,9 @@
 <?php
 // Currency symbols
 const CURRENCIES = [
-    'AFN' => ['symbol' => '؋', 'name' => 'Afghani',    'decimals' => 0],
-    'USD' => ['symbol' => '$', 'name' => 'US Dollar',   'decimals' => 2],
+    'AFN' => ['symbol' => '؋',  'name' => 'Afghani',          'decimals' => 0],
+    'USD' => ['symbol' => '$',  'name' => 'US Dollar',         'decimals' => 2],
+    'PKR' => ['symbol' => '₨', 'name' => 'Pakistani Rupee',   'decimals' => 0],
 ];
 
 function getSettings(PDO $pdo): array {

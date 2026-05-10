@@ -77,3 +77,20 @@ function flashMessage() {
     }
     return $html;
 }
+
+// ── Duplicate-submission prevention ──
+function generateFormToken(string $key = 'form_token'): string {
+    $token = bin2hex(random_bytes(16));
+    $_SESSION['_tok_' . $key] = $token;
+    return $token;
+}
+
+function validateFormToken(string $key = 'form_token'): bool {
+    $submitted = $_POST['_form_token'] ?? '';
+    $stored    = $_SESSION['_tok_' . $key] ?? '';
+    if (!$submitted || !$stored || !hash_equals($stored, $submitted)) {
+        return false;
+    }
+    unset($_SESSION['_tok_' . $key]); // consume — second submit will fail
+    return true;
+}
