@@ -7,10 +7,18 @@ require_once '../includes/currency.php';
 
 $pageTitle = __('set_title');
 
+// Auto-migrate email column
+try { $pdo->exec("ALTER TABLE users ADD COLUMN email VARCHAR(150) NULL AFTER full_name"); } catch (\Throwable $e) {}
+
 $settings = getSettings($pdo);
 $secCur   = $settings['secondary_currency'] ?? 'USD';
 $rateUsd  = (float)($settings['rate_usd'] ?? $settings['exchange_rate'] ?? 90);
 $ratePkr  = (float)($settings['rate_pkr'] ?? 0.25);
+
+// Current admin profile
+$meStmt = $pdo->prepare("SELECT id, username, full_name, email FROM users WHERE id = ?");
+$meStmt->execute([$_SESSION['user_id']]);
+$me = $meStmt->fetch();
 
 // Rate history
 $rateLog = [];
@@ -25,6 +33,53 @@ try {
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
+
+    if ($action === 'update_profile') {
+        $newName  = trim($_POST['full_name'] ?? '');
+        $newEmail = trim($_POST['email'] ?? '');
+        $newUser  = trim($_POST['username'] ?? '');
+        $curPw    = $_POST['current_password'] ?? '';
+        $newPw    = $_POST['new_password'] ?? '';
+        $confPw   = $_POST['confirm_password'] ?? '';
+
+        $errors = [];
+        if (!$newName)  $errors[] = 'Full name is required.';
+        if (!$newUser)  $errors[] = 'Username is required.';
+
+        // Check username uniqueness (exclude self)
+        $dup = $pdo->prepare("SELECT id FROM users WHERE username = ? AND id != ?");
+        $dup->execute([$newUser, $_SESSION['user_id']]);
+        if ($dup->fetch()) $errors[] = 'Username already taken.';
+
+        // Password change — only if any password field filled
+        $changePw = ($curPw !== '' || $newPw !== '' || $confPw !== '');
+        if ($changePw) {
+            $pwRow = $pdo->prepare("SELECT password FROM users WHERE id = ?");
+            $pwRow->execute([$_SESSION['user_id']]);
+            $hash = $pwRow->fetchColumn();
+            if (!password_verify($curPw, $hash))    $errors[] = 'Current password is incorrect.';
+            if (strlen($newPw) < 6)                 $errors[] = 'New password must be at least 6 characters.';
+            if ($newPw !== $confPw)                 $errors[] = 'New passwords do not match.';
+        }
+
+        if ($errors) {
+            $_SESSION['error'] = implode(' ', $errors);
+        } else {
+            if ($changePw) {
+                $pdo->prepare("UPDATE users SET full_name=?, email=?, username=?, password=? WHERE id=?")
+                    ->execute([$newName, $newEmail ?: null, $newUser, password_hash($newPw, PASSWORD_DEFAULT), $_SESSION['user_id']]);
+            } else {
+                $pdo->prepare("UPDATE users SET full_name=?, email=?, username=? WHERE id=?")
+                    ->execute([$newName, $newEmail ?: null, $newUser, $_SESSION['user_id']]);
+            }
+            // Refresh session
+            $_SESSION['full_name'] = $newName;
+            $_SESSION['username']  = $newUser;
+            $_SESSION['success']   = 'Profile updated successfully.';
+        }
+        header('Location: settings.php');
+        exit;
+    }
 
     if ($action === 'update_rate') {
         $newRateUsd = (float)($_POST['rate_usd'] ?? 0);
@@ -236,6 +291,72 @@ require_once '../includes/header.php';
     </div>
 </div>
 
+<!-- ── Profile & Security ── -->
+<div class="row g-3 mt-1">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header fw-semibold">
+                <i class="bi bi-person-gear me-2"></i>My Profile &amp; Security
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <input type="hidden" name="action" value="update_profile">
+                    <div class="row g-3">
+
+                        <!-- Left: identity fields -->
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold small">Full Name</label>
+                                <input type="text" name="full_name" class="form-control"
+                                       value="<?= htmlspecialchars($me['full_name'] ?? '') ?>" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold small">Username</label>
+                                <input type="text" name="username" class="form-control"
+                                       value="<?= htmlspecialchars($me['username'] ?? '') ?>" required autocomplete="username">
+                            </div>
+                            <div class="mb-0">
+                                <label class="form-label fw-semibold small">Email <span class="text-muted fw-normal">(optional)</span></label>
+                                <input type="email" name="email" class="form-control"
+                                       value="<?= htmlspecialchars($me['email'] ?? '') ?>"
+                                       placeholder="admin@example.com">
+                            </div>
+                        </div>
+
+                        <!-- Right: password change -->
+                        <div class="col-md-6">
+                            <p class="text-muted small mb-2 fw-semibold">Change Password <span class="fw-normal">(leave blank to keep current)</span></p>
+                            <div class="mb-2">
+                                <label class="form-label small">Current Password</label>
+                                <input type="password" name="current_password" class="form-control"
+                                       placeholder="Enter current password" autocomplete="current-password">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small">New Password</label>
+                                <input type="password" name="new_password" id="newPwInput" class="form-control"
+                                       placeholder="Min 6 characters" autocomplete="new-password"
+                                       oninput="checkPwMatch()">
+                            </div>
+                            <div class="mb-0">
+                                <label class="form-label small">Confirm New Password</label>
+                                <input type="password" name="confirm_password" id="confPwInput" class="form-control"
+                                       placeholder="Repeat new password" autocomplete="new-password"
+                                       oninput="checkPwMatch()">
+                                <div id="pwMatchMsg" class="form-text"></div>
+                            </div>
+                        </div>
+
+                    </div>
+                    <hr class="my-3">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg me-2"></i>Save Profile
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- ── Backup shortcut ── -->
 <div class="row g-3 mt-1">
     <div class="col-12">
@@ -313,6 +434,20 @@ document.addEventListener('DOMContentLoaded', function() {
     syncPkr();
     updateConvLabel();
 });
+
+function checkPwMatch() {
+    const nw  = document.getElementById('newPwInput').value;
+    const cf  = document.getElementById('confPwInput').value;
+    const msg = document.getElementById('pwMatchMsg');
+    if (!nw && !cf) { msg.textContent = ''; return; }
+    if (nw === cf) {
+        msg.className = 'form-text text-success';
+        msg.textContent = 'Passwords match';
+    } else {
+        msg.className = 'form-text text-danger';
+        msg.textContent = 'Passwords do not match';
+    }
+}
 </script>
 JS;
 ?>
