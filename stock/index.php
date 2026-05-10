@@ -70,31 +70,31 @@ require_once '../includes/header.php';
 <div class="row g-3 mb-2">
     <div class="col-6 col-sm-3">
         <div class="card stat-card" style="background:rgba(0,103,192,0.07);">
-            <div class="stat-val text-primary"><?= number_format($stats['total_in_qty']) ?> <small style="font-size:.75rem;font-weight:500;">pcs</small></div>
+            <div class="stat-val text-primary"><?= number_format($stats['total_in_qty']) ?> <small style="font-size:.75rem;font-weight:500;"><?= __('unit_pcs') ?></small></div>
             <?php if ($stats['total_in_bundles'] > 0): ?>
             <div style="font-size:.82rem;font-weight:600;color:#0067C0;opacity:.8;margin-top:2px;">
-                <?= number_format($stats['total_in_bundles']) ?> <span style="font-weight:500;">bundles</span>
+                <?= number_format($stats['total_in_bundles']) ?> <span style="font-weight:500;"><?= __('unit_bundles') ?></span>
             </div>
             <?php endif; ?>
-            <div class="stat-lbl" style="color:#0067C0;">Stock Received</div>
+            <div class="stat-lbl" style="color:#0067C0;"><?= __('stock_received') ?></div>
         </div>
     </div>
     <div class="col-6 col-sm-3">
         <div class="card stat-card" style="background:rgba(196,43,28,0.07);">
             <div class="stat-val text-danger"><?= number_format($stats['total_suppliers']) ?></div>
-            <div class="stat-lbl" style="color:#C42B1C;">Total Suppliers</div>
+            <div class="stat-lbl" style="color:#C42B1C;"><?= __('stock_total_suppliers') ?></div>
         </div>
     </div>
     <div class="col-6 col-sm-3">
         <div class="card stat-card" style="background:rgba(16,124,16,0.07);">
             <div class="stat-val text-success">؋<?= number_format($stats['total_paid'], 0) ?></div>
-            <div class="stat-lbl" style="color:#107C10;">Total Paid</div>
+            <div class="stat-lbl" style="color:#107C10;"><?= __('stock_total_paid_stat') ?></div>
         </div>
     </div>
     <div class="col-6 col-sm-3">
         <div class="card stat-card" style="background:rgba(157,93,0,0.08);">
             <div class="stat-val" style="color:#9D5D00;">؋<?= number_format($stats['total_unpaid'], 0) ?></div>
-            <div class="stat-lbl" style="color:#9D5D00;">Unpaid / Balance</div>
+            <div class="stat-lbl" style="color:#9D5D00;"><?= __('stock_unpaid_balance') ?></div>
         </div>
     </div>
 </div>
@@ -102,7 +102,7 @@ require_once '../includes/header.php';
 <!-- Total purchased banner -->
 <div class="card mb-4" style="background:rgba(0,0,0,0.035);border:none;">
     <div class="card-body py-2 px-3 d-flex align-items-center justify-content-between flex-wrap gap-1">
-        <span class="small fw-semibold text-muted">Total Purchased from Wholesalers</span>
+        <span class="small fw-semibold text-muted"><?= __('stock_wholesalers_total') ?></span>
         <span class="fw-bold fs-6">؋ <?= number_format($stats['total_purchased'], 0) ?></span>
     </div>
 </div>
@@ -111,7 +111,7 @@ require_once '../includes/header.php';
 <div class="d-flex align-items-center justify-content-between mb-2">
     <h5 class="mb-0 fw-semibold d-flex align-items-center gap-2">
         <i class="bi bi-people" style="color:#0067C0;"></i>
-        Supplier / Wholesaler Accounts
+        <?= __('stock_supplier_accts') ?>
     </h5>
 </div>
 
@@ -119,7 +119,7 @@ require_once '../includes/header.php';
 <div class="card border-0" style="background:rgba(0,0,0,0.03);">
     <div class="card-body text-center text-muted py-5">
         <i class="bi bi-people fs-2 d-block mb-2 opacity-25"></i>
-        No suppliers recorded yet. Add a supplier name when logging incoming stock.
+        <?= __('stock_no_suppliers') ?>
     </div>
 </div>
 <?php else: ?>
@@ -128,13 +128,13 @@ require_once '../includes/header.php';
         <table class="table table-hover align-middle mb-0" style="font-size:0.85rem;">
             <thead class="table-light">
                 <tr>
-                    <th>Supplier / Wholesaler</th>
-                    <th class="text-end">Transactions</th>
-                    <th class="text-end">Total Qty</th>
-                    <th class="text-end">Total Purchased</th>
-                    <th class="text-end">Total Paid</th>
-                    <th class="text-end">Balance / Unpaid</th>
-                    <th>Last Activity</th>
+                    <th><?= __('stock_col_supplier') ?></th>
+                    <th class="text-end"><?= __('stock_col_txns') ?></th>
+                    <th class="text-end"><?= __('stock_col_qty') ?></th>
+                    <th class="text-end"><?= __('stock_col_purchased') ?></th>
+                    <th class="text-end"><?= __('stock_col_paid') ?></th>
+                    <th class="text-end"><?= __('stock_col_balance') ?></th>
+                    <th><?= __('stock_col_activity') ?></th>
                     <th></th>
                 </tr>
             </thead>
@@ -143,7 +143,7 @@ require_once '../includes/header.php';
                 <tr style="cursor:pointer;" onclick="location.href='supplier.php?name=<?= urlencode($s['supplier']) ?>'">
                     <td class="fw-semibold"><?= htmlspecialchars($s['supplier']) ?></td>
                     <td class="text-end text-muted"><?= number_format($s['txn_count']) ?></td>
-                    <td class="text-end text-muted"><?= number_format($s['total_qty']) ?> pcs</td>
+                    <td class="text-end text-muted"><?= number_format($s['total_qty']) ?> <?= __('unit_pcs') ?></td>
                     <td class="text-end fw-semibold"><?= $s['total_purchased'] ? '؋'.number_format($s['total_purchased'], 0) : '—' ?></td>
                     <td class="text-end text-success fw-semibold"><?= $s['total_paid'] ? '؋'.number_format($s['total_paid'], 0) : '—' ?></td>
                     <td class="text-end fw-bold <?= $s['total_unpaid'] > 0 ? 'text-danger' : 'text-muted' ?>">
@@ -154,13 +154,13 @@ require_once '../includes/header.php';
                         <a href="supplier.php?name=<?= urlencode($s['supplier']) ?>"
                            class="btn btn-sm btn-light me-1"
                            onclick="event.stopPropagation()"
-                           title="View Transactions">
+                           title="<?= __('stock_view_txns') ?>">
                             <i class="bi bi-eye"></i>
                         </a>
                         <a href="add.php?supplier=<?= urlencode($s['supplier']) ?>"
                            class="btn btn-sm btn-outline-primary"
                            onclick="event.stopPropagation()"
-                           title="Add Stock from this Supplier">
+                           title="<?= __('stock_add_supplier') ?>">
                             <i class="bi bi-plus-circle"></i>
                         </a>
                     </td>
