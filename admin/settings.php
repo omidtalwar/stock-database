@@ -247,7 +247,7 @@ const SYMBOLS   = {$symbolsJson};
 function previewUsd() {
     const r = parseFloat(document.getElementById('rateUsd').value) || 0;
     document.getElementById('usdPreview').innerHTML = r > 0
-        ? `$ 100 USD = <strong>؋ ${(100 * r).toLocaleString('en-US', {maximumFractionDigits:0})}</strong>`
+        ? '$ 100 USD = <strong>؋ ' + (100 * r).toLocaleString('en-US', {maximumFractionDigits:0}) + '</strong>'
         : '';
     ALL_RATES.USD = r;
     convReset();
@@ -258,7 +258,7 @@ function syncPkr() {
     const r = v1000 / 1000;
     document.getElementById('ratePkr').value = r.toFixed(6);
     document.getElementById('pkrPreview').innerHTML = v1000 > 0
-        ? `1 PKR = <strong>؋ ${r.toFixed(4)}</strong> &nbsp;·&nbsp; 1 AFN ≈ ₨ ${r > 0 ? (1/r).toFixed(2) : '—'}`
+        ? '1 PKR = <strong>؋ ' + r.toFixed(4) + '</strong> &nbsp;·&nbsp; 1 AFN ≈ ₨ ' + (r > 0 ? (1/r).toFixed(2) : '—')
         : '';
     ALL_RATES.PKR = r;
     convReset();
@@ -275,7 +275,7 @@ function updateConvLabel() {
     const sym = SYMBOLS[cur] || cur;
     const r   = ALL_RATES[cur] || 1;
     document.getElementById('convSecLabel').textContent = sym + ' ' + cur;
-    document.getElementById('convNote').innerHTML = `1 ${sym} ${cur} = <strong>؋ ${r.toLocaleString('en-US', {maximumFractionDigits:4})}</strong>`;
+    document.getElementById('convNote').innerHTML = '1 ' + sym + ' ' + cur + ' = <strong>؋ ' + r.toLocaleString('en-US', {maximumFractionDigits:4}) + '</strong>';
 }
 
 function convFromAfn() {
