@@ -101,6 +101,9 @@ if (isset($_GET['action']) && in_array($_GET['action'], ['full', 'today'])) {
     $filename = 'fzl_backup_' . $label . '_' . date('His') . '.sql';
     $sql      = generateDump($pdo, $type);
 
+    // Flush any buffered output (e.g. UTF-8 BOM from PHP file encoding)
+    while (ob_get_level()) ob_end_clean();
+
     header('Content-Type: application/octet-stream');
     header('Content-Disposition: attachment; filename="' . $filename . '"');
     header('Content-Length: ' . strlen($sql));
@@ -123,6 +126,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['sql_file'])) {
             $importError = 'Only .sql files are accepted.';
         } else {
             $content = file_get_contents($_FILES['sql_file']['tmp_name']);
+            // Strip UTF-8 BOM if present (EF BB BF)
+            if (str_starts_with($content, "\xEF\xBB\xBF")) {
+                $content = substr($content, 3);
+            }
             try {
                 $pdo->exec("SET FOREIGN_KEY_CHECKS=0");
                 $pdo->exec("SET SQL_MODE='NO_AUTO_VALUE_ON_ZERO'");
@@ -131,9 +138,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['sql_file'])) {
                 $statements = preg_split('/;\s*\n/', $content);
                 $count      = 0;
                 foreach ($statements as $stmt) {
-                    // Remove leading/trailing whitespace and comment-only blocks
                     $stmt = trim($stmt);
                     if ($stmt === '') continue;
+                    // Skip comment-only blocks
                     $stripped = trim(preg_replace('/^--[^\n]*\n?/m', '', $stmt));
                     if ($stripped === '') continue;
                     $pdo->exec($stmt);

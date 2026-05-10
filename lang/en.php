@@ -268,7 +268,7 @@ return [
     'del_failed'         => 'Failed to delete. Please try again.',
 
     // ── Settings ──
-    'set_title'          => 'Settings',
+    'set_title'          => 'Settings & Exchange',
     'set_sub'            => 'Exchange rate and currency configuration',
     'set_ex_rate'        => 'Exchange Rate',
     'set_sec_currency'   => 'Secondary Currency',
