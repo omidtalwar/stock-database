@@ -180,7 +180,7 @@ require_once '../includes/header.php';
                         <div class="input-group mb-1">
                             <span class="input-group-text fw-bold">₨ 1000 PKR =</span>
                             <input type="number" id="ratePkr1000"
-                                   class="form-control" step="1" min="0.01"
+                                   class="form-control" step="0.01" min="0.01"
                                    value="<?= number_format($ratePkr * 1000, 2, '.', '') ?>"
                                    required oninput="syncPkr()">
                             <span class="input-group-text">؋ AFN</span>
