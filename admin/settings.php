@@ -236,6 +236,23 @@ require_once '../includes/header.php';
     </div>
 </div>
 
+<!-- ── Backup shortcut ── -->
+<div class="row g-3 mt-1">
+    <div class="col-12">
+        <div class="card border-0" style="background:rgba(13,110,253,0.05);">
+            <div class="card-body d-flex align-items-center justify-content-between gap-3 py-3">
+                <div>
+                    <div class="fw-semibold"><i class="bi bi-shield-lock me-2 text-primary"></i>Backup &amp; Restore</div>
+                    <div class="text-muted small">Download today's transactions or a full database backup, or restore from a previous backup file.</div>
+                </div>
+                <a href="backup.php" class="btn btn-primary btn-sm text-nowrap">
+                    <i class="bi bi-database me-1"></i>Open Backup
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
 <?php
 $allRatesJson = json_encode(['AFN' => 1.0, 'USD' => $rateUsd, 'PKR' => $ratePkr]);
 $symbolsJson  = json_encode(array_map(fn($c) => $c['symbol'], CURRENCIES));

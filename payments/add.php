@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once '../includes/session.php';
 requireLogin();
 require_once '../includes/lang.php';
@@ -7,10 +7,9 @@ require_once '../includes/currency.php';
 
 $pageTitle = __('pay_add');
 
+$allRates    = getAllRates($pdo);
 $settings    = getSettings($pdo);
-$rate        = (float)($settings['exchange_rate'] ?? 90);
 $secCur      = $settings['secondary_currency'] ?? 'USD';
-$secSymbol   = currencySymbol($secCur);
 
 $customers   = $pdo->query("SELECT id, name, shop_name, total_debt FROM customers WHERE total_debt > 0 ORDER BY name ASC")->fetchAll();
 $preCustomer = (int)($_GET['customer_id'] ?? 0);
@@ -28,8 +27,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($amount <= 0) {
         $_SESSION['error'] = __('fill_all_fields');
     } else {
-        $usedRate  = $currency === 'AFN' ? 1.0 : $rate;
-        $amountAfn = toAFN($amount, $currency, $rate);
+        $usedRate  = $allRates[$currency] ?? 1.0;
+        $amountAfn = toAFN($amount, $currency, $usedRate);
 
         $stmt = $pdo->prepare("SELECT total_debt FROM customers WHERE id = ?");
         $stmt->execute([$customer_id]);
@@ -63,12 +62,11 @@ require_once '../includes/header.php';
 
 <div class="alert alert-secondary py-2 small mb-3">
     <i class="bi bi-currency-exchange me-1"></i>
-    <?= __('pay_rate_label') ?>: <strong>1 <?= htmlspecialchars($secCur) ?> = <?= number_format($rate, 2) ?> ؋</strong>
-    &nbsp;—&nbsp;
+    <strong>$ 1 USD = ؋ <?= number_format($allRates['USD'], 2) ?></strong>
+    &nbsp;·&nbsp;
+    <strong>₨ 1000 PKR = ؋ <?= number_format($allRates['PKR'] * 1000, 2) ?></strong>
     <?php if (isAdmin()): ?>
-    <a href="/admin/settings.php"><?= __('btn_update') ?></a>
-    <?php else: ?>
-    <span class="text-muted"><?= __('pay_cash') ?></span>
+    &nbsp;—&nbsp;<a href="/admin/settings.php"><?= __('btn_update') ?></a>
     <?php endif; ?>
 </div>
 
@@ -99,8 +97,8 @@ require_once '../includes/header.php';
                             <span class="text-muted small"><?= __('pay_curr_debt') ?></span>
                             <span class="fw-bold text-danger" id="debtAfn">؋ 0</span>
                         </div>
-                        <div class="d-flex justify-content-between align-items-center mt-1">
-                            <span class="text-muted small"><?= __('pay_equiv') ?> <?= htmlspecialchars($secCur) ?></span>
+                        <div class="d-flex justify-content-between align-items-center mt-1 d-none" id="debtSecRow">
+                            <span class="text-muted small" id="debtSecLabel"><?= __('pay_equiv') ?></span>
                             <span class="fw-semibold text-muted" id="debtSec">—</span>
                         </div>
                     </div>
@@ -109,10 +107,11 @@ require_once '../includes/header.php';
                         <label class="form-label fw-semibold"><?= __('field_currency') ?> &amp; <?= __('field_amount') ?> <span class="text-danger">*</span></label>
                         <div class="input-group">
                             <select name="currency" id="currencySelect" class="form-select" style="max-width:110px;" onchange="onCurrencyChange()">
-                                <option value="AFN" <?= ($_POST['currency'] ?? 'AFN') === 'AFN' ? 'selected' : '' ?>>؋ AFN</option>
-                                <option value="<?= htmlspecialchars($secCur) ?>" <?= ($_POST['currency'] ?? '') === $secCur ? 'selected' : '' ?>>
-                                    <?= htmlspecialchars($secSymbol) ?> <?= htmlspecialchars($secCur) ?>
+                                <?php foreach (CURRENCIES as $code => $info): ?>
+                                <option value="<?= $code ?>" <?= ($_POST['currency'] ?? 'AFN') === $code ? 'selected' : '' ?>>
+                                    <?= $info['symbol'] ?> <?= $code ?>
                                 </option>
+                                <?php endforeach; ?>
                             </select>
                             <input type="number" name="amount" id="amountInput" class="form-control"
                                    step="0.01" min="0.01"
@@ -130,7 +129,7 @@ require_once '../includes/header.php';
                     </div>
 
                     <div class="d-flex gap-2">
-                        <button type="submit" class="btn btn-success px-4">
+                        <button type="submit" class="btn btn-success px-4" id="submitBtn">
                             <i class="bi bi-check-lg me-2"></i><?= __('pay_save') ?>
                         </button>
                         <a href="index.php" class="btn btn-light"><?= __('btn_cancel') ?></a>
@@ -142,19 +141,20 @@ require_once '../includes/header.php';
 </div>
 
 <?php
-$_hint_text  = __('pay_hint');
-$_json_sec   = json_encode($secCur);
-$_json_sym   = json_encode($secSymbol);
-$_json_hint  = json_encode($_hint_text);
+$_json_rates = json_encode($allRates);
+$_json_hint  = json_encode(__('pay_hint'));
 $extraScript = <<<JS
 <script>
-const RATE    = {$rate};
-const SEC_CUR = {$_json_sec};
-const SEC_SYM = {$_json_sym};
-const HINT    = {$_json_hint};
+const ALL_RATES = {$_json_rates};
+const SYMBOLS   = {AFN:'؋', USD:'$', PKR:'₨'};
+const HINT      = {$_json_hint};
 
-function fmtAFN(v) { return '؋ ' + parseFloat(v).toLocaleString('en-AF', {maximumFractionDigits:0}); }
-function fmtSec(v) { return SEC_SYM + ' ' + parseFloat(v).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}); }
+function sym(cur) { return SYMBOLS[cur] || cur; }
+function fmtAFN(v) { return '؋ ' + parseFloat(v).toLocaleString('en-US',{maximumFractionDigits:0}); }
+function fmtCur(v, cur) {
+    const dec = cur === 'USD' ? 2 : 0;
+    return sym(cur) + ' ' + parseFloat(v).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec});
+}
 
 function updateDebt() {
     const sel  = document.getElementById('customerSelect');
@@ -163,24 +163,41 @@ function updateDebt() {
     const box  = document.getElementById('debtInfo');
     if (debt > 0 && opt?.value) {
         document.getElementById('debtAfn').textContent = fmtAFN(debt);
-        document.getElementById('debtSec').textContent = RATE > 0 ? fmtSec(debt / RATE) : '—';
+        const cur     = document.getElementById('currencySelect').value;
+        const rate    = ALL_RATES[cur] || 1;
+        const secRow  = document.getElementById('debtSecRow');
+        if (cur !== 'AFN' && rate > 0) {
+            document.getElementById('debtSecLabel').textContent = sym(cur) + ' ' + cur + ' equiv.';
+            document.getElementById('debtSec').textContent = fmtCur(debt / rate, cur);
+            secRow.classList.remove('d-none');
+        } else {
+            secRow.classList.add('d-none');
+        }
         box.style.display = '';
     } else {
         box.style.display = 'none';
     }
 }
 
-function onCurrencyChange() { updateConvert(); }
+function onCurrencyChange() { updateDebt(); updateConvert(); }
 
 function updateConvert() {
     const cur    = document.getElementById('currencySelect').value;
     const amount = parseFloat(document.getElementById('amountInput').value) || 0;
     const hint   = document.getElementById('convertHint');
     if (cur === 'AFN' || amount <= 0) { hint.style.display = 'none'; return; }
-    const afn = amount * RATE;
+    const rate = ALL_RATES[cur] || 1;
+    const afn  = amount * rate;
     hint.style.display = '';
-    hint.innerHTML = '<i class="bi bi-arrow-right-short"></i> ' + fmtSec(amount) + ' × ' + RATE.toLocaleString() + ' = <strong>' + fmtAFN(afn) + '</strong> ' + HINT;
+    hint.innerHTML = '<i class="bi bi-arrow-right-short"></i> '
+        + fmtCur(amount, cur) + ' &times; ' + rate.toLocaleString('en-US',{maximumFractionDigits:4})
+        + ' = <strong>' + fmtAFN(afn) + '</strong>'
+        + (HINT ? ' &mdash; ' + HINT : '');
 }
+
+document.getElementById('payForm').addEventListener('submit', function() {
+    document.getElementById('submitBtn').disabled = true;
+});
 
 document.addEventListener('DOMContentLoaded', () => { updateDebt(); updateConvert(); });
 </script>
