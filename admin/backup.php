@@ -159,6 +159,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['sql_file'])) {
     }
 }
 
+// ── Handle system reset ────────────────────────────────────────────────────────
+$resetError   = null;
+$resetSuccess = null;
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'reset_system') {
+    $confirm = trim($_POST['confirm_word'] ?? '');
+    if ($confirm !== 'RESET') {
+        $resetError = 'Type RESET exactly to confirm.';
+    } else {
+        try {
+            $pdo->exec("SET FOREIGN_KEY_CHECKS=0");
+
+            // Clear all transactional data (order: children before parents)
+            foreach ([
+                'exchange_rate_log',
+                'sale_items',
+                'sales',
+                'payments',
+                'stock_logs',
+                'customers',
+                'products',
+            ] as $tbl) {
+                $pdo->exec("TRUNCATE TABLE `$tbl`");
+            }
+
+            // Remove non-admin users; keep all admin accounts
+            $pdo->exec("DELETE FROM users WHERE role != 'admin'");
+
+            $pdo->exec("SET FOREIGN_KEY_CHECKS=1");
+
+            $_SESSION['success'] = 'System reset complete. All business data cleared. Admin accounts kept.';
+            header('Location: backup.php');
+            exit;
+        } catch (\Throwable $e) {
+            try { $pdo->exec("SET FOREIGN_KEY_CHECKS=1"); } catch (\Throwable $e2) {}
+            $resetError = $e->getMessage();
+        }
+    }
+}
+
 // ── Quick stats ────────────────────────────────────────────────────────────────
 $todaySales    = (int)$pdo->query("SELECT COUNT(*) FROM sales WHERE DATE(created_at) = CURDATE()")->fetchColumn();
 $todayPayments = (int)$pdo->query("SELECT COUNT(*) FROM payments WHERE DATE(created_at) = CURDATE()")->fetchColumn();
@@ -275,10 +315,79 @@ require_once '../includes/header.php';
 
 </div>
 
+<!-- ── Reset System ── -->
+<div class="row g-3 mt-1">
+    <div class="col-12">
+        <div class="card border-danger">
+            <div class="card-header bg-danger text-white fw-semibold">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i>Reset Management System
+            </div>
+            <div class="card-body">
+
+                <?php if ($resetError): ?>
+                <div class="alert alert-danger py-2 small"><i class="bi bi-x-circle me-1"></i><?= htmlspecialchars($resetError) ?></div>
+                <?php endif; ?>
+
+                <div class="row g-3 align-items-start">
+                    <div class="col-md-6">
+                        <p class="fw-semibold mb-2 text-danger"><i class="bi bi-trash3 me-1"></i>What will be deleted:</p>
+                        <ul class="small text-muted mb-0 ps-3">
+                            <li>All customers &amp; their balances</li>
+                            <li>All products</li>
+                            <li>All sales &amp; sale items</li>
+                            <li>All payments</li>
+                            <li>All stock logs</li>
+                            <li>All exchange rate history</li>
+                            <li>All <strong>assistant</strong> user accounts</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <p class="fw-semibold mb-2 text-success"><i class="bi bi-shield-check me-1"></i>What will be kept:</p>
+                        <ul class="small text-muted mb-0 ps-3">
+                            <li>All <strong>admin</strong> user accounts</li>
+                            <li>Exchange rate settings</li>
+                            <li>Currency configuration</li>
+                        </ul>
+                        <div class="alert alert-warning py-2 small mt-3 mb-0">
+                            <i class="bi bi-download me-1"></i>
+                            <strong>Recommended:</strong> <a href="backup.php?action=full">Download a full backup</a> before resetting.
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="my-3">
+
+                <form method="POST" id="resetForm" class="d-flex align-items-end gap-3 flex-wrap">
+                    <input type="hidden" name="action" value="reset_system">
+                    <div>
+                        <label class="form-label fw-semibold small text-danger mb-1">
+                            Type <code>RESET</code> to confirm
+                        </label>
+                        <input type="text" name="confirm_word" id="resetConfirmInput"
+                               class="form-control border-danger"
+                               placeholder="RESET" autocomplete="off"
+                               style="width:180px;"
+                               oninput="document.getElementById('resetBtn').disabled = this.value !== 'RESET'">
+                    </div>
+                    <button type="submit" id="resetBtn" class="btn btn-danger fw-semibold" disabled
+                            onclick="return confirm('Last chance — this will permanently wipe all business data. Are you absolutely sure?')">
+                        <i class="bi bi-trash3 me-2"></i>Reset System
+                    </button>
+                </form>
+
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 document.getElementById('importForm').addEventListener('submit', function() {
     document.getElementById('importBtn').disabled = true;
     document.getElementById('importBtn').innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Importing...';
+});
+document.getElementById('resetForm').addEventListener('submit', function() {
+    document.getElementById('resetBtn').disabled = true;
+    document.getElementById('resetBtn').innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Resetting...';
 });
 </script>
 

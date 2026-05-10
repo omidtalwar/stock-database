@@ -243,7 +243,7 @@ require_once '../includes/header.php';
             <div class="card-body d-flex align-items-center justify-content-between gap-3 py-3">
                 <div>
                     <div class="fw-semibold"><i class="bi bi-shield-lock me-2 text-primary"></i>Backup &amp; Restore</div>
-                    <div class="text-muted small">Download today's transactions or a full database backup, or restore from a previous backup file.</div>
+                    <div class="text-muted small">Download today's transactions or a full database backup, restore from a file, or reset the system to a clean state.</div>
                 </div>
                 <a href="backup.php" class="btn btn-primary btn-sm text-nowrap">
                     <i class="bi bi-database me-1"></i>Open Backup
