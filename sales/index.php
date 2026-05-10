@@ -52,7 +52,8 @@ $page       = min($page, $totalPages);
 $offset     = ($page - 1) * $perPage;
 
 $sales = $pdo->prepare("
-    SELECT s.id, s.total_amount, s.paid_amount, s.balance, s.created_at, s.notes,
+    SELECT s.id, s.bill_no, s.total_amount, s.paid_amount, s.balance, s.created_at, s.notes,
+           s.currency,
            c.name AS customer_name, c.shop_name,
            u.full_name AS created_by
     FROM sales s
@@ -64,6 +65,26 @@ $sales = $pdo->prepare("
 ");
 $sales->execute($params);
 $sales = $sales->fetchAll();
+
+// Batch-fetch sale items for all visible sales
+$itemsBySale = [];
+if (!empty($sales)) {
+    $saleIds      = array_column($sales, 'id');
+    $placeholders = implode(',', array_fill(0, count($saleIds), '?'));
+    $itemRows     = $pdo->prepare("
+        SELECT si.sale_id, si.quantity, si.unit_price, si.subtotal,
+               COALESCE(p.name, si.custom_name, 'Custom Item') AS product_name,
+               p.size, p.color
+        FROM sale_items si
+        LEFT JOIN products p ON p.id = si.product_id
+        WHERE si.sale_id IN ($placeholders)
+        ORDER BY si.sale_id, si.id
+    ");
+    $itemRows->execute($saleIds);
+    foreach ($itemRows->fetchAll() as $item) {
+        $itemsBySale[$item['sale_id']][] = $item;
+    }
+}
 
 require_once '../includes/header.php';
 ?>
@@ -168,9 +189,21 @@ $searchParam = $search ? '&search=' . urlencode($search) : '';
                 <?php if (empty($sales)): ?>
                 <tr><td colspan="8" class="text-center text-muted py-5"><?= __('sale_no_data') ?></td></tr>
                 <?php else: ?>
-                <?php foreach ($sales as $s): ?>
-                <tr>
-                    <td><span class="badge bg-light text-dark fw-semibold">#<?= str_pad($s['id'], 4, '0', STR_PAD_LEFT) ?></span></td>
+                <?php foreach ($sales as $s):
+                    $sItems = $itemsBySale[$s['id']] ?? [];
+                    $nItems = count($sItems);
+                ?>
+                <tr style="cursor:pointer;" onclick="toggleItems(<?= $s['id'] ?>)">
+                    <td>
+                        <div class="fw-semibold" style="font-size:0.82rem;">
+                            <?= $s['bill_no'] ? htmlspecialchars($s['bill_no']) : '#'.str_pad($s['id'], 4, '0', STR_PAD_LEFT) ?>
+                        </div>
+                        <?php if ($nItems > 0): ?>
+                        <div class="text-muted" style="font-size:0.7rem;">
+                            <i class="bi bi-chevron-down me-1 toggle-icon-<?= $s['id'] ?>"></i><?= $nItems ?> item<?= $nItems > 1 ? 's' : '' ?>
+                        </div>
+                        <?php endif; ?>
+                    </td>
                     <td>
                         <div class="fw-semibold small"><?= htmlspecialchars($s['customer_name']) ?></div>
                         <div class="text-muted" style="font-size:0.75rem;"><?= htmlspecialchars($s['shop_name']) ?></div>
@@ -186,7 +219,7 @@ $searchParam = $search ? '&search=' . urlencode($search) : '';
                     </td>
                     <td class="text-muted small d-none d-md-table-cell"><?= htmlspecialchars($s['created_by']) ?></td>
                     <td class="text-muted small d-none d-md-table-cell"><?= date('d M Y', strtotime($s['created_at'])) ?></td>
-                    <td>
+                    <td onclick="event.stopPropagation()">
                         <a href="view.php?id=<?= $s['id'] ?>" class="btn btn-sm btn-light me-1" title="<?= __('btn_view') ?>">
                             <i class="bi bi-eye"></i>
                         </a>
@@ -198,6 +231,37 @@ $searchParam = $search ? '&search=' . urlencode($search) : '';
                         <?php endif; ?>
                     </td>
                 </tr>
+                <?php if ($nItems > 0): ?>
+                <tr id="items-<?= $s['id'] ?>" style="display:none;background:rgba(0,103,192,0.03);">
+                    <td colspan="8" style="padding:0 0 0 36px;">
+                        <table class="table table-sm mb-0" style="font-size:0.77rem;border:none;">
+                            <thead style="background:rgba(0,0,0,0.03);">
+                                <tr>
+                                    <th class="border-0 py-1">Product</th>
+                                    <th class="border-0 py-1 text-end" style="width:70px;">Qty</th>
+                                    <th class="border-0 py-1 text-end" style="width:100px;">Unit Price</th>
+                                    <th class="border-0 py-1 text-end" style="width:100px;">Subtotal</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            <?php foreach ($sItems as $it): ?>
+                            <tr>
+                                <td class="border-0 py-1">
+                                    <span class="fw-semibold"><?= htmlspecialchars($it['product_name']) ?></span>
+                                    <?php if ($it['size'] || $it['color']): ?>
+                                    <span class="text-muted ms-1" style="font-size:0.7rem;"><?= htmlspecialchars(trim(($it['size'] ?? '').' '.($it['color'] ?? ''))) ?></span>
+                                    <?php endif; ?>
+                                </td>
+                                <td class="border-0 py-1 text-end text-muted"><?= number_format($it['quantity']) ?> pcs</td>
+                                <td class="border-0 py-1 text-end text-muted">؋ <?= number_format($it['unit_price'], 0) ?></td>
+                                <td class="border-0 py-1 text-end fw-semibold">؋ <?= number_format($it['subtotal'], 0) ?></td>
+                            </tr>
+                            <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </td>
+                </tr>
+                <?php endif; ?>
                 <?php endforeach; ?>
                 <?php endif; ?>
             </tbody>
@@ -230,5 +294,19 @@ $searchParam = $search ? '&search=' . urlencode($search) : '';
     </div>
     <?php endif; ?>
 </div>
+
+<script>
+function toggleItems(saleId) {
+    const row  = document.getElementById('items-' + saleId);
+    const icon = document.querySelector('.toggle-icon-' + saleId);
+    if (!row) return;
+    const open = row.style.display === 'none' || row.style.display === '';
+    row.style.display = open ? 'table-row' : 'none';
+    if (icon) {
+        icon.classList.toggle('bi-chevron-down', !open);
+        icon.classList.toggle('bi-chevron-up',   open);
+    }
+}
+</script>
 
 <?php require_once '../includes/footer.php'; ?>

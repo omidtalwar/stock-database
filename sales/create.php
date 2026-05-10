@@ -12,16 +12,18 @@ foreach ([
     "ALTER TABLE sales ADD COLUMN bill_no       VARCHAR(100) NULL AFTER id",
     "ALTER TABLE sales ADD COLUMN sale_date     DATE         NULL AFTER bill_no",
     "ALTER TABLE sales ADD COLUMN images        TEXT         NULL",
+    "ALTER TABLE sales ADD COLUMN currency      VARCHAR(10)  NULL DEFAULT 'AFN'",
     "ALTER TABLE sale_items ADD COLUMN custom_name VARCHAR(255) NULL",
     "ALTER TABLE sale_items MODIFY product_id   INT          NULL",
 ] as $_sql) {
     try { $pdo->exec($_sql); } catch (\PDOException $e) {}
 }
 
+$allRates  = getAllRates($pdo);
 $settings  = getSettings($pdo);
-$rate      = (float)($settings['exchange_rate'] ?? 90);
 $secCur    = $settings['secondary_currency'] ?? 'USD';
 $secSymbol = currencySymbol($secCur);
+$rate      = $allRates[$secCur]; // for secondary display in summary
 
 $customers   = $pdo->query("SELECT id, name, shop_name FROM customers ORDER BY name ASC")->fetchAll();
 $products    = $pdo->query("SELECT id, name, size, color, price, quantity FROM products WHERE quantity > 0 ORDER BY name ASC")->fetchAll();
@@ -33,10 +35,12 @@ $suggestedBillNo = 'BL-' . date('ymd') . '-' . str_pad($nextId, 3, '0', STR_PAD_
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $customer_id       = (int)($_POST['customer_id'] ?? 0);
+    $sale_currency     = strtoupper(trim($_POST['sale_currency'] ?? 'AFN'));
+    if (!array_key_exists($sale_currency, CURRENCIES)) $sale_currency = 'AFN';
     $paid_currency     = strtoupper(trim($_POST['paid_currency'] ?? 'AFN'));
     if (!array_key_exists($paid_currency, CURRENCIES)) $paid_currency = 'AFN';
     $paid_amount_input = (float)($_POST['paid_amount'] ?? 0);
-    $paid_amount       = toAFN($paid_amount_input, $paid_currency, $rate);
+    $paid_amount       = toAFN($paid_amount_input, $paid_currency, $allRates[$paid_currency]);
     $notes             = trim($_POST['notes'] ?? '');
     $bill_no           = trim($_POST['bill_no'] ?? '');
     $sale_date         = $_POST['sale_date'] ?? date('Y-m-d');
@@ -70,12 +74,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$custName) { $errors[] = 'Please enter a name for the custom item.'; break; }
         }
 
-        $sub    = $qty * $unitPrice;
-        $total += $sub;
+        // Convert prices from sale_currency to AFN for storage
+        $saleRate     = $allRates[$sale_currency];
+        $unitPriceAfn = $unitPrice * $saleRate;
+        $sub          = $qty * $unitPriceAfn;
+        $total       += $sub;
         $lineItems[] = [
             'product_id'  => $pid ?: null,
             'quantity'    => $qty,
-            'unit_price'  => $unitPrice,
+            'unit_price'  => $unitPriceAfn,
             'subtotal'    => $sub,
             'custom_name' => $custName ?: null,
         ];
@@ -88,9 +95,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->beginTransaction();
         try {
             $pdo->prepare("
-                INSERT INTO sales (bill_no, sale_date, customer_id, total_amount, paid_amount, balance, notes, images, created_by)
-                VALUES (?,?,?,?,?,?,?,?,?)
-            ")->execute([$bill_no ?: null, $sale_date, $customer_id, $total, $paid_amount, $balance, $notes, $images_json, $_SESSION['user_id']]);
+                INSERT INTO sales (bill_no, sale_date, customer_id, total_amount, paid_amount, balance, notes, images, currency, created_by)
+                VALUES (?,?,?,?,?,?,?,?,?,?)
+            ")->execute([$bill_no ?: null, $sale_date, $customer_id, $total, $paid_amount, $balance, $notes, $images_json, $sale_currency, $_SESSION['user_id']]);
             $saleId = $pdo->lastInsertId();
 
             foreach ($lineItems as $li) {
@@ -277,7 +284,7 @@ require_once '../includes/header.php';
             <div class="card-body">
                 <div class="row g-3">
                     <!-- Bill No -->
-                    <div class="col-sm-6">
+                    <div class="col-sm-4">
                         <label class="form-label small fw-semibold">Bill No</label>
                         <div class="input-group input-group-sm">
                             <span class="input-group-text"><i class="bi bi-hash"></i></span>
@@ -286,6 +293,18 @@ require_once '../includes/header.php';
                                    placeholder="e.g. BL-250506-001">
                         </div>
                         <div class="form-text">Auto-suggested — you can change it.</div>
+                    </div>
+
+                    <!-- Sale Currency -->
+                    <div class="col-sm-2">
+                        <label class="form-label small fw-semibold"><i class="bi bi-currency-exchange me-1 text-primary"></i>Currency</label>
+                        <select name="sale_currency" id="saleCurrencySelect" class="form-select form-select-sm" onchange="onSaleCurrencyChange()">
+                            <?php foreach (CURRENCIES as $code => $cur): ?>
+                            <option value="<?= $code ?>" <?= ($code === ($_POST['sale_currency'] ?? 'AFN')) ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($cur['symbol'] . ' ' . $code) ?>
+                            </option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
 
                     <!-- Date — Solar Hijri -->
@@ -360,8 +379,8 @@ require_once '../includes/header.php';
                         <tr>
                             <th><?= __('nav_products') ?> / Size</th>
                             <th style="width:90px;"><?= __('field_quantity') ?></th>
-                            <th style="width:120px;"><?= __('field_price') ?> (؋)</th>
-                            <th style="width:110px;"><?= __('field_total') ?></th>
+                            <th style="width:130px;"><?= __('field_price') ?> (<span class="sale-cur-hdr">؋</span>)</th>
+                            <th style="width:120px;"><?= __('field_total') ?> (<span class="sale-cur-hdr">؋</span>)</th>
                             <th style="width:46px;"></th>
                         </tr>
                     </thead>
@@ -408,7 +427,7 @@ require_once '../includes/header.php';
                     <span class="fw-semibold" id="summaryTotal">؋ 0</span>
                 </div>
                 <div class="d-flex justify-content-between mb-3 text-muted small">
-                    <span>≈ <?= htmlspecialchars($secCur) ?></span>
+                    <span>≈ ؋ AFN equivalent</span>
                     <span id="summaryTotalSec">—</span>
                 </div>
                 <hr>
@@ -416,12 +435,12 @@ require_once '../includes/header.php';
                     <label class="form-label fw-semibold"><?= __('sale_paid_now') ?></label>
                     <div class="input-group input-group-sm">
                         <select name="paid_currency" id="paidCurrency" class="form-select"
-                                style="max-width:100px;" onchange="updateSummary()">
-                            <option value="AFN" <?= ($_POST['paid_currency'] ?? 'AFN') === 'AFN' ? 'selected' : '' ?>>؋ AFN</option>
-                            <option value="<?= htmlspecialchars($secCur) ?>"
-                                <?= ($_POST['paid_currency'] ?? '') === $secCur ? 'selected' : '' ?>>
-                                <?= htmlspecialchars($secSymbol) ?> <?= htmlspecialchars($secCur) ?>
+                                style="max-width:110px;" onchange="updateSummary()">
+                            <?php foreach (CURRENCIES as $code => $cur): ?>
+                            <option value="<?= $code ?>" <?= ($_POST['paid_currency'] ?? 'AFN') === $code ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($cur['symbol'] . ' ' . $code) ?>
                             </option>
+                            <?php endforeach; ?>
                         </select>
                         <input type="number" name="paid_amount" id="paidAmount" class="form-control"
                                min="0" step="0.01"
@@ -470,9 +489,9 @@ const PRODUCTS = <?= json_encode(array_map(fn($p) => [
     'stock' => (int)$p['quantity'],
 ], $products)) ?>;
 
-const RATE_INV    = <?= $rate ?>;
+const ALL_RATES_INV = <?= json_encode($allRates) ?>;
+const CURRENCIES_INV = <?= json_encode(array_map(fn($c) => ['symbol' => $c['symbol'], 'decimals' => $c['decimals']], CURRENCIES)) ?>;
 const SEC_CUR_INV = <?= json_encode($secCur) ?>;
-const SEC_SYM_INV = <?= json_encode($secSymbol) ?>;
 const EMPTY_MSG   = <?= json_encode(__('sale_click_add')) ?>;
 
 // Fast lookup by label
@@ -483,18 +502,48 @@ PRODUCTS.forEach(p => { PROD_MAP[p.label] = p; });
 const _dl = document.createElement('datalist');
 _dl.id = 'prod-master-list';
 PRODUCTS.forEach(p => {
-    const o = document.createElement('option');
-    o.value = p.label;
-    _dl.appendChild(o);
+    const o = document.createElement('option'); o.value = p.label; _dl.appendChild(o);
 });
 document.body.appendChild(_dl);
 
 let rowCount = 0;
 
+function saleCur()  { return document.getElementById('saleCurrencySelect')?.value || 'AFN'; }
+function saleSym()  { return CURRENCIES_INV[saleCur()]?.symbol || '؋'; }
+function saleDec()  { return CURRENCIES_INV[saleCur()]?.decimals ?? 0; }
+function saleRate() { return ALL_RATES_INV[saleCur()] || 1; }
+
+function fmtSale(v) {
+    const dec = saleDec();
+    return saleSym() + ' ' + parseFloat(v).toLocaleString('en-US', {minimumFractionDigits:dec, maximumFractionDigits:dec});
+}
+function fmtAFN_inv(v) { return '؋ ' + parseFloat(v).toLocaleString('en-US', {maximumFractionDigits:0}); }
+
+function onSaleCurrencyChange() {
+    const sym = saleSym();
+    // Update table header symbols
+    document.querySelectorAll('.sale-cur-hdr').forEach(el => el.textContent = sym);
+    // Re-calc all rows (product prices stay as AFN, convert for display)
+    document.querySelectorAll('#itemsBody tr[id^="row_"]').forEach(row => {
+        const idx = row.id.replace('row_', '');
+        const pid = row.querySelector('.prod-id-hidden').value;
+        if (pid) {
+            const prod = PRODUCTS.find(p => p.id == pid);
+            if (prod) {
+                const r = saleRate();
+                row.querySelector('.price-input').value = r > 0 ? (prod.price / r).toFixed(saleDec()) : prod.price;
+            }
+        }
+        updateRow(idx);
+    });
+    updateSummary();
+}
+
 function addRow() {
     document.getElementById('emptyRow')?.remove();
     rowCount++;
     const idx = rowCount;
+    const sym = saleSym();
     const row = document.createElement('tr');
     row.id = `row_${idx}`;
     row.innerHTML = `
@@ -514,14 +563,17 @@ function addRow() {
                    value="1" min="1" oninput="updateRow(${idx})" required>
         </td>
         <td>
-            <input type="number" name="items[${idx}][unit_price]"
-                   class="form-control form-control-sm price-input"
-                   value="0" min="0" step="1"
-                   oninput="updateRow(${idx})" placeholder="0">
+            <div class="input-group input-group-sm">
+                <span class="input-group-text sale-cur-sym" style="font-size:.8rem;">${sym}</span>
+                <input type="number" name="items[${idx}][unit_price]"
+                       class="form-control form-control-sm price-input"
+                       value="" min="0" step="0.01"
+                       oninput="updateRow(${idx})" placeholder="0">
+            </div>
         </td>
         <td>
             <input type="text" class="form-control form-control-sm subtotal-display fw-semibold"
-                   readonly value="؋ 0" tabindex="-1">
+                   readonly value="${sym} 0" tabindex="-1">
         </td>
         <td>
             <button type="button" class="btn btn-sm btn-light text-danger"
@@ -542,7 +594,9 @@ function matchProduct(idx, input) {
 
     if (prod) {
         pidInput.value  = prod.id;
-        priceEl.value   = prod.price;
+        // Convert AFN price to selected sale currency
+        const r = saleRate();
+        priceEl.value   = r > 0 ? (prod.price / r).toFixed(saleDec()) : prod.price;
         qtyEl.max       = prod.stock;
         stockInfo.innerHTML = `<i class="bi bi-archive me-1"></i>Stock: <b>${prod.stock}</b> pcs`;
         stockInfo.style.color = prod.stock > 0 ? '' : 'var(--w11-red,#C42B1C)';
@@ -558,23 +612,24 @@ function matchProduct(idx, input) {
 }
 
 function updateRow(idx) {
-    const row    = document.getElementById(`row_${idx}`);
-    const price  = parseFloat(row.querySelector('.price-input').value || 0);
-    const qty    = parseInt(row.querySelector('.qty-input').value    || 0);
-    const pid    = row.querySelector('.prod-id-hidden').value;
-    const prod   = pid ? PRODUCTS.find(p => p.id == pid) : null;
+    const row  = document.getElementById(`row_${idx}`);
+    const price = parseFloat(row.querySelector('.price-input').value) || 0;
+    const qty   = parseInt(row.querySelector('.qty-input').value)     || 0;
+    const pid   = row.querySelector('.prod-id-hidden').value;
+    const prod  = pid ? PRODUCTS.find(p => p.id == pid) : null;
 
-    // Cap qty to stock for known products
     if (prod && qty > prod.stock) row.querySelector('.qty-input').value = prod.stock;
-    const finalQty = parseInt(row.querySelector('.qty-input').value || 0);
+    const finalQty = parseInt(row.querySelector('.qty-input').value) || 0;
     const sub = price * finalQty;
-    row.querySelector('.subtotal-display').value = '؋ ' + sub.toLocaleString('en-AF', {maximumFractionDigits:0});
+    // Store AFN subtotal in data attr for summary calc
+    row.dataset.subAfn = (sub * saleRate()).toFixed(2);
+    row.querySelector('.subtotal-display').value = fmtSale(sub);
     updateSummary();
 }
 
 function removeRow(idx) {
     document.getElementById(`row_${idx}`)?.remove();
-    if (!document.getElementById('itemsBody').querySelector('tr:not(#emptyRow)')) {
+    if (!document.getElementById('itemsBody').querySelector('tr[id^="row_"]')) {
         const em = document.createElement('tr');
         em.id = 'emptyRow';
         em.innerHTML = `<td colspan="5" class="text-center text-muted py-4 small">${EMPTY_MSG}</td>`;
@@ -583,28 +638,32 @@ function removeRow(idx) {
     updateSummary();
 }
 
-function fmtAFN_inv(v) { return '؋ ' + parseFloat(v).toLocaleString('en-AF', {maximumFractionDigits:0}); }
-function fmtSec_inv(v) { return SEC_SYM_INV + ' ' + parseFloat(v).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}); }
-
 function updateSummary() {
-    let total = 0;
-    document.querySelectorAll('.subtotal-display').forEach(el => {
-        total += parseFloat(el.value.replace('؋ ', '').replace(/,/g, '')) || 0;
+    // Total in AFN (sum of row AFN subtotals)
+    let totalAfn = 0;
+    document.querySelectorAll('#itemsBody tr[id^="row_"]').forEach(row => {
+        totalAfn += parseFloat(row.dataset.subAfn) || 0;
     });
-    const cur       = document.getElementById('paidCurrency').value;
-    const paidInput = parseFloat(document.getElementById('paidAmount').value || 0);
-    const paidAfn   = cur === 'AFN' ? paidInput : paidInput * RATE_INV;
-    const balance   = Math.max(0, total - paidAfn);
 
-    document.getElementById('summaryTotal').textContent    = fmtAFN_inv(total);
-    document.getElementById('summaryTotalSec').textContent = fmtSec_inv(RATE_INV > 0 ? total / RATE_INV : 0);
+    const paidCur   = document.getElementById('paidCurrency').value;
+    const paidInput = parseFloat(document.getElementById('paidAmount').value) || 0;
+    const paidAfn   = paidInput * (ALL_RATES_INV[paidCur] || 1);
+    const balance   = Math.max(0, totalAfn - paidAfn);
+
+    // Summary in sale currency
+    const r = saleRate();
+    const totalSale = r > 0 ? totalAfn / r : totalAfn;
+    document.getElementById('summaryTotal').textContent    = fmtSale(totalSale);
+    document.getElementById('summaryTotalSec').textContent = fmtAFN_inv(totalAfn) + ' AFN';
     document.getElementById('paidAfnDisplay').textContent  = fmtAFN_inv(paidAfn);
     document.getElementById('summaryBalance').textContent  = fmtAFN_inv(balance);
 
     const hint = document.getElementById('paidConvert');
-    if (cur !== 'AFN' && paidInput > 0) {
+    if (paidCur !== 'AFN' && paidInput > 0) {
+        const paidR = ALL_RATES_INV[paidCur] || 1;
+        const sym   = CURRENCIES_INV[paidCur]?.symbol || paidCur;
         hint.style.display = '';
-        hint.innerHTML = fmtSec_inv(paidInput) + ' × ' + RATE_INV.toLocaleString() + ' = <strong>' + fmtAFN_inv(paidAfn) + '</strong>';
+        hint.innerHTML = `${sym} ${paidInput.toLocaleString()} × ${paidR} = <strong>${fmtAFN_inv(paidAfn)}</strong>`;
     } else {
         hint.style.display = 'none';
     }

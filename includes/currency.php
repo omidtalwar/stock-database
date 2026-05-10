@@ -20,6 +20,16 @@ function getSecondaryCurrency(PDO $pdo): string {
     return $v ?: 'USD';
 }
 
+// Returns AFN-per-1-unit for every currency: ['AFN'=>1, 'USD'=>65, 'PKR'=>0.25]
+function getAllRates(PDO $pdo): array {
+    $pairs = $pdo->query(
+        "SELECT `key`, `value` FROM settings WHERE `key` IN ('rate_usd','rate_pkr','exchange_rate')"
+    )->fetchAll(PDO::FETCH_KEY_PAIR);
+    $usd = (float)($pairs['rate_usd'] ?? $pairs['exchange_rate'] ?? 90.0);
+    $pkr = (float)($pairs['rate_pkr'] ?? 0.25);
+    return ['AFN' => 1.0, 'USD' => $usd, 'PKR' => $pkr];
+}
+
 function currencySymbol(string $currency): string {
     return CURRENCIES[$currency]['symbol'] ?? $currency;
 }
