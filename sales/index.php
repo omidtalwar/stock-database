@@ -6,6 +6,14 @@ require_once '../config/db.php';
 
 $pageTitle = __('sale_title');
 
+// Auto-migrate columns that the queries below rely on
+foreach ([
+    "ALTER TABLE sales ADD COLUMN bill_no   VARCHAR(100) NULL AFTER id",
+    "ALTER TABLE sales ADD COLUMN currency  VARCHAR(10)  NULL DEFAULT 'AFN'",
+    "ALTER TABLE sale_items ADD COLUMN custom_name VARCHAR(255) NULL",
+    "ALTER TABLE sale_items MODIFY product_id INT NULL",
+] as $_sql) { try { $pdo->exec($_sql); } catch (\PDOException $e) {} }
+
 // ── Period filter ──
 $period = in_array($_GET['period'] ?? '', ['today','week','month','all'])
     ? $_GET['period'] : 'all';
