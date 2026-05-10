@@ -137,11 +137,9 @@ require_once '../includes/header.php';
 ?>
 
 <style>
-.calc-field {
-    background: rgba(0,103,192,0.05) !important;
+.row-total-auto {
+    background: rgba(0,103,192,0.04) !important;
     border-color: rgba(0,103,192,0.2) !important;
-    color: var(--w11-blue, #0067C0) !important;
-    font-weight: 700 !important;
 }
 #prodRows tr td { vertical-align: middle; padding: 6px 5px; }
 #prodRows tr td:first-child { padding-left: 10px; }
@@ -237,7 +235,7 @@ require_once '../includes/header.php';
                         <th style="width:10%;">Bundles</th>
                         <th style="width:12%;">Pricing</th>
                         <th style="width:14%;">Unit Price</th>
-                        <th style="width:14%;">Row Total</th>
+                        <th style="width:14%;">Total <span class="text-muted fw-normal" style="font-size:.72rem;">(auto or direct)</span></th>
                         <th style="width:36px;"></th>
                     </tr>
                 </thead>
@@ -393,11 +391,13 @@ function rowHTML(idx) {
         + '<span class="input-group-text"><span class="cur-sym">' + sym + '</span></span>'
         + '<input type="number" name="unit_price[]" class="form-control row-price" min="0" step="0.01" placeholder="0" oninput="calcRowTotal(this.closest(\'tr\'))">'
         + '</div></td>'
-        + '<td style="min-width:110px;">'
+        + '<td style="min-width:120px;">'
         + '<div class="input-group input-group-sm">'
         + '<span class="input-group-text"><span class="cur-sym">' + sym + '</span></span>'
-        + '<input type="number" name="total_amount[]" class="form-control row-total calc-field" min="0" step="0.01" placeholder="0" oninput="onRowTotalManual(this.closest(\'tr\'))">'
-        + '</div></td>'
+        + '<input type="number" name="total_amount[]" class="form-control row-total" min="0" step="0.01" placeholder="Total" oninput="onRowTotalManual(this.closest(\'tr\'))">'
+        + '</div>'
+        + '<div class="row-total-hint text-muted" style="font-size:.68rem;min-height:14px;margin-top:1px;"></div>'
+        + '</td>'
         + '<td><button type="button" class="btn btn-sm btn-light text-danger px-2" onclick="removeRow(this)" title="Remove"><i class="bi bi-x-lg"></i></button></td>';
 }
 
@@ -436,13 +436,26 @@ function calcRowTotal(tr) {
     if (pricing === 'per_bundle' && bundles > 0) total = bundles * price;
     else if (pricing === 'per_pcs' && qty > 0)   total = qty * price;
 
-    tr.querySelector('.row-total').value = total > 0 ? total.toFixed(curDec()) : '';
+    const totalInput = tr.querySelector('.row-total');
+    totalInput.value = total > 0 ? total.toFixed(curDec()) : '';
+    totalInput.classList.toggle('row-total-auto', total > 0);
+    const hint = tr.querySelector('.row-total-hint');
+    if (hint) hint.innerHTML = total > 0 ? '<i class="bi bi-lightning-charge"></i> auto-calculated' : 'enter total directly';
     calcGrandTotal();
 }
 
 function onRowTotalManual(tr) {
     tr.dataset.manualTotal = '1';
+    tr.querySelector('.row-total').classList.remove('row-total-auto');
+    const hint = tr.querySelector('.row-total-hint');
+    if (hint) hint.innerHTML = '<a href="#" class="text-primary" style="text-decoration:none;" onclick="resetRowTotal(this.closest(\'tr\'));return false;">↺ back to auto</a>';
     calcGrandTotal();
+}
+
+function resetRowTotal(tr) {
+    delete tr.dataset.manualTotal;
+    tr.querySelector('.row-total').value = '';
+    calcRowTotal(tr);
 }
 
 function calcGrandTotal() {
