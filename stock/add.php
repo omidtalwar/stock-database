@@ -64,9 +64,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $rowTotal   = (float)($rowTotals[$i]  ?? 0);
 
         if (!$pid && $customProd === '') $customProd = 'Stock';
-        if ($qty <= 0) { $errors[] = 'Row '.($i+1).': quantity must be greater than 0.'; continue; }
 
-        if ($type === 'out' && $pid) {
+        // Skip completely empty rows silently
+        if ($qty <= 0 && $rowTotal <= 0 && $unitPrice <= 0) continue;
+
+        if ($type === 'out' && $pid && $qty > 0) {
             $currQty = (int)$pdo->query("SELECT quantity FROM products WHERE id=$pid")->fetchColumn();
             if ($qty > $currQty) $errors[] = "Row ".($i+1).": not enough stock (available: $currQty pcs).";
         }
@@ -375,7 +377,7 @@ function rowHTML(idx) {
         + '</td>'
         + '<td style="min-width:100px;">'
         + '<div class="input-group input-group-sm">'
-        + '<input type="number" name="quantity[]" class="form-control row-qty" min="1" placeholder="0" oninput="calcRowTotal(this.closest(\'tr\'))">'
+        + '<input type="number" name="quantity[]" class="form-control row-qty" min="0" placeholder="0" oninput="calcRowTotal(this.closest(\'tr\'))">'
         + '<span class="input-group-text" style="font-size:.72rem;">pcs</span>'
         + '</div></td>'
         + '<td style="min-width:80px;">'

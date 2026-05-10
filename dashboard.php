@@ -5,7 +5,17 @@ require_once 'config/db.php';
 require_once 'includes/currency.php';
 require_once 'includes/lang.php';
 
-$settings  = getSettings($pdo);
+// ── AJAX: verify dashboard PIN ──────────────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['_action'] ?? '') === 'pin_verify') {
+    header('Content-Type: application/json');
+    $s   = $pdo->query("SELECT `value` FROM settings WHERE `key`='dashboard_pin'")->fetchColumn();
+    $ok  = $s && trim($_POST['pin'] ?? '') === trim($s);
+    echo json_encode(['ok' => (bool)$ok]);
+    exit;
+}
+
+$settings   = getSettings($pdo);
+$pinEnabled = !empty(trim($settings['dashboard_pin'] ?? ''));
 $rate      = (float)($settings['exchange_rate']      ?? 90);
 $secCur    = $settings['secondary_currency'] ?? 'USD';
 $secSymbol = currencySymbol($secCur);
@@ -452,9 +462,35 @@ body { font-family: 'Segoe UI Variable', 'Noto Naskh Arabic', 'Segoe UI', system
     align-items: center; justify-content: center; padding: 16px;
 }
 #fzl-install-modal.open { display: flex; }
+
+/* ── PIN blur ── */
+body.pin-locked .stat-value,
+body.pin-locked .stat-sec,
+body.pin-locked .stat-foot,
+body.pin-locked .admin-bar .val,
+body.pin-locked .admin-bar .sec,
+body.pin-locked .amt-main,
+body.pin-locked .amt-sec,
+body.pin-locked .status-owed,
+body.pin-locked .debtor-debt .v,
+body.pin-locked .debtor-debt .s { filter: blur(7px); user-select: none; pointer-events: none; }
+
+/* ── PIN overlay ── */
+#pinOverlay {
+    display: none; position: fixed; inset: 0; z-index: 99999;
+    background: rgba(0,0,0,0.55); backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    align-items: center; justify-content: center;
+}
+#pinOverlay.show { display: flex; }
+.pin-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid #0067C0; background: transparent; display: inline-block; transition: background .15s; }
+.pin-dot.filled { background: #0067C0; }
+.pin-key { padding: 14px; border-radius: 10px; border: 1px solid rgba(0,0,0,0.1); background: #f8f9fa; font-size: 1.1rem; font-weight: 600; cursor: pointer; transition: background .12s; color: #1C1C1C; }
+.pin-key:hover { background: #e9ecef; }
+.pin-key:active { background: #dee2e6; }
 </style>
 </head>
-<body>
+<body class="<?= $pinEnabled ? 'pin-locked' : '' ?>">
 
 <div id="fzl-bar"></div>
 
@@ -477,6 +513,25 @@ body { font-family: 'Segoe UI Variable', 'Noto Naskh Arabic', 'Segoe UI', system
 </div>
 
 <?= flash() ?>
+
+<?php if ($pinEnabled): ?>
+<!-- PIN overlay -->
+<div id="pinOverlay">
+    <div style="background:#fff;border-radius:18px;padding:32px 24px;width:300px;max-width:92vw;box-shadow:0 8px 40px rgba(0,0,0,0.25);text-align:center;">
+        <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#0067C0,#003E92);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:0.95rem;letter-spacing:1px;margin:0 auto 14px;">FZL</div>
+        <div style="font-weight:700;font-size:1rem;margin-bottom:4px;">Dashboard PIN</div>
+        <div style="font-size:0.8rem;color:#666;margin-bottom:20px;">Enter your PIN to view financial data</div>
+        <div id="pinDots" style="display:flex;justify-content:center;gap:14px;margin-bottom:22px;">
+            <span class="pin-dot"></span>
+            <span class="pin-dot"></span>
+            <span class="pin-dot"></span>
+            <span class="pin-dot"></span>
+        </div>
+        <div id="pinPad" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:220px;margin:0 auto;"></div>
+        <div id="pinError" style="display:none;margin-top:14px;color:#C42B1C;font-size:0.82rem;font-weight:600;">Wrong PIN. Try again.</div>
+    </div>
+</div>
+<?php endif; ?>
 
 <!-- ── Sidebar ── -->
 <aside class="sidebar" id="sidebar">
@@ -868,6 +923,70 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').cat
     // Hide if already running as installed app
     if (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone)
         btn.style.display = 'none';
+})();
+
+// ── Dashboard PIN ──
+(function () {
+    const overlay = document.getElementById('pinOverlay');
+    if (!overlay) return;
+
+    const dots  = document.querySelectorAll('.pin-dot');
+    const pad   = document.getElementById('pinPad');
+    const errEl = document.getElementById('pinError');
+    let pin = '';
+
+    // Build numpad
+    [1,2,3,4,5,6,7,8,9,'',0,'⌫'].forEach(k => {
+        if (k === '') { pad.appendChild(document.createElement('span')); return; }
+        const btn = document.createElement('button');
+        btn.className = 'pin-key';
+        btn.textContent = k;
+        btn.addEventListener('click', () => handleKey(String(k)));
+        pad.appendChild(btn);
+    });
+
+    function updateDots() {
+        dots.forEach((d, i) => d.classList.toggle('filled', i < pin.length));
+    }
+
+    async function handleKey(k) {
+        if (k === '⌫') { pin = pin.slice(0, -1); updateDots(); return; }
+        if (pin.length >= 4) return;
+        pin += k; updateDots();
+        if (pin.length === 4) await verifyPin();
+    }
+
+    async function verifyPin() {
+        try {
+            const res  = await fetch('', { method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: '_action=pin_verify&pin=' + encodeURIComponent(pin) });
+            const data = await res.json();
+            if (data.ok) {
+                sessionStorage.setItem('fzl_pin_ok', '1');
+                document.body.classList.remove('pin-locked');
+                overlay.classList.remove('show');
+            } else {
+                errEl.style.display = 'block';
+                pin = ''; updateDots();
+                setTimeout(() => { errEl.style.display = 'none'; }, 2000);
+            }
+        } catch (e) {
+            pin = ''; updateDots();
+        }
+    }
+
+    // Check session storage first (persists within the same tab)
+    if (sessionStorage.getItem('fzl_pin_ok')) {
+        document.body.classList.remove('pin-locked');
+    } else {
+        overlay.classList.add('show');
+    }
+
+    // Physical keyboard support
+    document.addEventListener('keydown', e => {
+        if (!overlay.classList.contains('show')) return;
+        if (/^[0-9]$/.test(e.key)) handleKey(e.key);
+        else if (e.key === 'Backspace') handleKey('⌫');
+    });
 })();
 </script>
 </body>
