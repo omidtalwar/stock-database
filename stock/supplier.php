@@ -21,6 +21,30 @@ foreach ([
     "ALTER TABLE stock_logs ADD COLUMN bill_image     TEXT          NULL",
 ] as $_sql) { try { $pdo->exec($_sql); } catch (\PDOException $e) {} }
 
+// Handle "Make Payment" POST
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'payment') {
+    $payAmt   = (float)($_POST['payment_amount'] ?? 0);
+    $payNotes = trim($_POST['payment_notes'] ?? '');
+
+    if ($payAmt <= 0) {
+        $_SESSION['error'] = 'Payment amount must be greater than 0.';
+    } else {
+        // Payment entry: total_amount=0 (doesn't affect purchases), paid_amount=payAmt,
+        // balance=-payAmt (credit that reduces SUM(balance) = total_unpaid)
+        $pdo->prepare("
+            INSERT INTO stock_logs
+                (product_id, custom_product, type, quantity, bundle_count, pricing_type,
+                 unit_price, total_amount, paid_amount, balance,
+                 supplier, notes, bill_image, created_by)
+            VALUES (NULL, '_payment_', 'in', 0, NULL, 'per_pcs', 0, 0, ?, ?, ?, ?, NULL, ?)
+        ")->execute([$payAmt, -$payAmt, $supplierName, $payNotes ?: null, $_SESSION['user_id']]);
+
+        $_SESSION['success'] = 'Payment of ؋'.number_format($payAmt, 0).' recorded.';
+        header('Location: supplier.php?name='.urlencode($supplierName));
+        exit;
+    }
+}
+
 // Supplier aggregate stats
 $stats = $pdo->prepare("
     SELECT
@@ -105,10 +129,17 @@ require_once '../includes/header.php';
             &mdash; since <?= date('d M Y', strtotime($stats['first_txn'])) ?>
         </p>
     </div>
-    <a href="add.php?supplier=<?= urlencode($supplierName) ?>"
-       class="btn btn-primary">
-        <i class="bi bi-plus-square me-2"></i>Add Stock from this Supplier
-    </a>
+    <div class="d-flex gap-2 flex-wrap">
+        <?php if ($stats['total_unpaid'] > 0): ?>
+        <button class="btn btn-success fw-semibold" data-bs-toggle="modal" data-bs-target="#paymentModal">
+            <i class="bi bi-cash-coin me-2"></i>Make Payment
+            <span class="badge bg-white text-success ms-1">؋<?= number_format($stats['total_unpaid'], 0) ?></span>
+        </button>
+        <?php endif; ?>
+        <a href="add.php?supplier=<?= urlencode($supplierName) ?>" class="btn btn-primary">
+            <i class="bi bi-plus-square me-2"></i>Add Stock
+        </a>
+    </div>
 </div>
 
 <!-- Stats -->
@@ -193,9 +224,16 @@ $pct = $stats['total_purchased'] > 0
                     <i class="bi bi-archive fs-3 d-block mb-2 opacity-25"></i>No records found.
                 </td></tr>
                 <?php else: ?>
-                <?php foreach ($logs as $log): ?>
-                <tr>
+                <?php foreach ($logs as $log):
+                    $isPayment = ($log['custom_product'] === '_payment_');
+                ?>
+                <tr class="<?= $isPayment ? 'table-success' : '' ?>">
                     <td style="max-width:160px;">
+                        <?php if ($isPayment): ?>
+                        <span class="fw-semibold text-success d-flex align-items-center gap-1">
+                            <i class="bi bi-cash-coin"></i> Payment
+                        </span>
+                        <?php else: ?>
                         <span class="fw-semibold d-block"><?= htmlspecialchars($log['product_label']) ?></span>
                         <?php if ($log['size'] || $log['color']): ?>
                         <span class="text-muted" style="font-size:0.7rem;"><?= htmlspecialchars(trim(($log['size'] ?? '').' '.($log['color'] ?? ''))) ?></span>
@@ -203,9 +241,12 @@ $pct = $stats['total_purchased'] > 0
                         <?php if (!$log['product_id'] && !empty($log['custom_product'])): ?>
                         <span class="badge bg-secondary-subtle text-secondary border" style="font-size:0.62rem;">custom</span>
                         <?php endif; ?>
+                        <?php endif; ?>
                     </td>
                     <td class="text-nowrap">
-                        <?php if ($log['type'] === 'in'): ?>
+                        <?php if ($isPayment): ?>
+                        <span class="badge bg-success text-white"><i class="bi bi-check-circle me-1"></i>Payment</span>
+                        <?php elseif ($log['type'] === 'in'): ?>
                         <span class="badge bg-success-subtle text-success border border-success-subtle">
                             <i class="bi bi-arrow-down-circle me-1"></i>In
                         </span>
@@ -215,13 +256,15 @@ $pct = $stats['total_purchased'] > 0
                         </span>
                         <?php endif; ?>
                     </td>
-                    <td class="fw-semibold text-end text-nowrap"><?= number_format($log['quantity']) ?> pcs</td>
-                    <td class="text-end text-muted"><?= $log['bundle_count'] ? number_format($log['bundle_count']) : '—' ?></td>
-                    <td class="text-end text-muted"><?= $log['unit_price'] ? '؋'.number_format($log['unit_price'], 0) : '—' ?></td>
-                    <td class="text-end text-nowrap"><?= $log['total_amount'] ? '؋'.number_format($log['total_amount'], 0) : '—' ?></td>
-                    <td class="text-end text-success fw-semibold text-nowrap"><?= $log['paid_amount'] ? '؋'.number_format($log['paid_amount'], 0) : '—' ?></td>
-                    <td class="text-end fw-semibold text-nowrap <?= $log['balance'] > 0 ? 'text-danger' : 'text-muted' ?>">
-                        <?= $log['balance'] > 0 ? '؋'.number_format($log['balance'], 0) : '—' ?>
+                    <td class="fw-semibold text-end text-nowrap"><?= !$isPayment ? number_format($log['quantity']).' pcs' : '—' ?></td>
+                    <td class="text-end text-muted"><?= (!$isPayment && $log['bundle_count']) ? number_format($log['bundle_count']) : '—' ?></td>
+                    <td class="text-end text-muted"><?= (!$isPayment && $log['unit_price']) ? '؋'.number_format($log['unit_price'], 0) : '—' ?></td>
+                    <td class="text-end text-nowrap"><?= (!$isPayment && $log['total_amount']) ? '؋'.number_format($log['total_amount'], 0) : '—' ?></td>
+                    <td class="text-end text-success fw-semibold text-nowrap">
+                        <?= $log['paid_amount'] > 0 ? '؋'.number_format($log['paid_amount'], 0) : '—' ?>
+                    </td>
+                    <td class="text-end fw-semibold text-nowrap <?= $log['balance'] > 0 ? 'text-danger' : ($log['balance'] < 0 ? 'text-success' : 'text-muted') ?>">
+                        <?= $log['balance'] != 0 ? '؋'.number_format(abs($log['balance']), 0).($log['balance'] < 0 ? ' credit' : '') : '—' ?>
                     </td>
                     <?php $ending = $runningMap[(int)$log['id']] ?? 0; ?>
                     <td class="text-end fw-bold text-nowrap <?= $ending > 0 ? 'text-danger' : 'text-success' ?>"
@@ -290,6 +333,63 @@ $pct = $stats['total_purchased'] > 0
         </ul></nav>
     </div>
     <?php endif; ?>
+</div>
+
+<!-- Make Payment Modal -->
+<div class="modal fade" id="paymentModal" tabindex="-1" aria-labelledby="paymentModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold d-flex align-items-center gap-2" id="paymentModalLabel">
+                    <i class="bi bi-cash-coin text-success"></i>
+                    Make Payment
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST">
+                <input type="hidden" name="action" value="payment">
+                <div class="modal-body pt-2">
+
+                    <div class="p-3 rounded mb-3 d-flex justify-content-between align-items-center"
+                         style="background:rgba(196,43,28,0.06);border:1px solid rgba(196,43,28,0.15);">
+                        <div>
+                            <div class="small text-muted">Current Balance Owed</div>
+                            <div class="fw-bold fs-5 text-danger">؋ <?= number_format(max(0, $stats['total_unpaid']), 0) ?></div>
+                        </div>
+                        <i class="bi bi-exclamation-circle-fill text-danger fs-4 opacity-50"></i>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Payment Amount <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text fw-semibold">؋</span>
+                            <input type="number" name="payment_amount" class="form-control form-control-lg fw-semibold"
+                                   min="1" step="1" placeholder="0" required
+                                   max="<?= max(0, $stats['total_unpaid']) ?>">
+                        </div>
+                        <div class="form-text">
+                            <a href="#" onclick="document.querySelector('[name=payment_amount]').value=<?= max(0, (int)$stats['total_unpaid']) ?>;return false;">
+                                Pay full balance (؋<?= number_format(max(0, $stats['total_unpaid']), 0) ?>)
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="mb-1">
+                        <label class="form-label fw-semibold">Notes <span class="text-muted fw-normal">(optional)</span></label>
+                        <input type="text" name="payment_notes" class="form-control"
+                               placeholder="e.g. Cash payment, bank transfer, cheque…">
+                    </div>
+
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success fw-semibold px-4">
+                        <i class="bi bi-check-circle me-2"></i>Record Payment
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
 </div>
 
 <?php require_once '../includes/footer.php'; ?>
