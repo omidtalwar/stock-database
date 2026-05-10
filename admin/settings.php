@@ -9,6 +9,8 @@ $pageTitle = __('set_title');
 
 // Auto-migrate email column
 try { $pdo->exec("ALTER TABLE users ADD COLUMN email VARCHAR(150) NULL AFTER full_name"); } catch (\Throwable $e) {}
+// Fix users created without a status (NULL) — activate them so they can log in
+try { $pdo->exec("UPDATE users SET status = 'active' WHERE status IS NULL"); } catch (\Throwable $e) {}
 
 $settings = getSettings($pdo);
 $secCur   = $settings['secondary_currency'] ?? 'USD';

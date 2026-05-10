@@ -26,7 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['error'] = 'Username already exists.';
             } else {
                 $hash = password_hash($password, PASSWORD_DEFAULT);
-                $pdo->prepare("INSERT INTO users (username, password, full_name, role) VALUES (?,?,?,?)")
+                $pdo->prepare("INSERT INTO users (username, password, full_name, role, status) VALUES (?,?,?,?,'active')")
                     ->execute([$username, $hash, $full_name, $role]);
                 $_SESSION['success'] = htmlspecialchars($username);
             }
