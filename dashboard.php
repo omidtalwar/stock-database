@@ -592,6 +592,12 @@ body.pin-locked .debtor-debt .s { filter: blur(7px); user-select: none; pointer-
                 style="display:flex;align-items:center;gap:6px;padding:4px 11px;border-radius:6px;border:1px solid #0067C0;background:#EFF6FC;color:#0067C0;font-size:0.78rem;font-weight:600;cursor:pointer;white-space:nowrap;">
                 &#8659; <span class="d-sm-inline" style="display:none;">Install App</span>
             </button>
+            <?php if ($pinEnabled): ?>
+            <button id="lockDashBtn" title="Lock dashboard"
+                style="display:none;align-items:center;gap:5px;padding:4px 11px;border-radius:6px;border:1px solid rgba(196,43,28,0.35);background:rgba(196,43,28,0.06);color:#C42B1C;font-size:0.78rem;font-weight:600;cursor:pointer;white-space:nowrap;">
+                <i class="bi bi-lock"></i> Lock
+            </button>
+            <?php endif; ?>
             <div class="lang-switch">
                 <a href="?setlang=en" class="lang-btn <?= currentLang() === 'en' ? 'active' : '' ?>">🇬🇧 EN</a>
                 <a href="?setlang=ps" class="lang-btn <?= currentLang() === 'ps' ? 'active' : '' ?>">🇦🇫 PS</a>
@@ -961,9 +967,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').cat
             const res  = await fetch('/ajax/pin-verify.php', { method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: 'pin=' + encodeURIComponent(pin) });
             const data = await res.json();
             if (data.ok) {
-                sessionStorage.setItem('fzl_pin_ok', '1');
-                document.body.classList.remove('pin-locked');
-                overlay.classList.remove('show');
+                unlock();
             } else {
                 errEl.style.display = 'block';
                 pin = ''; updateDots();
@@ -977,12 +981,32 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').cat
         }
     }
 
+    const lockBtn = document.getElementById('lockDashBtn');
+
+    function unlock() {
+        sessionStorage.setItem('fzl_pin_ok', '1');
+        document.body.classList.remove('pin-locked');
+        overlay.classList.remove('show');
+        if (lockBtn) lockBtn.style.display = 'flex';
+    }
+
+    function lock() {
+        sessionStorage.removeItem('fzl_pin_ok');
+        document.body.classList.add('pin-locked');
+        pin = ''; updateDots();
+        errEl.style.display = 'none';
+        overlay.classList.add('show');
+        if (lockBtn) lockBtn.style.display = 'none';
+    }
+
     // Check session storage first (persists within the same tab)
     if (sessionStorage.getItem('fzl_pin_ok')) {
-        document.body.classList.remove('pin-locked');
+        unlock();
     } else {
         overlay.classList.add('show');
     }
+
+    lockBtn?.addEventListener('click', lock);
 
     // Physical keyboard support
     document.addEventListener('keydown', e => {
