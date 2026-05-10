@@ -22,7 +22,8 @@ function navItem(string $href, string $icon, string $label, bool $active): strin
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FZL — <?= htmlspecialchars($pageTitle ?? 'Management') ?></title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-<link rel="shortcut icon" href="/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="/icon.php?size=32">
+<link rel="shortcut icon" type="image/png" href="/icon.php?size=32">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#0067C0">
 <meta name="mobile-web-app-capable" content="yes">
