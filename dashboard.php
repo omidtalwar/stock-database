@@ -958,7 +958,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').cat
 
     async function verifyPin() {
         try {
-            const res  = await fetch('', { method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: '_action=pin_verify&pin=' + encodeURIComponent(pin) });
+            const res  = await fetch('/ajax/pin-verify.php', { method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: 'pin=' + encodeURIComponent(pin) });
             const data = await res.json();
             if (data.ok) {
                 sessionStorage.setItem('fzl_pin_ok', '1');
@@ -970,7 +970,10 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').cat
                 setTimeout(() => { errEl.style.display = 'none'; }, 2000);
             }
         } catch (e) {
+            errEl.textContent = 'Connection error. Try again.';
+            errEl.style.display = 'block';
             pin = ''; updateDots();
+            setTimeout(() => { errEl.style.display = 'none'; errEl.textContent = 'Wrong PIN. Try again.'; }, 2500);
         }
     }
 

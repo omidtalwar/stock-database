@@ -82,8 +82,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'update_pin') {
-        $newPin = trim($_POST['dashboard_pin'] ?? '');
-        if (!preg_match('/^\d{4}$/', $newPin)) {
+        $newPin   = trim($_POST['dashboard_pin'] ?? '');
+        $acctPw   = $_POST['account_password'] ?? '';
+        $pwRow    = $pdo->prepare("SELECT password FROM users WHERE id = ?");
+        $pwRow->execute([$_SESSION['user_id']]);
+        $hash     = $pwRow->fetchColumn();
+        if (!$acctPw || !password_verify($acctPw, $hash)) {
+            $_SESSION['error'] = 'Incorrect account password.';
+        } elseif (!preg_match('/^\d{4}$/', $newPin)) {
             $_SESSION['error'] = 'PIN must be exactly 4 digits.';
         } else {
             $pdo->prepare("INSERT INTO settings (`key`,`value`,updated_by) VALUES ('dashboard_pin',?,?) ON DUPLICATE KEY UPDATE `value`=?, updated_by=?, updated_at=NOW()")
@@ -94,8 +100,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'clear_pin') {
-        $pdo->prepare("DELETE FROM settings WHERE `key` = 'dashboard_pin'")->execute();
-        $_SESSION['success'] = 'Dashboard PIN removed.';
+        $acctPw = $_POST['account_password'] ?? '';
+        $pwRow  = $pdo->prepare("SELECT password FROM users WHERE id = ?");
+        $pwRow->execute([$_SESSION['user_id']]);
+        $hash   = $pwRow->fetchColumn();
+        if (!$acctPw || !password_verify($acctPw, $hash)) {
+            $_SESSION['error'] = 'Incorrect account password.';
+        } else {
+            $pdo->prepare("DELETE FROM settings WHERE `key` = 'dashboard_pin'")->execute();
+            $_SESSION['success'] = 'Dashboard PIN removed.';
+        }
         header('Location: settings.php'); exit;
     }
 
@@ -386,48 +400,69 @@ require_once '../includes/header.php';
                 <?php $currentPin = $settings['dashboard_pin'] ?? ''; ?>
                 <p class="text-muted small mb-3">
                     When a PIN is set, financial data on the dashboard is blurred until the correct 4-digit PIN is entered.
-                    The PIN is cleared per browser tab after you close it.
+                    Your account password is required to set, change, or remove the PIN.
                 </p>
-                <div class="row g-3 align-items-end">
-                    <div class="col-sm-auto">
-                        <?php if ($currentPin): ?>
-                        <div class="d-flex align-items-center gap-2 p-2 rounded" style="background:rgba(16,124,16,0.07);border:1px solid rgba(16,124,16,0.15);">
-                            <i class="bi bi-shield-lock-fill text-success"></i>
-                            <span class="small fw-semibold text-success">PIN is active</span>
-                            <span class="text-muted small">(****)</span>
-                        </div>
-                        <?php else: ?>
-                        <div class="d-flex align-items-center gap-2 p-2 rounded" style="background:rgba(0,0,0,0.04);border:1px solid rgba(0,0,0,0.1);">
-                            <i class="bi bi-shield text-muted"></i>
-                            <span class="small fw-semibold text-muted">No PIN set</span>
-                        </div>
-                        <?php endif; ?>
-                    </div>
-                    <div class="col-sm-auto">
-                        <form method="POST" class="d-flex gap-2 align-items-end">
-                            <input type="hidden" name="action" value="update_pin">
-                            <div>
-                                <label class="form-label small mb-1"><?= $currentPin ? 'Change PIN' : 'Set PIN' ?></label>
-                                <input type="text" name="dashboard_pin" class="form-control"
-                                       inputmode="numeric" maxlength="4" pattern="\d{4}"
-                                       placeholder="4 digits" style="width:110px;letter-spacing:6px;font-weight:700;">
-                            </div>
-                            <button type="submit" class="btn btn-primary btn-sm">
-                                <i class="bi bi-lock me-1"></i><?= $currentPin ? 'Update' : 'Set PIN' ?>
-                            </button>
-                        </form>
-                    </div>
+
+                <!-- Status -->
+                <div class="mb-3">
                     <?php if ($currentPin): ?>
-                    <div class="col-sm-auto">
-                        <form method="POST" onsubmit="return confirm('Remove dashboard PIN protection?')">
-                            <input type="hidden" name="action" value="clear_pin">
-                            <button type="submit" class="btn btn-outline-danger btn-sm">
-                                <i class="bi bi-x-circle me-1"></i>Remove PIN
-                            </button>
-                        </form>
+                    <div class="d-inline-flex align-items-center gap-2 px-3 py-2 rounded" style="background:rgba(16,124,16,0.07);border:1px solid rgba(16,124,16,0.18);">
+                        <i class="bi bi-shield-lock-fill text-success"></i>
+                        <span class="small fw-semibold text-success">PIN is active</span>
+                        <span class="text-muted small">(4-digit PIN set)</span>
+                    </div>
+                    <?php else: ?>
+                    <div class="d-inline-flex align-items-center gap-2 px-3 py-2 rounded" style="background:rgba(0,0,0,0.04);border:1px solid rgba(0,0,0,0.1);">
+                        <i class="bi bi-shield text-muted"></i>
+                        <span class="small fw-semibold text-muted">No PIN set — dashboard data is visible to all users</span>
                     </div>
                     <?php endif; ?>
                 </div>
+
+                <!-- Set / Change PIN -->
+                <form method="POST" class="mb-3">
+                    <input type="hidden" name="action" value="update_pin">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-sm-auto">
+                            <label class="form-label small mb-1 fw-semibold"><?= $currentPin ? 'New PIN' : 'Set PIN' ?></label>
+                            <input type="text" name="dashboard_pin" class="form-control form-control-sm"
+                                   inputmode="numeric" maxlength="4" pattern="\d{4}" required
+                                   placeholder="4 digits" style="width:110px;letter-spacing:6px;font-weight:700;">
+                        </div>
+                        <div class="col-sm-auto">
+                            <label class="form-label small mb-1 fw-semibold">Account Password</label>
+                            <input type="password" name="account_password" class="form-control form-control-sm"
+                                   placeholder="Your login password" required style="width:210px;"
+                                   autocomplete="current-password">
+                        </div>
+                        <div class="col-sm-auto">
+                            <button type="submit" class="btn btn-primary btn-sm">
+                                <i class="bi bi-lock me-1"></i><?= $currentPin ? 'Update PIN' : 'Set PIN' ?>
+                            </button>
+                        </div>
+                    </div>
+                </form>
+
+                <!-- Remove PIN -->
+                <?php if ($currentPin): ?>
+                <form method="POST">
+                    <input type="hidden" name="action" value="clear_pin">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-sm-auto">
+                            <label class="form-label small mb-1 fw-semibold">Account Password to Remove PIN</label>
+                            <input type="password" name="account_password" class="form-control form-control-sm"
+                                   placeholder="Confirm your password" required style="width:230px;"
+                                   autocomplete="current-password">
+                        </div>
+                        <div class="col-sm-auto">
+                            <button type="submit" class="btn btn-outline-danger btn-sm"
+                                    onclick="return confirm('Remove dashboard PIN protection?')">
+                                <i class="bi bi-x-circle me-1"></i>Remove PIN
+                            </button>
+                        </div>
+                    </div>
+                </form>
+                <?php endif; ?>
             </div>
         </div>
     </div>
