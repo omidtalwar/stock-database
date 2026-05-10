@@ -18,6 +18,7 @@ foreach ([
     "ALTER TABLE stock_logs ADD COLUMN paid_amount    DECIMAL(10,2) NULL DEFAULT 0",
     "ALTER TABLE stock_logs ADD COLUMN balance        DECIMAL(10,2) NULL DEFAULT 0",
     "ALTER TABLE stock_logs ADD COLUMN bill_image     TEXT          NULL",
+    "ALTER TABLE stock_logs ADD COLUMN bill_no        VARCHAR(100)  NULL",
     "ALTER TABLE stock_logs ADD COLUMN currency       VARCHAR(10)   NULL DEFAULT 'AFN'",
 ] as $_sql) { try { $pdo->exec($_sql); } catch (\PDOException $e) {} }
 
@@ -36,6 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $type      = in_array($_POST['type'] ?? '', ['in','out']) ? $_POST['type'] : 'in';
     $currency  = array_key_exists($_POST['currency'] ?? '', CURRENCIES) ? $_POST['currency'] : 'AFN';
     $supplier  = trim($_POST['supplier']   ?? '');
+    $billNo    = trim($_POST['bill_no']    ?? '');
     $notes     = trim($_POST['notes']      ?? '');
     $billImage = trim($_POST['bill_image'] ?? '');
     $paidTotal = (float)($_POST['paid_amount'] ?? 0);
@@ -103,13 +105,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     INSERT INTO stock_logs
                         (product_id, custom_product, type, quantity, bundle_count, pricing_type,
                          unit_price, total_amount, paid_amount, balance,
-                         supplier, notes, bill_image, currency, created_by)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                         supplier, bill_no, notes, bill_image, currency, created_by)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ")->execute([
                     $r['pid'] ?: null, $r['customProd'] ?: null, $type, $r['qty'],
                     $r['bundle'] ?: null, $r['pricing'], $r['unitPrice'],
                     $r['rowTotal'], $rowPaid, $rowBalance,
-                    $supplier ?: null, $notes ?: null, $billImage ?: null, $currency, $_SESSION['user_id'],
+                    $supplier ?: null, $billNo ?: null, $notes ?: null, $billImage ?: null, $currency, $_SESSION['user_id'],
                 ]);
             }
             $pdo->commit();
@@ -168,7 +170,7 @@ require_once '../includes/header.php';
     <div class="card mb-3">
         <div class="card-body py-3">
             <div class="row g-3 align-items-end">
-                <div class="col-sm-5">
+                <div class="col-sm-4">
                     <label class="form-label fw-semibold mb-1">Supplier / Wholesaler <span class="text-muted fw-normal small">(optional)</span></label>
                     <input list="supplier-list" type="text" name="supplier" class="form-control"
                            placeholder="e.g. Ahmed Traders…" autocomplete="off"
@@ -180,16 +182,22 @@ require_once '../includes/header.php';
                     </datalist>
                 </div>
                 <div class="col-sm-3">
+                    <label class="form-label fw-semibold mb-1"><i class="bi bi-receipt me-1 text-primary"></i>Bill No. <span class="text-muted fw-normal small">(optional)</span></label>
+                    <input type="text" name="bill_no" class="form-control"
+                           placeholder="e.g. INV-2024-001"
+                           value="<?= htmlspecialchars($_POST['bill_no'] ?? '') ?>">
+                </div>
+                <div class="col-sm-2">
                     <label class="form-label fw-semibold mb-1"><i class="bi bi-currency-exchange me-1 text-primary"></i>Currency</label>
                     <select name="currency" id="currencySelect" class="form-select" onchange="onCurrencyChange()">
                         <?php foreach (CURRENCIES as $code => $cur): ?>
                         <option value="<?= $code ?>" <?= ($code === ($_POST['currency'] ?? 'AFN')) ? 'selected' : '' ?>>
-                            <?= htmlspecialchars($cur['symbol'] . ' ' . $code . ' — ' . $cur['name']) ?>
+                            <?= htmlspecialchars($cur['symbol'] . ' ' . $code) ?>
                         </option>
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="col-sm-4">
+                <div class="col-sm-3">
                     <label class="form-label fw-semibold mb-1"><?= __('field_type') ?></label>
                     <div class="d-flex gap-4 pt-1">
                         <div class="form-check">

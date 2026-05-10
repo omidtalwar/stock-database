@@ -18,6 +18,7 @@ foreach ([
     "ALTER TABLE stock_logs ADD COLUMN paid_amount    DECIMAL(10,2) NULL DEFAULT 0",
     "ALTER TABLE stock_logs ADD COLUMN balance        DECIMAL(10,2) NULL DEFAULT 0",
     "ALTER TABLE stock_logs ADD COLUMN bill_image     TEXT          NULL",
+    "ALTER TABLE stock_logs ADD COLUMN bill_no        VARCHAR(100)  NULL",
 ] as $_sql) { try { $pdo->exec($_sql); } catch (\PDOException $e) {} }
 
 // Dashboard aggregate stats

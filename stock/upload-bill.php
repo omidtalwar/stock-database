@@ -14,7 +14,6 @@ $maxBytes     = 5 * 1024 * 1024;
 if ($file['error'] !== UPLOAD_ERR_OK)                     { echo json_encode(['success'=>false,'error'=>'Upload error '.$file['error']]); exit; }
 if (!in_array($file['type'], $allowedMimes, true))         { echo json_encode(['success'=>false,'error'=>'Only JPG, PNG, WebP, GIF allowed.']); exit; }
 if ($file['size'] > $maxBytes)                             { echo json_encode(['success'=>false,'error'=>'File exceeds 5 MB.']); exit; }
-
 $dir = __DIR__ . '/../uploads/stock-bills/';
 if (!is_dir($dir)) mkdir($dir, 0755, true);
 
