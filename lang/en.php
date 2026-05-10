@@ -28,7 +28,7 @@ return [
     'nav_stock'         => 'Stock Log',
     'nav_users'         => 'User Management',
     'nav_reports'       => 'Reports',
-    'nav_exchange'      => 'Exchange Rate',
+    'nav_exchange'      => 'Settings & Exchange',
 
     // ── Common actions ──
     'btn_save'          => 'Save',
