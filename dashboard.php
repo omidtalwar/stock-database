@@ -475,14 +475,19 @@ body.pin-locked .status-owed,
 body.pin-locked .debtor-debt .v,
 body.pin-locked .debtor-debt .s { filter: blur(7px); user-select: none; pointer-events: none; }
 
-/* ── PIN overlay ── */
+/* ── PIN overlay — sits over the content area only, sidebar stays visible ── */
 #pinOverlay {
-    display: none; position: fixed; inset: 0; z-index: 99999;
-    background: rgba(0,0,0,0.55); backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    display: none; position: fixed;
+    top: 0; bottom: 0; right: 0;
+    <?= isRTL() ? 'right: var(--w11-sidebar); left: 0;' : 'left: var(--w11-sidebar);' ?>
+    z-index: 150; /* below sidebar z-index (200) so sidebar stays clickable */
+    background: rgba(0,0,0,0.60); backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     align-items: center; justify-content: center;
 }
 #pinOverlay.show { display: flex; }
+/* On mobile the sidebar is hidden, overlay covers full width */
+@media (max-width: 768px) { #pinOverlay { left: 0; right: 0; } }
 .pin-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid #0067C0; background: transparent; display: inline-block; transition: background .15s; }
 .pin-dot.filled { background: #0067C0; }
 .pin-key { padding: 14px; border-radius: 10px; border: 1px solid rgba(0,0,0,0.1); background: #f8f9fa; font-size: 1.1rem; font-weight: 600; cursor: pointer; transition: background .12s; color: #1C1C1C; }
@@ -594,8 +599,8 @@ body.pin-locked .debtor-debt .s { filter: blur(7px); user-select: none; pointer-
             </button>
             <?php if ($pinEnabled): ?>
             <button id="lockDashBtn" title="Lock dashboard"
-                style="display:none;align-items:center;gap:5px;padding:4px 11px;border-radius:6px;border:1px solid rgba(196,43,28,0.35);background:rgba(196,43,28,0.06);color:#C42B1C;font-size:0.78rem;font-weight:600;cursor:pointer;white-space:nowrap;">
-                <i class="bi bi-lock"></i> Lock
+                style="display:flex;align-items:center;gap:5px;padding:4px 11px;border-radius:6px;border:1px solid rgba(196,43,28,0.35);background:rgba(196,43,28,0.06);color:#C42B1C;font-size:0.78rem;font-weight:600;cursor:pointer;white-space:nowrap;">
+                <i class="bi bi-lock-fill"></i> Lock
             </button>
             <?php endif; ?>
             <div class="lang-switch">
@@ -987,7 +992,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').cat
         sessionStorage.setItem('fzl_pin_ok', '1');
         document.body.classList.remove('pin-locked');
         overlay.classList.remove('show');
-        if (lockBtn) lockBtn.style.display = 'flex';
     }
 
     function lock() {
@@ -996,7 +1000,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').cat
         pin = ''; updateDots();
         errEl.style.display = 'none';
         overlay.classList.add('show');
-        if (lockBtn) lockBtn.style.display = 'none';
     }
 
     // Check session storage first (persists within the same tab)
