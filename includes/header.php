@@ -424,7 +424,9 @@ if (!empty($_SESSION['error'])) {
 
     <nav class="sidebar-nav">
         <div class="nav-section"><?= __('nav_main') ?></div>
+        <?php if (isAdmin()): ?>
         <?= navItem('/dashboard.php', 'grid-1x2', __('nav_dashboard'), $currentPage === 'dashboard') ?>
+        <?php endif; ?>
 
         <div class="nav-section"><?= __('nav_business') ?></div>
         <?= navItem('/customers/index.php', 'people',      __('nav_customers'), $currentDir === 'customers') ?>

@@ -5,6 +5,12 @@ require_once 'config/db.php';
 require_once 'includes/currency.php';
 require_once 'includes/lang.php';
 
+// Assistants have no access to the dashboard
+if (!isAdmin()) {
+    header('Location: /sales/index.php');
+    exit;
+}
+
 // ── AJAX: verify dashboard PIN ──────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['_action'] ?? '') === 'pin_verify') {
     header('Content-Type: application/json');

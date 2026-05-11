@@ -25,7 +25,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['username']  = $user['username'];
             $_SESSION['full_name'] = $user['full_name'];
             $_SESSION['role']      = $user['role'];
-            header('Location: /dashboard.php');
+            $redirect = $user['role'] === 'admin' ? '/dashboard.php' : '/sales/index.php';
+            header('Location: ' . $redirect);
             exit;
         } else {
             $error = __('incorrect_login');
