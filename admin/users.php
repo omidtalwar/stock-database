@@ -146,33 +146,36 @@ require_once '../includes/header.php';
                         <?php endif; ?>
                     </td>
                 </tr>
-
-                <div class="modal fade" id="resetModal<?= $u['id'] ?>" tabindex="-1">
-                    <div class="modal-dialog modal-sm">
-                        <div class="modal-content">
-                            <div class="modal-header">
-                                <h6 class="modal-title"><?= __('admin_reset_pw') ?> — <?= htmlspecialchars($u['username']) ?></h6>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                            </div>
-                            <form method="POST">
-                                <div class="modal-body">
-                                    <input type="hidden" name="action" value="reset_password">
-                                    <input type="hidden" name="user_id" value="<?= $u['id'] ?>">
-                                    <input type="password" name="new_password" class="form-control" placeholder="<?= __('admin_new_password') ?>" required minlength="6">
-                                </div>
-                                <div class="modal-footer">
-                                    <button type="submit" class="btn btn-primary btn-sm"><?= __('btn_update') ?></button>
-                                    <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal"><?= __('btn_cancel') ?></button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                </div>
                 <?php endforeach; ?>
             </tbody>
         </table>
     </div>
 </div>
+
+<!-- Reset-password modals (must be outside the table) -->
+<?php foreach ($users as $u): ?>
+<div class="modal fade" id="resetModal<?= $u['id'] ?>" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title"><?= __('admin_reset_pw') ?> — <?= htmlspecialchars($u['username']) ?></h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST">
+                <div class="modal-body">
+                    <input type="hidden" name="action" value="reset_password">
+                    <input type="hidden" name="user_id" value="<?= $u['id'] ?>">
+                    <input type="password" name="new_password" class="form-control" placeholder="<?= __('admin_new_password') ?>" required minlength="6">
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary btn-sm"><?= __('btn_update') ?></button>
+                    <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal"><?= __('btn_cancel') ?></button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<?php endforeach; ?>
 
 <div class="row g-3 mt-2">
     <div class="col-md-6">
