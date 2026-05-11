@@ -3,6 +3,11 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+// Move Bootstrap modals to <body> so they escape the stacking context
+// created by .content-area's CSS animation (transform creates a stacking
+// context that traps modal z-indices below the backdrop).
+document.querySelectorAll('.modal').forEach(function(m){ document.body.appendChild(m); });
+
 (function () {
     // ── PWA: Service Worker + Install prompt ──
     if ('serviceWorker' in navigator) {
