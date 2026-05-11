@@ -177,6 +177,40 @@
         bar.style.opacity    = '1';
     });
 })();
+
+// ── Auto-convert Arabic/Persian digits to Western digits ──
+// Fires on beforeinput (before the browser validates the character),
+// so it works even on type="number" inputs that would otherwise reject ۱٢٣.
+(function () {
+    var AR = [/[٠-٩]/g, /[۰-۹]/g];
+
+    function toWestern(str) {
+        return str
+            .replace(AR[0], function(c){ return c.charCodeAt(0) - 0x0660; })
+            .replace(AR[1], function(c){ return c.charCodeAt(0) - 0x06F0; });
+    }
+
+    document.addEventListener('beforeinput', function(e) {
+        if (!e.data) return;
+        var converted = toWestern(e.data);
+        if (converted === e.data) return;
+        e.preventDefault();
+        // execCommand works across all input types including type="number"
+        // and correctly handles cursor/selection position
+        document.execCommand('insertText', false, converted);
+    }, true);
+
+    // Also handle paste (clipboard may contain Arabic numerals)
+    document.addEventListener('paste', function(e) {
+        var el = e.target;
+        if (el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA') return;
+        var text = (e.clipboardData || window.clipboardData).getData('text');
+        var converted = toWestern(text);
+        if (converted === text) return;
+        e.preventDefault();
+        document.execCommand('insertText', false, converted);
+    }, true);
+})();
 </script>
 <?php if (!empty($extraScript)) echo $extraScript; ?>
 </body>
