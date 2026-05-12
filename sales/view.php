@@ -19,8 +19,8 @@ $sale = $sale->fetch();
 if (!$sale) { $_SESSION['error'] = 'Invoice not found.'; header('Location: index.php'); exit; }
 
 $items = $pdo->prepare("
-    SELECT si.*, p.name AS product_name, p.size, p.color
-    FROM sale_items si JOIN products p ON p.id = si.product_id
+    SELECT si.*, COALESCE(p.name, si.custom_name, 'Custom Item') AS product_name, p.size, p.color
+    FROM sale_items si LEFT JOIN products p ON p.id = si.product_id
     WHERE si.sale_id = ?
 ");
 $items->execute([$id]);
