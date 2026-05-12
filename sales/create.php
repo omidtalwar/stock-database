@@ -520,7 +520,7 @@ let rowCount = 0;
 
 function saleCur()  { return document.getElementById('saleCurrencySelect')?.value || 'AFN'; }
 function saleSym()  { return CURRENCIES_INV[saleCur()]?.symbol || '؋'; }
-function saleDec()  { return CURRENCIES_INV[saleCur()]?.decimals ?? 0; }
+function saleDec()  { return Math.max(2, CURRENCIES_INV[saleCur()]?.decimals ?? 2); }
 function saleRate() { return ALL_RATES_INV[saleCur()] || 1; }
 
 function fmtSale(v) {

@@ -6,6 +6,9 @@ require_once '../config/db.php';
 
 $pageTitle = __('sale_title');
 
+require_once '../includes/currency.php';
+$rates = getAllRates($pdo);
+
 // Auto-migrate columns that the queries below rely on
 foreach ([
     "ALTER TABLE sales ADD COLUMN bill_no   VARCHAR(100) NULL AFTER id",
@@ -198,29 +201,49 @@ $searchParam = $search ? '&search=' . urlencode($search) : '';
                 <tr><td colspan="8" class="text-center text-muted py-5"><?= __('sale_no_data') ?></td></tr>
                 <?php else: ?>
                 <?php foreach ($sales as $s):
-                    $sItems = $itemsBySale[$s['id']] ?? [];
-                    $nItems = count($sItems);
+                    $sItems  = $itemsBySale[$s['id']] ?? [];
+                    $nItems  = count($sItems);
+                    $cur     = $s['currency'] ?? 'AFN';
+                    $curRate = $rates[$cur] ?? 1;
                 ?>
                 <tr style="cursor:pointer;" onclick="toggleItems(<?= $s['id'] ?>)">
                     <td>
                         <div class="fw-semibold" style="font-size:0.82rem;">
                             <?= $s['bill_no'] ? htmlspecialchars($s['bill_no']) : '#'.str_pad($s['id'], 4, '0', STR_PAD_LEFT) ?>
                         </div>
-                        <?php if ($nItems > 0): ?>
-                        <div class="text-muted" style="font-size:0.7rem;">
-                            <i class="bi bi-chevron-down me-1 toggle-icon-<?= $s['id'] ?>"></i><?= $nItems ?> item<?= $nItems > 1 ? 's' : '' ?>
+                        <div class="d-flex align-items-center gap-1 mt-1 flex-wrap">
+                            <?php if ($cur !== 'AFN'): ?>
+                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size:0.62rem;"><?= $cur ?></span>
+                            <?php endif; ?>
+                            <?php if ($nItems > 0): ?>
+                            <span class="text-muted" style="font-size:0.7rem;">
+                                <i class="bi bi-chevron-down me-1 toggle-icon-<?= $s['id'] ?>"></i><?= $nItems ?> item<?= $nItems > 1 ? 's' : '' ?>
+                            </span>
+                            <?php endif; ?>
                         </div>
-                        <?php endif; ?>
                     </td>
                     <td>
                         <div class="fw-semibold small"><?= htmlspecialchars($s['customer_name']) ?></div>
                         <div class="text-muted" style="font-size:0.75rem;"><?= htmlspecialchars($s['shop_name']) ?></div>
                     </td>
-                    <td class="fw-semibold">؋ <?= number_format($s['total_amount'], 0) ?></td>
-                    <td class="text-success d-none d-sm-table-cell">؋ <?= number_format($s['paid_amount'], 0) ?></td>
+                    <td class="fw-semibold">
+                        ؋ <?= number_format($s['total_amount'], 0) ?>
+                        <?php if ($cur !== 'AFN'): ?>
+                        <div class="text-muted" style="font-size:0.72rem;">≈ <?= formatMoney(fromAFN($s['total_amount'], $curRate), $cur) ?></div>
+                        <?php endif; ?>
+                    </td>
+                    <td class="text-success d-none d-sm-table-cell">
+                        ؋ <?= number_format($s['paid_amount'], 0) ?>
+                        <?php if ($cur !== 'AFN' && $s['paid_amount'] > 0): ?>
+                        <div class="text-muted" style="font-size:0.72rem;">≈ <?= formatMoney(fromAFN($s['paid_amount'], $curRate), $cur) ?></div>
+                        <?php endif; ?>
+                    </td>
                     <td>
                         <?php if ($s['balance'] > 0): ?>
-                            <span class="fw-bold text-danger">؋ <?= number_format($s['balance'], 0) ?></span>
+                            <div class="fw-bold text-danger">؋ <?= number_format($s['balance'], 0) ?></div>
+                            <?php if ($cur !== 'AFN'): ?>
+                            <div class="text-muted" style="font-size:0.72rem;">≈ <?= formatMoney(fromAFN($s['balance'], $curRate), $cur) ?></div>
+                            <?php endif; ?>
                         <?php else: ?>
                             <span class="badge bg-success-subtle text-success border border-success-subtle"><?= __('sale_fully_paid') ?></span>
                         <?php endif; ?>
@@ -261,8 +284,22 @@ $searchParam = $search ? '&search=' . urlencode($search) : '';
                                     <?php endif; ?>
                                 </td>
                                 <td class="border-0 py-1 text-end text-muted"><?= number_format($it['quantity']) ?> pcs</td>
-                                <td class="border-0 py-1 text-end text-muted">؋ <?= number_format($it['unit_price'], 0) ?></td>
-                                <td class="border-0 py-1 text-end fw-semibold">؋ <?= number_format($it['subtotal'], 0) ?></td>
+                                <td class="border-0 py-1 text-end text-muted">
+                                    <?php if ($cur !== 'AFN'): ?>
+                                        <?= formatMoney(fromAFN((float)$it['unit_price'], $curRate), $cur) ?>
+                                        <div style="font-size:0.68rem;color:#aaa;">؋ <?= number_format($it['unit_price'], 0) ?></div>
+                                    <?php else: ?>
+                                        ؋ <?= number_format($it['unit_price'], 2) ?>
+                                    <?php endif; ?>
+                                </td>
+                                <td class="border-0 py-1 text-end fw-semibold">
+                                    <?php if ($cur !== 'AFN'): ?>
+                                        <?= formatMoney(fromAFN((float)$it['subtotal'], $curRate), $cur) ?>
+                                        <div style="font-size:0.68rem;color:#aaa;">؋ <?= number_format($it['subtotal'], 0) ?></div>
+                                    <?php else: ?>
+                                        ؋ <?= number_format($it['subtotal'], 2) ?>
+                                    <?php endif; ?>
+                                </td>
                             </tr>
                             <?php endforeach; ?>
                             </tbody>

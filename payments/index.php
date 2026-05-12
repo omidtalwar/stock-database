@@ -39,13 +39,16 @@ $totalPages = max(1, (int)ceil($totalRows / $perPage));
 $page       = min($page, $totalPages);
 $offset     = ($page - 1) * $perPage;
 
+// Auto-migrate payment_date if not yet present
+try { $pdo->exec("ALTER TABLE payments ADD COLUMN payment_date DATE NULL AFTER notes"); } catch (\PDOException $e) {}
+
 $payments = $pdo->query("
     SELECT p.*, c.name AS customer_name, c.shop_name, u.full_name AS created_by
     FROM payments p
     JOIN customers c ON c.id = p.customer_id
     JOIN users u ON u.id = p.created_by
     WHERE 1=1 $periodWhere
-    ORDER BY p.created_at DESC
+    ORDER BY COALESCE(p.payment_date, DATE(p.created_at)) DESC, p.created_at DESC
     LIMIT $perPage OFFSET $offset
 ")->fetchAll();
 
@@ -55,6 +58,29 @@ foreach ($payments as &$p) {
     }
 }
 unset($p);
+
+function toShamsi(int $gy, int $gm, int $gd): array {
+    $g_d_m = [0,31,59,90,120,151,181,212,243,273,304,334];
+    if ($gy > 1600) { $jy = 979; $gy -= 1600; } else { $jy = 0; $gy -= 621; }
+    $gy2  = $gm > 2 ? $gy + 1 : $gy;
+    $days = 365*$gy + intdiv($gy2+3,4) - intdiv($gy2+99,100) + intdiv($gy2+399,400)
+            - 80 + $gd + $g_d_m[$gm - 1];
+    $jy  += 33 * intdiv($days, 12053); $days %= 12053;
+    $jy  +=  4 * intdiv($days,  1461); $days %= 1461;
+    if ($days > 365) { $jy += intdiv($days-1, 365); $days = ($days-1) % 365; }
+    $jm = $days < 186 ? 1 + intdiv($days, 31) : 7 + intdiv($days - 186, 30);
+    $jd = 1 + ($days < 186 ? $days % 31 : ($days - 186) % 30);
+    return ['y' => $jy, 'm' => $jm, 'd' => $jd];
+}
+
+function fmtPayDate(array $p): string {
+    $d = $p['payment_date'] ?? null;
+    $ts = $d ? strtotime($d) : strtotime($p['created_at']);
+    $greg = date('d M Y', $ts);
+    $s = toShamsi((int)date('Y', $ts), (int)date('n', $ts), (int)date('j', $ts));
+    $shamsi = $s['y'] . '/' . str_pad($s['m'], 2, '0', STR_PAD_LEFT) . '/' . str_pad($s['d'], 2, '0', STR_PAD_LEFT);
+    return '<div>' . $greg . '</div><div class="text-muted" style="font-size:0.7rem;">' . $shamsi . '</div>';
+}
 
 require_once '../includes/header.php';
 ?>
@@ -146,11 +172,12 @@ $payPeriodLabels = [
                     <th class="d-none d-lg-table-cell"><?= __('field_notes') ?></th>
                     <th class="d-none d-md-table-cell"><?= __('field_by') ?></th>
                     <th class="d-none d-md-table-cell"><?= __('field_date') ?></th>
+                    <?php if (isAdmin()): ?><th></th><?php endif; ?>
                 </tr>
             </thead>
             <tbody>
                 <?php if (empty($payments)): ?>
-                <tr><td colspan="8" class="text-center text-muted py-5"><?= __('pay_no_data') ?></td></tr>
+                <tr><td colspan="<?= isAdmin() ? 9 : 8 ?>" class="text-center text-muted py-5"><?= __('pay_no_data') ?></td></tr>
                 <?php else: ?>
                 <?php foreach ($payments as $i => $p):
                     $amtAfn = (float)$p['amount_afn'] ?: (float)$p['amount'];
@@ -171,7 +198,7 @@ $payPeriodLabels = [
                                 </span>
                             </span>
                         </div>
-                        <div class="d-sm-none small text-muted"><?= date('d M Y', strtotime($p['created_at'])) ?></div>
+                        <div class="d-sm-none small text-muted"><?= fmtPayDate($p) ?></div>
                     </td>
                     <td class="fw-bold text-success"><?= formatMoney((float)$p['amount'], $cur) ?></td>
                     <td class="d-none d-sm-table-cell">
@@ -185,7 +212,17 @@ $payPeriodLabels = [
                     <td class="fw-semibold d-none d-sm-table-cell"><?= formatAFN($amtAfn) ?></td>
                     <td class="text-muted small d-none d-lg-table-cell"><?= htmlspecialchars($p['notes'] ?: '—') ?></td>
                     <td class="text-muted small d-none d-md-table-cell"><?= htmlspecialchars($p['created_by']) ?></td>
-                    <td class="text-muted small d-none d-md-table-cell"><?= date('d M Y', strtotime($p['created_at'])) ?></td>
+                    <td class="text-muted small d-none d-md-table-cell"><?= fmtPayDate($p) ?></td>
+                    <?php if (isAdmin()): ?>
+                    <td>
+                        <a href="delete.php?id=<?= $p['id'] ?>"
+                           class="btn btn-sm btn-outline-danger"
+                           onclick="return confirm('<?= htmlspecialchars(addslashes(__('confirm_delete'))) ?>')"
+                           title="<?= __('btn_delete') ?>">
+                            <i class="bi bi-trash"></i>
+                        </a>
+                    </td>
+                    <?php endif; ?>
                 </tr>
                 <?php endforeach; ?>
                 <?php endif; ?>

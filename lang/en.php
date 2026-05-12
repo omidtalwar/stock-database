@@ -199,6 +199,7 @@ return [
     'pay_rate_label'     => 'Current rate',
     'pay_notes_hint'     => 'e.g. Cash, Bank transfer, Hawala...',
     'pay_cash'           => 'Ask admin to update if needed',
+    'pay_deleted'        => 'Payment deleted and debt restored.',
 
     // ── Stock ──
     'stock_title'        => 'Stock Log',
