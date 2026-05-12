@@ -245,6 +245,8 @@ return [
     'admin_toggle'       => 'Toggle Status',
     'admin_del_self'     => 'Cannot deactivate yourself.',
     'admin_del_confirm'  => 'Delete user %s?',
+    'admin_user_deleted' => 'User deleted successfully.',
+    'admin_del_has_records' => 'Cannot delete: this user has sales, payments, or stock records. Deactivate them instead.',
     'admin_perms_admin'  => 'Admin Permissions',
     'admin_perms_asst'   => 'Assistant Permissions',
     'admin_perm_full'    => 'Full access to all modules',

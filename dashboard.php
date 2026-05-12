@@ -22,9 +22,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['_action'] ?? '') === 'pin_
 
 $settings   = getSettings($pdo);
 $pinEnabled = !empty(trim($settings['dashboard_pin'] ?? ''));
-$rate      = (float)($settings['exchange_rate']      ?? 90);
-$secCur    = $settings['secondary_currency'] ?? 'USD';
-$secSymbol = currencySymbol($secCur);
+$rates   = getAllRates($pdo);
+$rateUSD = $rates['USD'];
+$ratePKR = $rates['PKR'];
 
 // ── Period filter ──
 $period = in_array($_GET['period'] ?? '', ['today','week','month','all'])
@@ -65,7 +65,7 @@ if (isAdmin()) {
     $adminStats = [
         'total_sales' => (float)$pdo->query("SELECT COALESCE(SUM(total_amount),0) FROM sales s WHERE $pwSales")->fetchColumn(),
         'collected'   => (float)$pdo->query("SELECT COALESCE(SUM(paid_amount),0) FROM sales s WHERE $pwSales")->fetchColumn(),
-        'payments'    => (float)$pdo->query("SELECT COALESCE(SUM(GREATEST(amount_afn,amount)),0) FROM payments p WHERE $pwPay")->fetchColumn(),
+        'payments'    => (float)$pdo->query("SELECT COALESCE(SUM(COALESCE(NULLIF(amount_afn,0),amount)),0) FROM payments p WHERE $pwPay")->fetchColumn(),
     ];
 }
 
@@ -633,7 +633,7 @@ body.pin-locked .debtor-debt .s { filter: blur(7px); user-select: none; pointer-
             <div class="rate-chip">
                 <i class="bi bi-currency-exchange" style="color:var(--w11-blue);font-size:1.1rem;"></i>
                 <div>
-                    <div class="lbl">1 <?= htmlspecialchars($secCur) ?> = <?= number_format($rate, 2) ?> ؋</div>
+                    <div class="lbl">$ 1 = <?= number_format($rateUSD, 0) ?> ؋ &nbsp;·&nbsp; ₨ 100 = <?= number_format($ratePKR * 100, 0) ?> ؋</div>
                     <div class="sub"><?= __('dash_rate_label') ?></div>
                 </div>
                 <?php if (isAdmin()): ?>
@@ -667,7 +667,7 @@ body.pin-locked .debtor-debt .s { filter: blur(7px); user-select: none; pointer-
                     <div class="stat-icon ic-red"><i class="bi bi-receipt"></i></div>
                 </div>
                 <div class="stat-value"><?= formatAFN($periodSales) ?></div>
-                <div class="stat-sec">≈ <?= formatMoney(fromAFN($periodSales, $rate), $secCur) ?></div>
+                <div class="stat-sec">≈ <?= formatMoney(fromAFN($periodSales, $rateUSD), 'USD') ?> · <?= formatMoney(fromAFN($periodSales, $ratePKR), 'PKR') ?></div>
                 <div class="stat-foot"><?= $periodCount ?> <?= __('rep_invoices') ?></div>
             </div>
 
@@ -677,7 +677,7 @@ body.pin-locked .debtor-debt .s { filter: blur(7px); user-select: none; pointer-
                     <div class="stat-icon ic-amber"><i class="bi bi-cash-coin"></i></div>
                 </div>
                 <div class="stat-value" style="color:var(--w11-red)"><?= formatAFN($totalDebt) ?></div>
-                <div class="stat-sec">≈ <?= formatMoney(fromAFN($totalDebt, $rate), $secCur) ?></div>
+                <div class="stat-sec">≈ <?= formatMoney(fromAFN($totalDebt, $rateUSD), 'USD') ?> · <?= formatMoney(fromAFN($totalDebt, $ratePKR), 'PKR') ?></div>
                 <div class="stat-foot"><?= __('dash_outstanding') ?></div>
             </div>
 
@@ -708,22 +708,22 @@ body.pin-locked .debtor-debt .s { filter: blur(7px); user-select: none; pointer-
             <div class="admin-bar-item">
                 <div class="lbl"><?= __('period_showing') ?>: <?= strip_tags($periodLabels[$period]) ?> — <?= __('rep_total_sales') ?></div>
                 <div class="val"><?= formatAFN($adminStats['total_sales']) ?></div>
-                <div class="sec">≈ <?= formatMoney(fromAFN($adminStats['total_sales'], $rate), $secCur) ?></div>
+                <div class="sec">≈ <?= formatMoney(fromAFN($adminStats['total_sales'], $rateUSD), 'USD') ?> · <?= formatMoney(fromAFN($adminStats['total_sales'], $ratePKR), 'PKR') ?></div>
             </div>
             <div class="admin-bar-item">
                 <div class="lbl"><?= __('dash_collected') ?></div>
                 <div class="val" style="color:var(--w11-green)"><?= formatAFN($adminStats['collected']) ?></div>
-                <div class="sec">≈ <?= formatMoney(fromAFN($adminStats['collected'], $rate), $secCur) ?></div>
+                <div class="sec">≈ <?= formatMoney(fromAFN($adminStats['collected'], $rateUSD), 'USD') ?> · <?= formatMoney(fromAFN($adminStats['collected'], $ratePKR), 'PKR') ?></div>
             </div>
             <div class="admin-bar-item">
                 <div class="lbl"><?= __('dash_payments_rcvd') ?></div>
                 <div class="val" style="color:var(--w11-green)"><?= formatAFN($adminStats['payments']) ?></div>
-                <div class="sec">≈ <?= formatMoney(fromAFN($adminStats['payments'], $rate), $secCur) ?></div>
+                <div class="sec">≈ <?= formatMoney(fromAFN($adminStats['payments'], $rateUSD), 'USD') ?> · <?= formatMoney(fromAFN($adminStats['payments'], $ratePKR), 'PKR') ?></div>
             </div>
             <div class="admin-bar-item">
                 <div class="lbl"><?= __('dash_still_owed') ?></div>
                 <div class="val" style="color:var(--w11-red)"><?= formatAFN($totalDebt) ?></div>
-                <div class="sec">≈ <?= formatMoney(fromAFN($totalDebt, $rate), $secCur) ?></div>
+                <div class="sec">≈ <?= formatMoney(fromAFN($totalDebt, $rateUSD), 'USD') ?> · <?= formatMoney(fromAFN($totalDebt, $ratePKR), 'PKR') ?></div>
             </div>
         </div>
         <?php endif; ?>
@@ -764,7 +764,7 @@ body.pin-locked .debtor-debt .s { filter: blur(7px); user-select: none; pointer-
                                 </td>
                                 <td>
                                     <div class="amt-main"><?= formatAFN($s['total_amount']) ?></div>
-                                    <div class="amt-sec">≈ <?= formatMoney(fromAFN($s['total_amount'], $rate), $secCur) ?></div>
+                                    <div class="amt-sec">≈ <?= formatMoney(fromAFN($s['total_amount'], $rateUSD), 'USD') ?> · <?= formatMoney(fromAFN($s['total_amount'], $ratePKR), 'PKR') ?></div>
                                 </td>
                                 <td>
                                     <?php if ($s['balance'] > 0): ?>
@@ -804,7 +804,8 @@ body.pin-locked .debtor-debt .s { filter: blur(7px); user-select: none; pointer-
                         </div>
                         <div class="debtor-debt">
                             <div class="v"><?= formatAFN($d['total_debt']) ?></div>
-                            <div class="s">≈ <?= formatMoney(fromAFN($d['total_debt'], $rate), $secCur) ?></div>
+                            <div class="s">≈ <?= formatMoney(fromAFN($d['total_debt'], $rateUSD), 'USD') ?></div>
+                            <div class="s">≈ <?= formatMoney(fromAFN($d['total_debt'], $ratePKR), 'PKR') ?></div>
                         </div>
                     </div>
                     <?php endforeach; ?>

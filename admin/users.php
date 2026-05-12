@@ -55,10 +55,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'delete') {
         $uid = (int)($_POST['user_id'] ?? 0);
-        if ($uid === $_SESSION['user_id']) { $_SESSION['error'] = __('admin_del_self'); }
-        else {
-            $pdo->prepare("DELETE FROM users WHERE id = ?")->execute([$uid]);
-            $_SESSION['success'] = __('btn_delete');
+        if ($uid === $_SESSION['user_id']) {
+            $_SESSION['error'] = __('admin_del_self');
+        } else {
+            try {
+                $pdo->prepare("DELETE FROM users WHERE id = ?")->execute([$uid]);
+                $_SESSION['success'] = __('admin_user_deleted');
+            } catch (\PDOException $e) {
+                // FK constraint: user has sales/payments/stock records
+                $_SESSION['error'] = __('admin_del_has_records');
+            }
         }
     }
 

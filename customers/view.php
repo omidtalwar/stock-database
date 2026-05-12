@@ -13,9 +13,9 @@ if (!$customer) { $_SESSION['error'] = 'Customer not found.'; header('Location: 
 
 $pageTitle = htmlspecialchars($customer['name']);
 
-$settings = getSettings($pdo);
-$rate     = (float)($settings['exchange_rate'] ?? 90);
-$secCur   = $settings['secondary_currency'] ?? 'USD';
+$rates   = getAllRates($pdo);
+$rateUSD = $rates['USD'];
+$ratePKR = $rates['PKR'];
 
 $sales = $pdo->prepare("
     SELECT s.*, u.full_name AS created_by
@@ -63,7 +63,8 @@ require_once '../includes/header.php';
             <div class="card-body py-3">
                 <div class="text-muted small mb-1"><?= __('cust_total_sales') ?></div>
                 <div class="fw-bold"><?= formatAFN($totalSales) ?></div>
-                <div class="text-muted small">≈ <?= formatMoney(fromAFN($totalSales, $rate), $secCur) ?></div>
+                <div class="text-muted small">≈ <?= formatMoney(fromAFN($totalSales, $rateUSD), 'USD') ?></div>
+                <div class="text-muted small">≈ <?= formatMoney(fromAFN($totalSales, $ratePKR), 'PKR') ?></div>
             </div>
         </div>
     </div>
@@ -72,7 +73,8 @@ require_once '../includes/header.php';
             <div class="card-body py-3">
                 <div class="text-muted small mb-1"><?= __('cust_total_paid') ?></div>
                 <div class="fw-bold text-success"><?= formatAFN($totalPayments) ?></div>
-                <div class="text-muted small">≈ <?= formatMoney(fromAFN($totalPayments, $rate), $secCur) ?></div>
+                <div class="text-muted small">≈ <?= formatMoney(fromAFN($totalPayments, $rateUSD), 'USD') ?></div>
+                <div class="text-muted small">≈ <?= formatMoney(fromAFN($totalPayments, $ratePKR), 'PKR') ?></div>
             </div>
         </div>
     </div>
@@ -83,7 +85,8 @@ require_once '../includes/header.php';
                 <div class="fw-bold <?= $customer['total_debt'] > 0 ? 'text-danger' : 'text-success' ?>">
                     <?= formatAFN($customer['total_debt']) ?>
                 </div>
-                <div class="text-muted small">≈ <?= formatMoney(fromAFN($customer['total_debt'], $rate), $secCur) ?></div>
+                <div class="text-muted small">≈ <?= formatMoney(fromAFN($customer['total_debt'], $rateUSD), 'USD') ?></div>
+                <div class="text-muted small">≈ <?= formatMoney(fromAFN($customer['total_debt'], $ratePKR), 'PKR') ?></div>
             </div>
         </div>
     </div>
@@ -124,7 +127,7 @@ require_once '../includes/header.php';
                             <td><span class="badge bg-light text-dark">#<?= str_pad($s['id'], 4, '0', STR_PAD_LEFT) ?></span></td>
                             <td>
                                 <div><?= formatAFN($s['total_amount']) ?></div>
-                                <div class="text-muted" style="font-size:0.72rem;">≈ <?= formatMoney(fromAFN($s['total_amount'], $rate), $secCur) ?></div>
+                                <div class="text-muted" style="font-size:0.72rem;">≈ <?= formatMoney(fromAFN($s['total_amount'], $rateUSD), 'USD') ?> · <?= formatMoney(fromAFN($s['total_amount'], $ratePKR), 'PKR') ?></div>
                             </td>
                             <td>
                                 <?php if ($s['balance'] > 0): ?>

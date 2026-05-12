@@ -3,6 +3,11 @@ require_once '../includes/session.php';
 requireLogin();
 require_once '../includes/lang.php';
 require_once '../config/db.php';
+require_once '../includes/currency.php';
+
+$rates   = getAllRates($pdo);
+$rateUSD = $rates['USD'];
+$ratePKR = $rates['PKR'];
 
 $pageTitle = __('cust_title');
 
@@ -99,7 +104,8 @@ require_once '../includes/header.php';
                     <td class="d-none d-sm-table-cell"><span class="badge bg-light text-dark"><?= $c['sale_count'] ?></span></td>
                     <td>
                         <?php if ($c['total_debt'] > 0): ?>
-                            <span class="fw-bold text-danger">؋ <?= number_format($c['total_debt'], 0) ?></span>
+                            <div class="fw-bold text-danger">؋ <?= number_format($c['total_debt'], 0) ?></div>
+                            <div class="text-muted" style="font-size:0.72rem;">≈ <?= formatMoney(fromAFN($c['total_debt'], $rateUSD), 'USD') ?> · <?= formatMoney(fromAFN($c['total_debt'], $ratePKR), 'PKR') ?></div>
                         <?php else: ?>
                             <span class="text-success fw-semibold"><?= __('cust_cleared') ?></span>
                         <?php endif; ?>

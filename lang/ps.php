@@ -245,6 +245,8 @@ return [
     'admin_toggle'       => 'حالت بدلول',
     'admin_del_self'     => 'تاسو نشئ کولای خپل ځان غیر فعال کړئ.',
     'admin_del_confirm'  => 'کاربر %s ړنګ کول؟',
+    'admin_user_deleted' => 'کاربر په بریالیتوب سره ړنګ شو.',
+    'admin_del_has_records' => 'ړنګول ممکن نه دي: دا کاربر د پلور، تادیاتو یا سټاک ثبتونه لري. پرځای یې غیرفعال کړئ.',
     'admin_perms_admin'  => 'د ادمین اجازې',
     'admin_perms_asst'   => 'د مرستیال اجازې',
     'admin_perm_full'    => 'ټولو برخو ته بشپړ لاسرسی',

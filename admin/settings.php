@@ -11,6 +11,10 @@ $pageTitle = __('set_title');
 try { $pdo->exec("ALTER TABLE users ADD COLUMN email VARCHAR(150) NULL AFTER full_name"); } catch (\Throwable $e) {}
 // Fix users created without a status (NULL) — activate them so they can log in
 try { $pdo->exec("UPDATE users SET status = 'active' WHERE status IS NULL"); } catch (\Throwable $e) {}
+// Add PKR to payments currency ENUM
+try { $pdo->exec("ALTER TABLE payments MODIFY COLUMN currency ENUM('AFN','USD','PKR') NOT NULL DEFAULT 'AFN'"); } catch (\Throwable $e) {}
+// Ensure per-currency rate keys exist
+try { $pdo->exec("INSERT IGNORE INTO settings (`key`,`value`) VALUES ('rate_usd','90.00'),('rate_pkr','0.25')"); } catch (\Throwable $e) {}
 
 $settings = getSettings($pdo);
 $secCur   = $settings['secondary_currency'] ?? 'USD';
