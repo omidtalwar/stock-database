@@ -457,9 +457,13 @@ require_once '../includes/header.php';
                     <span class="text-muted small"><?= __('sale_paid_afn') ?></span>
                     <span class="text-success small fw-semibold" id="paidAfnDisplay">؋ 0</span>
                 </div>
-                <div class="d-flex justify-content-between mb-3">
+                <div class="d-flex justify-content-between mb-1">
                     <span class="fw-semibold"><?= __('sale_remaining') ?></span>
                     <span class="fw-bold text-danger" id="summaryBalance">؋ 0</span>
+                </div>
+                <div class="d-flex justify-content-between mb-3 text-muted small">
+                    <span>≈ ₨ PKR</span>
+                    <span id="summaryBalancePKR">—</span>
                 </div>
                 <div class="mb-3">
                     <label class="form-label fw-semibold"><?= __('field_notes') ?></label>
@@ -662,11 +666,14 @@ function updateSummary() {
     const ratePKR = ALL_RATES_INV['PKR'] || 0.25;
     const totalPKR = ratePKR > 0 ? totalAfn / ratePKR : 0;
 
-    document.getElementById('summaryTotal').textContent    = fmtSale(totalSale);
-    document.getElementById('summaryTotalSec').textContent = fmtAFN_inv(totalAfn) + ' AFN';
-    document.getElementById('summaryTotalPKR').textContent = '₨ ' + Math.round(totalPKR).toLocaleString('en-US');
-    document.getElementById('paidAfnDisplay').textContent  = fmtAFN_inv(paidAfn);
-    document.getElementById('summaryBalance').textContent  = fmtAFN_inv(balance);
+    const balancePKR = ratePKR > 0 ? balance / ratePKR : 0;
+
+    document.getElementById('summaryTotal').textContent      = fmtSale(totalSale);
+    document.getElementById('summaryTotalSec').textContent   = fmtAFN_inv(totalAfn) + ' AFN';
+    document.getElementById('summaryTotalPKR').textContent   = '₨ ' + Math.round(totalPKR).toLocaleString('en-US');
+    document.getElementById('paidAfnDisplay').textContent    = fmtAFN_inv(paidAfn);
+    document.getElementById('summaryBalance').textContent    = fmtAFN_inv(balance);
+    document.getElementById('summaryBalancePKR').textContent = '₨ ' + Math.round(balancePKR).toLocaleString('en-US');
 
     const hint = document.getElementById('paidConvert');
     if (paidCur !== 'AFN' && paidInput > 0) {
