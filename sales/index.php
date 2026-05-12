@@ -227,22 +227,30 @@ $searchParam = $search ? '&search=' . urlencode($search) : '';
                         <div class="text-muted" style="font-size:0.75rem;"><?= htmlspecialchars($s['shop_name']) ?></div>
                     </td>
                     <td class="fw-semibold">
-                        ؋ <?= number_format($s['total_amount'], 0) ?>
                         <?php if ($cur !== 'AFN'): ?>
-                        <div class="text-muted" style="font-size:0.72rem;">≈ <?= formatMoney(fromAFN($s['total_amount'], $curRate), $cur) ?></div>
+                            <?= formatMoney(fromAFN($s['total_amount'], $curRate), $cur) ?>
+                            <div class="text-muted" style="font-size:0.72rem;">≈ ؋ <?= number_format($s['total_amount'], 0) ?></div>
+                        <?php else: ?>
+                            ؋ <?= number_format($s['total_amount'], 0) ?>
                         <?php endif; ?>
                     </td>
                     <td class="text-success d-none d-sm-table-cell">
-                        ؋ <?= number_format($s['paid_amount'], 0) ?>
-                        <?php if ($cur !== 'AFN' && $s['paid_amount'] > 0): ?>
-                        <div class="text-muted" style="font-size:0.72rem;">≈ <?= formatMoney(fromAFN($s['paid_amount'], $curRate), $cur) ?></div>
+                        <?php if ($cur !== 'AFN'): ?>
+                            <?= $s['paid_amount'] > 0 ? formatMoney(fromAFN($s['paid_amount'], $curRate), $cur) : formatMoney(0, $cur) ?>
+                            <?php if ($s['paid_amount'] > 0): ?>
+                            <div class="text-muted" style="font-size:0.72rem;">≈ ؋ <?= number_format($s['paid_amount'], 0) ?></div>
+                            <?php endif; ?>
+                        <?php else: ?>
+                            ؋ <?= number_format($s['paid_amount'], 0) ?>
                         <?php endif; ?>
                     </td>
                     <td>
                         <?php if ($s['balance'] > 0): ?>
-                            <div class="fw-bold text-danger">؋ <?= number_format($s['balance'], 0) ?></div>
                             <?php if ($cur !== 'AFN'): ?>
-                            <div class="text-muted" style="font-size:0.72rem;">≈ <?= formatMoney(fromAFN($s['balance'], $curRate), $cur) ?></div>
+                                <div class="fw-bold text-danger"><?= formatMoney(fromAFN($s['balance'], $curRate), $cur) ?></div>
+                                <div class="text-muted" style="font-size:0.72rem;">≈ ؋ <?= number_format($s['balance'], 0) ?></div>
+                            <?php else: ?>
+                                <span class="fw-bold text-danger">؋ <?= number_format($s['balance'], 0) ?></span>
                             <?php endif; ?>
                         <?php else: ?>
                             <span class="badge bg-success-subtle text-success border border-success-subtle"><?= __('sale_fully_paid') ?></span>

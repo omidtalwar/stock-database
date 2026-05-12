@@ -570,7 +570,7 @@ function addRow() {
         <td>
             <input type="number" name="items[${idx}][quantity]"
                    class="form-control form-control-sm qty-input"
-                   value="1" min="1" oninput="updateRow(${idx})" required>
+                   value="1" min="0.001" step="any" oninput="updateRow(${idx})" required>
         </td>
         <td>
             <div class="input-group input-group-sm">
@@ -624,12 +624,12 @@ function matchProduct(idx, input) {
 function updateRow(idx) {
     const row  = document.getElementById(`row_${idx}`);
     const price = parseFloat(row.querySelector('.price-input').value) || 0;
-    const qty   = parseInt(row.querySelector('.qty-input').value)     || 0;
+    const qty   = parseFloat(row.querySelector('.qty-input').value)   || 0;
     const pid   = row.querySelector('.prod-id-hidden').value;
     const prod  = pid ? PRODUCTS.find(p => p.id == pid) : null;
 
     if (prod && qty > prod.stock) row.querySelector('.qty-input').value = prod.stock;
-    const finalQty = parseInt(row.querySelector('.qty-input').value) || 0;
+    const finalQty = parseFloat(row.querySelector('.qty-input').value) || 0;
     const sub = price * finalQty;
     // Store AFN subtotal in data attr for summary calc
     row.dataset.subAfn = (sub * saleRate()).toFixed(2);
