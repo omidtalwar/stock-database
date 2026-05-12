@@ -447,7 +447,7 @@ require_once '../includes/header.php';
                             <?php endforeach; ?>
                         </select>
                         <input type="number" name="paid_amount" id="paidAmount" class="form-control"
-                               min="0" step="0.01"
+                               min="0" step="any"
                                value="<?= htmlspecialchars($_POST['paid_amount'] ?? '0') ?>"
                                oninput="updateSummary()">
                     </div>
@@ -577,7 +577,7 @@ function addRow() {
                 <span class="input-group-text sale-cur-sym" style="font-size:.8rem;">${sym}</span>
                 <input type="number" name="items[${idx}][unit_price]"
                        class="form-control form-control-sm price-input"
-                       value="" min="0" step="0.01"
+                       value="" min="0" step="any"
                        oninput="updateRow(${idx})" placeholder="0">
             </div>
         </td>

@@ -134,7 +134,7 @@ require_once '../includes/header.php';
                                 <?php endforeach; ?>
                             </select>
                             <input type="number" name="amount" id="amountInput" class="form-control"
-                                   step="0.01" min="0.01"
+                                   step="any" min="0.01"
                                    value="<?= htmlspecialchars($_POST['amount'] ?? '') ?>"
                                    placeholder="0.00" required oninput="updateConvert()">
                         </div>
