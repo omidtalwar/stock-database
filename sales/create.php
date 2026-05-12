@@ -426,9 +426,13 @@ require_once '../includes/header.php';
                     <span class="text-muted"><?= __('sale_subtotal') ?></span>
                     <span class="fw-semibold" id="summaryTotal">؋ 0</span>
                 </div>
-                <div class="d-flex justify-content-between mb-3 text-muted small">
-                    <span>≈ ؋ AFN equivalent</span>
+                <div class="d-flex justify-content-between mb-1 text-muted small">
+                    <span>≈ ؋ AFN</span>
                     <span id="summaryTotalSec">—</span>
+                </div>
+                <div class="d-flex justify-content-between mb-3 text-muted small">
+                    <span>≈ ₨ PKR</span>
+                    <span id="summaryTotalPKR">—</span>
                 </div>
                 <hr>
                 <div class="mb-2">
@@ -471,7 +475,9 @@ require_once '../includes/header.php';
         <div class="card mt-2">
             <div class="card-body py-2 small text-muted">
                 <i class="bi bi-currency-exchange me-1"></i>
-                <?= __('dash_rate_label') ?>: <strong>1 <?= htmlspecialchars($secCur) ?> = <?= number_format($rate, 2) ?> ؋</strong>
+                <strong>$ 1 = <?= number_format($allRates['USD'], 0) ?> ؋</strong>
+                &nbsp;·&nbsp;
+                <strong>₨ 100 = <?= number_format($allRates['PKR'] * 100, 0) ?> ؋</strong>
                 <?php if (isAdmin()): ?>&nbsp;<a href="/admin/settings.php"><?= __('btn_update') ?></a><?php endif; ?>
             </div>
         </div>
@@ -653,8 +659,12 @@ function updateSummary() {
     // Summary in sale currency
     const r = saleRate();
     const totalSale = r > 0 ? totalAfn / r : totalAfn;
+    const ratePKR = ALL_RATES_INV['PKR'] || 0.25;
+    const totalPKR = ratePKR > 0 ? totalAfn / ratePKR : 0;
+
     document.getElementById('summaryTotal').textContent    = fmtSale(totalSale);
     document.getElementById('summaryTotalSec').textContent = fmtAFN_inv(totalAfn) + ' AFN';
+    document.getElementById('summaryTotalPKR').textContent = '₨ ' + Math.round(totalPKR).toLocaleString('en-US');
     document.getElementById('paidAfnDisplay').textContent  = fmtAFN_inv(paidAfn);
     document.getElementById('summaryBalance').textContent  = fmtAFN_inv(balance);
 
