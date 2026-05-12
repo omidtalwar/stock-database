@@ -26,9 +26,9 @@ $items = $pdo->prepare("
 $items->execute([$id]);
 $items = $items->fetchAll();
 
-$settings = getSettings($pdo);
-$rate     = (float)($settings['exchange_rate'] ?? 90);
-$secCur   = $settings['secondary_currency'] ?? 'USD';
+$allRates    = getAllRates($pdo);
+$saleCur     = $sale['currency'] ?? 'AFN';
+$saleCurRate = $allRates[$saleCur] ?? 1.0;
 
 $pageTitle = '#' . str_pad($id, 4, '0', STR_PAD_LEFT);
 
@@ -146,19 +146,36 @@ require_once '../includes/header.php';
                             <td><?= htmlspecialchars($item['size'] ?: '—') ?></td>
                             <td><?= htmlspecialchars($item['color'] ?: '—') ?></td>
                             <td class="text-end"><?= $item['quantity'] ?></td>
-                            <td class="text-end"><?= formatAFN($item['unit_price']) ?></td>
-                            <td class="text-end fw-semibold"><?= formatAFN($item['subtotal']) ?></td>
+                            <td class="text-end">
+                                <?php if ($saleCur !== 'AFN'): ?>
+                                    <?= formatMoney(fromAFN((float)$item['unit_price'], $saleCurRate), $saleCur) ?>
+                                    <div class="text-muted" style="font-size:0.72rem;">≈ <?= formatAFN($item['unit_price']) ?></div>
+                                <?php else: ?>
+                                    <?= formatAFN($item['unit_price']) ?>
+                                <?php endif; ?>
+                            </td>
+                            <td class="text-end fw-semibold">
+                                <?php if ($saleCur !== 'AFN'): ?>
+                                    <?= formatMoney(fromAFN((float)$item['subtotal'], $saleCurRate), $saleCur) ?>
+                                    <div class="text-muted" style="font-size:0.72rem;">≈ <?= formatAFN($item['subtotal']) ?></div>
+                                <?php else: ?>
+                                    <?= formatAFN($item['subtotal']) ?>
+                                <?php endif; ?>
+                            </td>
                         </tr>
                         <?php endforeach; ?>
                     </tbody>
                     <tfoot>
                         <tr class="table-light">
                             <td colspan="6" class="text-end fw-bold"><?= __('field_total') ?></td>
-                            <td class="text-end fw-bold fs-5"><?= formatAFN($sale['total_amount']) ?></td>
-                        </tr>
-                        <tr class="text-muted">
-                            <td colspan="6" class="text-end small">≈ <?= htmlspecialchars($secCur) ?></td>
-                            <td class="text-end small"><?= formatMoney(fromAFN($sale['total_amount'], $rate), $secCur) ?></td>
+                            <td class="text-end fw-bold fs-5">
+                                <?php if ($saleCur !== 'AFN'): ?>
+                                    <?= formatMoney(fromAFN($sale['total_amount'], $saleCurRate), $saleCur) ?>
+                                    <div class="fw-normal text-muted" style="font-size:0.75rem;">≈ <?= formatAFN($sale['total_amount']) ?></div>
+                                <?php else: ?>
+                                    <?= formatAFN($sale['total_amount']) ?>
+                                <?php endif; ?>
+                            </td>
                         </tr>
                     </tfoot>
                 </table>
@@ -173,26 +190,40 @@ require_once '../includes/header.php';
                 <div class="d-flex justify-content-between mb-2">
                     <span class="text-muted"><?= __('field_total') ?></span>
                     <div class="text-end">
-                        <div class="fw-semibold"><?= formatAFN($sale['total_amount']) ?></div>
-                        <div class="text-muted small">≈ <?= formatMoney(fromAFN($sale['total_amount'], $rate), $secCur) ?></div>
+                        <?php if ($saleCur !== 'AFN'): ?>
+                            <div class="fw-semibold"><?= formatMoney(fromAFN($sale['total_amount'], $saleCurRate), $saleCur) ?></div>
+                            <div class="text-muted small">≈ <?= formatAFN($sale['total_amount']) ?></div>
+                        <?php else: ?>
+                            <div class="fw-semibold"><?= formatAFN($sale['total_amount']) ?></div>
+                        <?php endif; ?>
                     </div>
                 </div>
                 <div class="d-flex justify-content-between mb-2">
                     <span class="text-muted"><?= __('sale_paid_at_sale') ?></span>
                     <div class="text-end">
-                        <div class="fw-semibold text-success"><?= formatAFN($sale['paid_amount']) ?></div>
-                        <div class="text-muted small">≈ <?= formatMoney(fromAFN($sale['paid_amount'], $rate), $secCur) ?></div>
+                        <?php if ($saleCur !== 'AFN'): ?>
+                            <div class="fw-semibold text-success"><?= formatMoney(fromAFN($sale['paid_amount'], $saleCurRate), $saleCur) ?></div>
+                            <div class="text-muted small">≈ <?= formatAFN($sale['paid_amount']) ?></div>
+                        <?php else: ?>
+                            <div class="fw-semibold text-success"><?= formatAFN($sale['paid_amount']) ?></div>
+                        <?php endif; ?>
                     </div>
                 </div>
                 <hr>
                 <div class="d-flex justify-content-between">
                     <span class="fw-semibold"><?= __('sale_balance_due') ?></span>
                     <div class="text-end">
-                        <div class="fw-bold <?= $sale['balance'] > 0 ? 'text-danger' : 'text-success' ?> fs-5">
-                            <?= formatAFN($sale['balance']) ?>
-                        </div>
-                        <?php if ($sale['balance'] > 0): ?>
-                        <div class="text-muted small">≈ <?= formatMoney(fromAFN($sale['balance'], $rate), $secCur) ?></div>
+                        <?php if ($saleCur !== 'AFN'): ?>
+                            <div class="fw-bold <?= $sale['balance'] > 0 ? 'text-danger' : 'text-success' ?> fs-5">
+                                <?= formatMoney(fromAFN($sale['balance'], $saleCurRate), $saleCur) ?>
+                            </div>
+                            <?php if ($sale['balance'] > 0): ?>
+                            <div class="text-muted small">≈ <?= formatAFN($sale['balance']) ?></div>
+                            <?php endif; ?>
+                        <?php else: ?>
+                            <div class="fw-bold <?= $sale['balance'] > 0 ? 'text-danger' : 'text-success' ?> fs-5">
+                                <?= formatAFN($sale['balance']) ?>
+                            </div>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -229,9 +260,12 @@ require_once '../includes/header.php';
                     <strong><?= __('sale_created_by') ?>:</strong> <?= htmlspecialchars($sale['created_by_name']) ?>
                 </div>
                 <div><strong><?= __('field_date') ?>:</strong> <?= date('d M Y H:i', strtotime($sale['created_at'])) ?></div>
+                <?php if ($saleCur !== 'AFN'): ?>
                 <div class="mt-1">
-                    <strong><?= __('sale_rate_at_view') ?>:</strong> 1 <?= htmlspecialchars($secCur) ?> = <?= number_format($rate, 2) ?> ؋
+                    <strong><?= __('sale_rate_at_view') ?>:</strong>
+                    1 <?= htmlspecialchars($saleCur) ?> = <?= number_format($saleCurRate, 2) ?> ؋
                 </div>
+                <?php endif; ?>
                 <?php if ($sale['notes']): ?>
                 <div class="mt-2"><strong><?= __('field_notes') ?>:</strong> <?= htmlspecialchars($sale['notes']) ?></div>
                 <?php endif; ?>
