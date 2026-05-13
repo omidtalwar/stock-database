@@ -15,6 +15,7 @@ foreach ([
     "ALTER TABLE sales ADD COLUMN currency      VARCHAR(10)  NULL DEFAULT 'AFN'",
     "ALTER TABLE sale_items ADD COLUMN custom_name VARCHAR(255) NULL",
     "ALTER TABLE sale_items MODIFY product_id   INT          NULL",
+    "ALTER TABLE sale_items MODIFY quantity     DECIMAL(10,3) NOT NULL DEFAULT 1",
 ] as $_sql) {
     try { $pdo->exec($_sql); } catch (\PDOException $e) {}
 }
@@ -58,7 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     foreach ($items as $item) {
         $pid       = (int)($item['product_id'] ?? 0);
-        $qty       = (int)($item['quantity']   ?? 0);
+        $qty       = (float)($item['quantity'] ?? 0);
         $unitPrice = (float)($item['unit_price'] ?? 0);
         $custName  = trim($item['product_name'] ?? '');
         if ($qty <= 0 || $unitPrice <= 0) continue;
@@ -527,7 +528,11 @@ function fmtSale(v) {
     const dec = saleDec();
     return saleSym() + ' ' + parseFloat(v).toLocaleString('en-US', {minimumFractionDigits:dec, maximumFractionDigits:dec});
 }
-function fmtAFN_inv(v) { return '؋ ' + parseFloat(v).toLocaleString('en-US', {maximumFractionDigits:0}); }
+function fmtAFN_inv(v) {
+    const n = parseFloat(v);
+    const dec = Number.isInteger(n) ? 0 : 2;
+    return '؋ ' + n.toLocaleString('en-US', {minimumFractionDigits:dec, maximumFractionDigits:dec});
+}
 
 function onSaleCurrencyChange() {
     const sym = saleSym();
