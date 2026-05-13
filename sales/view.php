@@ -145,7 +145,12 @@ require_once '../includes/header.php';
                             <td class="fw-semibold"><?= htmlspecialchars($item['product_name']) ?></td>
                             <td><?= htmlspecialchars($item['size'] ?: '—') ?></td>
                             <td><?= htmlspecialchars($item['color'] ?: '—') ?></td>
-                            <td class="text-end"><?= $item['quantity'] ?></td>
+                            <td class="text-end"><?php
+                                $q = (float)$item['quantity'];
+                                echo ($q == floor($q))
+                                    ? number_format($q, 0)
+                                    : rtrim(rtrim(number_format($q, 3, '.', ''), '0'), '.');
+                            ?></td>
                             <td class="text-end">
                                 <?php if ($saleCur !== 'AFN'): ?>
                                     <?= formatMoney(fromAFN((float)$item['unit_price'], $saleCurRate), $saleCur) ?>

@@ -291,7 +291,12 @@ $searchParam = $search ? '&search=' . urlencode($search) : '';
                                     <span class="text-muted ms-1" style="font-size:0.7rem;"><?= htmlspecialchars(trim(($it['size'] ?? '').' '.($it['color'] ?? ''))) ?></span>
                                     <?php endif; ?>
                                 </td>
-                                <td class="border-0 py-1 text-end text-muted"><?= number_format($it['quantity']) ?> pcs</td>
+                                <td class="border-0 py-1 text-end text-muted"><?php
+                                    $q = (float)$it['quantity'];
+                                    echo ($q == floor($q))
+                                        ? number_format($q, 0)
+                                        : rtrim(rtrim(number_format($q, 3, '.', ''), '0'), '.');
+                                ?> pcs</td>
                                 <td class="border-0 py-1 text-end text-muted">
                                     <?php if ($cur !== 'AFN'): ?>
                                         <?= formatMoney(fromAFN((float)$it['unit_price'], $curRate), $cur) ?>

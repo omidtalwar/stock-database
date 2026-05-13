@@ -15,6 +15,10 @@ try { $pdo->exec("UPDATE users SET status = 'active' WHERE status IS NULL"); } c
 try { $pdo->exec("ALTER TABLE payments MODIFY COLUMN currency ENUM('AFN','USD','PKR') NOT NULL DEFAULT 'AFN'"); } catch (\Throwable $e) {}
 // Ensure per-currency rate keys exist
 try { $pdo->exec("INSERT IGNORE INTO settings (`key`,`value`) VALUES ('rate_usd','90.00'),('rate_pkr','0.25')"); } catch (\Throwable $e) {}
+// Allow decimal quantities in sale items
+try { $pdo->exec("ALTER TABLE sale_items MODIFY quantity DECIMAL(10,3) NOT NULL DEFAULT 1"); } catch (\Throwable $e) {}
+// Allow decimal quantities in stock_logs
+try { $pdo->exec("ALTER TABLE stock_logs MODIFY quantity DECIMAL(10,3) NOT NULL DEFAULT 0"); } catch (\Throwable $e) {}
 
 $settings = getSettings($pdo);
 $secCur   = $settings['secondary_currency'] ?? 'USD';
