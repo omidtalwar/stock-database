@@ -57,6 +57,9 @@ function toShamsi(int $gy, int $gm, int $gd): array {
 $saleImages = !empty($sale['images']) ? json_decode($sale['images'], true) : [];
 if (!is_array($saleImages)) $saleImages = [];
 
+// Compute the real total from the actual line items (guards against stale sales.total_amount)
+$itemsTotal = array_sum(array_column($items, 'subtotal'));
+
 $saleDateShamsi = null;
 if (!empty($sale['sale_date'])) {
     $dp = explode('-', $sale['sale_date']);
@@ -175,10 +178,10 @@ require_once '../includes/header.php';
                             <td colspan="6" class="text-end fw-bold"><?= __('field_total') ?></td>
                             <td class="text-end fw-bold fs-5">
                                 <?php if ($saleCur !== 'AFN'): ?>
-                                    <?= formatMoney(fromAFN($sale['total_amount'], $saleCurRate), $saleCur) ?>
-                                    <div class="fw-normal text-muted" style="font-size:0.75rem;">≈ <?= formatAFN($sale['total_amount']) ?></div>
+                                    <?= formatMoney(fromAFN($itemsTotal, $saleCurRate), $saleCur) ?>
+                                    <div class="fw-normal text-muted" style="font-size:0.75rem;">≈ <?= formatAFN($itemsTotal) ?></div>
                                 <?php else: ?>
-                                    <?= formatAFN($sale['total_amount']) ?>
+                                    <?= formatAFN($itemsTotal) ?>
                                 <?php endif; ?>
                             </td>
                         </tr>
@@ -196,10 +199,10 @@ require_once '../includes/header.php';
                     <span class="text-muted"><?= __('field_total') ?></span>
                     <div class="text-end">
                         <?php if ($saleCur !== 'AFN'): ?>
-                            <div class="fw-semibold"><?= formatMoney(fromAFN($sale['total_amount'], $saleCurRate), $saleCur) ?></div>
-                            <div class="text-muted small">≈ <?= formatAFN($sale['total_amount']) ?></div>
+                            <div class="fw-semibold"><?= formatMoney(fromAFN($itemsTotal, $saleCurRate), $saleCur) ?></div>
+                            <div class="text-muted small">≈ <?= formatAFN($itemsTotal) ?></div>
                         <?php else: ?>
-                            <div class="fw-semibold"><?= formatAFN($sale['total_amount']) ?></div>
+                            <div class="fw-semibold"><?= formatAFN($itemsTotal) ?></div>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -214,25 +217,26 @@ require_once '../includes/header.php';
                         <?php endif; ?>
                     </div>
                 </div>
+                <?php $viewBalance = max(0, $itemsTotal - (float)$sale['paid_amount']); ?>
                 <hr>
                 <div class="d-flex justify-content-between">
                     <span class="fw-semibold"><?= __('sale_balance_due') ?></span>
                     <div class="text-end">
                         <?php if ($saleCur !== 'AFN'): ?>
-                            <div class="fw-bold <?= $sale['balance'] > 0 ? 'text-danger' : 'text-success' ?> fs-5">
-                                <?= formatMoney(fromAFN($sale['balance'], $saleCurRate), $saleCur) ?>
+                            <div class="fw-bold <?= $viewBalance > 0 ? 'text-danger' : 'text-success' ?> fs-5">
+                                <?= formatMoney(fromAFN($viewBalance, $saleCurRate), $saleCur) ?>
                             </div>
-                            <?php if ($sale['balance'] > 0): ?>
-                            <div class="text-muted small">≈ <?= formatAFN($sale['balance']) ?></div>
+                            <?php if ($viewBalance > 0): ?>
+                            <div class="text-muted small">≈ <?= formatAFN($viewBalance) ?></div>
                             <?php endif; ?>
                         <?php else: ?>
-                            <div class="fw-bold <?= $sale['balance'] > 0 ? 'text-danger' : 'text-success' ?> fs-5">
-                                <?= formatAFN($sale['balance']) ?>
+                            <div class="fw-bold <?= $viewBalance > 0 ? 'text-danger' : 'text-success' ?> fs-5">
+                                <?= formatAFN($viewBalance) ?>
                             </div>
                         <?php endif; ?>
                     </div>
                 </div>
-                <?php if ($sale['balance'] > 0): ?>
+                <?php if ($viewBalance > 0): ?>
                 <div class="mt-3">
                     <a href="/payments/add.php?customer_id=<?= $sale['customer_id'] ?>" class="btn btn-success w-100 btn-sm">
                         <i class="bi bi-cash me-2"></i><?= __('pay_add') ?>
