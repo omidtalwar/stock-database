@@ -60,6 +60,13 @@ if (!is_array($saleImages)) $saleImages = [];
 // Compute the real total from the actual line items (guards against stale sales.total_amount)
 $itemsTotal = array_sum(array_column($items, 'subtotal'));
 
+// Smart AFN formatter: shows 2 decimal places only when value is not a whole number
+function fmtAfn(float $v): string {
+    $r   = round($v, 2);
+    $dec = ($r == floor($r)) ? 0 : 2;
+    return '؋ ' . number_format($r, $dec);
+}
+
 $saleDateShamsi = null;
 if (!empty($sale['sale_date'])) {
     $dp = explode('-', $sale['sale_date']);
@@ -157,17 +164,17 @@ require_once '../includes/header.php';
                             <td class="text-end">
                                 <?php if ($saleCur !== 'AFN'): ?>
                                     <?= formatMoney(fromAFN((float)$item['unit_price'], $saleCurRate), $saleCur) ?>
-                                    <div class="text-muted" style="font-size:0.72rem;">≈ <?= formatAFN($item['unit_price']) ?></div>
+                                    <div class="text-muted" style="font-size:0.72rem;">≈ <?= fmtAfn((float)$item['unit_price']) ?></div>
                                 <?php else: ?>
-                                    <?= formatAFN($item['unit_price']) ?>
+                                    <?= fmtAfn((float)$item['unit_price']) ?>
                                 <?php endif; ?>
                             </td>
                             <td class="text-end fw-semibold">
                                 <?php if ($saleCur !== 'AFN'): ?>
                                     <?= formatMoney(fromAFN((float)$item['subtotal'], $saleCurRate), $saleCur) ?>
-                                    <div class="text-muted" style="font-size:0.72rem;">≈ <?= formatAFN($item['subtotal']) ?></div>
+                                    <div class="text-muted" style="font-size:0.72rem;">≈ <?= fmtAfn((float)$item['subtotal']) ?></div>
                                 <?php else: ?>
-                                    <?= formatAFN($item['subtotal']) ?>
+                                    <?= fmtAfn((float)$item['subtotal']) ?>
                                 <?php endif; ?>
                             </td>
                         </tr>
@@ -179,9 +186,9 @@ require_once '../includes/header.php';
                             <td class="text-end fw-bold fs-5">
                                 <?php if ($saleCur !== 'AFN'): ?>
                                     <?= formatMoney(fromAFN($itemsTotal, $saleCurRate), $saleCur) ?>
-                                    <div class="fw-normal text-muted" style="font-size:0.75rem;">≈ <?= formatAFN($itemsTotal) ?></div>
+                                    <div class="fw-normal text-muted" style="font-size:0.75rem;">≈ <?= fmtAfn($itemsTotal) ?></div>
                                 <?php else: ?>
-                                    <?= formatAFN($itemsTotal) ?>
+                                    <?= fmtAfn($itemsTotal) ?>
                                 <?php endif; ?>
                             </td>
                         </tr>
@@ -200,9 +207,9 @@ require_once '../includes/header.php';
                     <div class="text-end">
                         <?php if ($saleCur !== 'AFN'): ?>
                             <div class="fw-semibold"><?= formatMoney(fromAFN($itemsTotal, $saleCurRate), $saleCur) ?></div>
-                            <div class="text-muted small">≈ <?= formatAFN($itemsTotal) ?></div>
+                            <div class="text-muted small">≈ <?= fmtAfn($itemsTotal) ?></div>
                         <?php else: ?>
-                            <div class="fw-semibold"><?= formatAFN($itemsTotal) ?></div>
+                            <div class="fw-semibold"><?= fmtAfn($itemsTotal) ?></div>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -211,9 +218,9 @@ require_once '../includes/header.php';
                     <div class="text-end">
                         <?php if ($saleCur !== 'AFN'): ?>
                             <div class="fw-semibold text-success"><?= formatMoney(fromAFN($sale['paid_amount'], $saleCurRate), $saleCur) ?></div>
-                            <div class="text-muted small">≈ <?= formatAFN($sale['paid_amount']) ?></div>
+                            <div class="text-muted small">≈ <?= fmtAfn((float)$sale['paid_amount']) ?></div>
                         <?php else: ?>
-                            <div class="fw-semibold text-success"><?= formatAFN($sale['paid_amount']) ?></div>
+                            <div class="fw-semibold text-success"><?= fmtAfn((float)$sale['paid_amount']) ?></div>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -227,11 +234,11 @@ require_once '../includes/header.php';
                                 <?= formatMoney(fromAFN($viewBalance, $saleCurRate), $saleCur) ?>
                             </div>
                             <?php if ($viewBalance > 0): ?>
-                            <div class="text-muted small">≈ <?= formatAFN($viewBalance) ?></div>
+                            <div class="text-muted small">≈ <?= fmtAfn($viewBalance) ?></div>
                             <?php endif; ?>
                         <?php else: ?>
                             <div class="fw-bold <?= $viewBalance > 0 ? 'text-danger' : 'text-success' ?> fs-5">
-                                <?= formatAFN($viewBalance) ?>
+                                <?= fmtAfn($viewBalance) ?>
                             </div>
                         <?php endif; ?>
                     </div>
