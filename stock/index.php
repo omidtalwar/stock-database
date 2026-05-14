@@ -3,6 +3,7 @@ require_once '../includes/session.php';
 requireLogin();
 require_once '../includes/lang.php';
 require_once '../config/db.php';
+require_once '../includes/currency.php';
 
 $pageTitle = __('stock_title');
 
@@ -19,7 +20,10 @@ foreach ([
     "ALTER TABLE stock_logs ADD COLUMN balance        DECIMAL(10,2) NULL DEFAULT 0",
     "ALTER TABLE stock_logs ADD COLUMN bill_image     TEXT          NULL",
     "ALTER TABLE stock_logs ADD COLUMN bill_no        VARCHAR(100)  NULL",
+    "ALTER TABLE stock_logs ADD COLUMN currency       VARCHAR(10)   NULL DEFAULT 'AFN'",
 ] as $_sql) { try { $pdo->exec($_sql); } catch (\PDOException $e) {} }
+
+$rates = getAllRates($pdo);
 
 // Dashboard aggregate stats
 $stats = $pdo->query("
@@ -33,10 +37,11 @@ $stats = $pdo->query("
     FROM stock_logs
 ")->fetch();
 
-// Supplier summary
+// Supplier summary — grouped by supplier + currency so amounts display in original currency
 $supplierStats = $pdo->query("
     SELECT
         supplier,
+        COALESCE(currency, 'AFN') AS currency,
         COUNT(*)          AS txn_count,
         SUM(quantity)     AS total_qty,
         SUM(total_amount) AS total_purchased,
@@ -45,8 +50,8 @@ $supplierStats = $pdo->query("
         MAX(created_at)   AS last_txn
     FROM stock_logs
     WHERE supplier IS NOT NULL AND supplier != ''
-    GROUP BY supplier
-    ORDER BY total_unpaid DESC, last_txn DESC
+    GROUP BY supplier, currency
+    ORDER BY supplier, total_unpaid DESC, last_txn DESC
 ")->fetchAll();
 
 require_once '../includes/header.php';
@@ -140,16 +145,56 @@ require_once '../includes/header.php';
                 </tr>
             </thead>
             <tbody>
-                <?php foreach ($supplierStats as $s): ?>
+                <?php foreach ($supplierStats as $s):
+                    $cur        = $s['currency'];
+                    $rate       = $rates[$cur] ?? 1.0;
+                    $purchased  = (float)$s['total_purchased'];
+                    $paid       = (float)$s['total_paid'];
+                    $unpaid     = (float)$s['total_unpaid'];
+                    $curColors  = ['USD'=>'#0067C0','PKR'=>'#7719AA','AFN'=>'#107C10'];
+                    $curBgs     = ['USD'=>'rgba(0,103,192,0.09)','PKR'=>'rgba(119,25,170,0.09)','AFN'=>'rgba(16,124,16,0.09)'];
+                    $curCol     = $curColors[$cur] ?? '#666';
+                    $curBg      = $curBgs[$cur]    ?? 'rgba(0,0,0,0.06)';
+                ?>
                 <tr style="cursor:pointer;" onclick="location.href='supplier.php?name=<?= urlencode($s['supplier']) ?>'">
-                    <td class="fw-semibold"><?= htmlspecialchars($s['supplier']) ?></td>
+                    <td class="fw-semibold">
+                        <?= htmlspecialchars($s['supplier']) ?>
+                        <?php if ($cur !== 'AFN'): ?>
+                        <span style="background:<?= $curBg ?>;color:<?= $curCol ?>;font-size:0.65rem;font-weight:700;padding:1px 6px;border-radius:4px;margin-<?= isRTL()?'right':'left' ?>:4px;">
+                            <?= htmlspecialchars($cur) ?>
+                        </span>
+                        <?php endif; ?>
+                    </td>
                     <td class="text-end text-muted"><?= number_format($s['txn_count']) ?></td>
                     <td class="text-end text-muted"><?= number_format($s['total_qty']) ?> <?= __('unit_pcs') ?></td>
-                    <td class="text-end fw-semibold"><?= $s['total_purchased'] ? '؋'.number_format($s['total_purchased'], 0) : '—' ?></td>
-                    <td class="text-end text-success fw-semibold"><?= $s['total_paid'] ? '؋'.number_format($s['total_paid'], 0) : '—' ?></td>
-                    <td class="text-end fw-bold <?= $s['total_unpaid'] > 0 ? 'text-danger' : 'text-muted' ?>">
-                        <?= $s['total_unpaid'] > 0 ? '؋'.number_format($s['total_unpaid'], 0) : '—' ?>
+
+                    <td class="text-end fw-semibold">
+                        <?php if (!$purchased): ?>—<?php elseif ($cur !== 'AFN'): ?>
+                            <?= formatMoney($purchased, $cur) ?>
+                            <div class="text-muted fw-normal" style="font-size:0.72rem;">≈ <?= formatAFN(toAFN($purchased, $cur, $rate)) ?></div>
+                        <?php else: ?>
+                            <?= formatAFN($purchased) ?>
+                        <?php endif; ?>
                     </td>
+
+                    <td class="text-end text-success fw-semibold">
+                        <?php if (!$paid): ?>—<?php elseif ($cur !== 'AFN'): ?>
+                            <?= formatMoney($paid, $cur) ?>
+                            <div class="text-muted fw-normal" style="font-size:0.72rem;">≈ <?= formatAFN(toAFN($paid, $cur, $rate)) ?></div>
+                        <?php else: ?>
+                            <?= formatAFN($paid) ?>
+                        <?php endif; ?>
+                    </td>
+
+                    <td class="text-end fw-bold <?= $unpaid > 0 ? 'text-danger' : 'text-muted' ?>">
+                        <?php if ($unpaid <= 0): ?>—<?php elseif ($cur !== 'AFN'): ?>
+                            <?= formatMoney($unpaid, $cur) ?>
+                            <div class="text-muted fw-normal" style="font-size:0.72rem;">≈ <?= formatAFN(toAFN($unpaid, $cur, $rate)) ?></div>
+                        <?php else: ?>
+                            <?= formatAFN($unpaid) ?>
+                        <?php endif; ?>
+                    </td>
+
                     <td class="text-muted" style="font-size:0.75rem;"><?= date('d M Y', strtotime($s['last_txn'])) ?></td>
                     <td class="text-nowrap">
                         <a href="supplier.php?name=<?= urlencode($s['supplier']) ?>"

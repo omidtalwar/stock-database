@@ -15,4 +15,8 @@ $stored = $pdo->query("SELECT `value` FROM settings WHERE `key`='dashboard_pin' 
 $entered = trim($_POST['pin'] ?? '');
 $ok = $stored && $entered !== '' && $entered === trim($stored);
 
+if ($ok) {
+    $_SESSION['pin_verified'] = true;
+}
+
 echo json_encode(['ok' => (bool)$ok]);

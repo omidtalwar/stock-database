@@ -11,6 +11,13 @@ if (!isAdmin()) {
     exit;
 }
 
+// Lock: clear server-side PIN session and redirect
+if (isset($_GET['lock'])) {
+    unset($_SESSION['pin_verified']);
+    header('Location: /dashboard.php');
+    exit;
+}
+
 // ── AJAX: verify dashboard PIN ──────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['_action'] ?? '') === 'pin_verify') {
     header('Content-Type: application/json');
@@ -20,8 +27,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['_action'] ?? '') === 'pin_
     exit;
 }
 
-$settings   = getSettings($pdo);
-$pinEnabled = !empty(trim($settings['dashboard_pin'] ?? ''));
+$settings    = getSettings($pdo);
+$pinEnabled  = !empty(trim($settings['dashboard_pin'] ?? ''));
+$pinVerified = !$pinEnabled || !empty($_SESSION['pin_verified']);
 $rates   = getAllRates($pdo);
 $rateUSD = $rates['USD'];
 $ratePKR = $rates['PKR'];
@@ -37,6 +45,7 @@ $periodWhere = match($period) {
     default => "DATE(created_at) = CURDATE()",
 };
 
+if ($pinVerified) {
 $periodSales = (float)$pdo->query("SELECT COALESCE(SUM(total_amount),0) FROM sales WHERE $periodWhere")->fetchColumn();
 $periodCount = (int)$pdo->query("SELECT COUNT(*) FROM sales WHERE $periodWhere")->fetchColumn();
 $totalDebt   = (float)$pdo->query("SELECT COALESCE(SUM(total_debt),0) FROM customers")->fetchColumn();
@@ -103,8 +112,6 @@ $topDebtors = $pdo->query("
     ORDER BY total_debt DESC LIMIT 5
 ")->fetchAll();
 
-$adminStats = null;
-if (isAdmin()) {
     $pwSales = str_replace('created_at', 's.created_at', $periodWhere);
     $pwPay   = str_replace('created_at', 'p.created_at', $periodWhere);
     $adminStats = [
@@ -112,6 +119,18 @@ if (isAdmin()) {
         'collected'   => (float)$pdo->query("SELECT COALESCE(SUM(paid_amount),0) FROM sales s WHERE $pwSales")->fetchColumn(),
         'payments'    => (float)$pdo->query("SELECT COALESCE(SUM(COALESCE(NULLIF(amount_afn,0),amount)),0) FROM payments p WHERE $pwPay")->fetchColumn(),
     ];
+} else {
+    // PIN not verified — supply zero-value placeholders so real data never enters the HTML
+    $periodSales = 0; $periodCount = 0; $totalDebt = 0;
+    $stockData   = ['items' => 0, 'qty' => 0];
+    $custCount   = 0; $withDebt = 0;
+    $curBreakdown = array_fill_keys(['AFN','USD','PKR'], ['afn'=>0.0,'orig'=>0.0,'cnt'=>0]);
+    $grandAfn     = 0;
+    $debtCurData  = array_fill_keys(['AFN','USD','PKR'], ['afn'=>0.0,'orig'=>0.0,'cnt'=>0]);
+    $collCurData  = array_fill_keys(['AFN','USD','PKR'], ['afn'=>0.0,'orig'=>0.0,'cnt'=>0]);
+    $recentSales  = [];
+    $topDebtors   = [];
+    $adminStats   = ['total_sales'=>0,'collected'=>0,'payments'=>0];
 }
 
 $user   = currentUser();
@@ -837,35 +856,7 @@ body.pin-locked .debtor-debt .s { filter: blur(7px); user-select: none; pointer-
             <?php endif; ?>
         </div>
 
-        <!-- Currency Breakdown -->
-        <div class="cur-break-bar">
-            <?php
-            $curMeta = [
-                'AFN' => ['sym'=>'؋','label'=>'AFN','flag'=>'🇦🇫','col'=>'#107C10','bg'=>'rgba(16,124,16,0.10)'],
-                'USD' => ['sym'=>'$','label'=>'USD','flag'=>'🇺🇸','col'=>'#0067C0','bg'=>'rgba(0,103,192,0.10)'],
-                'PKR' => ['sym'=>'₨','label'=>'PKR','flag'=>'🇵🇰','col'=>'#7719AA','bg'=>'rgba(119,25,170,0.10)'],
-            ];
-            foreach ($curMeta as $cur => $meta):
-                $d = $curBreakdown[$cur];
-            ?>
-            <div class="cur-cell">
-                <div><span class="cur-pill" style="background:<?= $meta['bg'] ?>;color:<?= $meta['col'] ?>;"><?= $meta['flag'] ?> <?= $meta['sym'] ?> <?= $meta['label'] ?></span></div>
-                <div class="cur-val" style="color:<?= $d['cnt']>0 ? $meta['col'] : 'var(--w11-muted)' ?>;">
-                    <?= formatMoney($d['orig'], $cur) ?>
-                </div>
-                <?php if ($cur !== 'AFN' && $d['cnt'] > 0): ?>
-                <div class="cur-sub">≈ <?= formatAFN($d['afn']) ?></div>
-                <?php endif; ?>
-                <div class="cur-sub mt-1"><?= $d['cnt'] ?> <?= __('rep_invoices') ?></div>
-            </div>
-            <?php endforeach; ?>
-            <div class="cur-cell">
-                <div><span class="cur-pill" style="background:rgba(28,28,28,0.07);color:var(--w11-text);">🌐 ∑ <?= __('field_total') ?></span></div>
-                <div class="cur-val"><?= formatAFN($grandAfn) ?></div>
-                <div class="cur-sub">≈ <?= formatMoney(fromAFN($grandAfn,$rateUSD),'USD') ?></div>
-                <div class="cur-sub">≈ <?= formatMoney(fromAFN($grandAfn,$ratePKR),'PKR') ?></div>
-            </div>
-        </div>
+
 
 
         <!-- Bottom grid -->
@@ -1138,7 +1129,9 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').cat
             const res  = await fetch('/ajax/pin-verify.php', { method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: 'pin=' + encodeURIComponent(pin) });
             const data = await res.json();
             if (data.ok) {
-                unlock();
+                // Reload so the server renders real data now that the session is set
+                location.reload();
+                return;
             } else {
                 errEl.style.display = 'block';
                 pin = ''; updateDots();
@@ -1154,26 +1147,12 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').cat
 
     const lockBtn = document.getElementById('lockDashBtn');
 
-    function unlock() {
-        sessionStorage.setItem('fzl_pin_ok', '1');
-        document.body.classList.remove('pin-locked');
-        overlay.classList.remove('show');
-    }
-
     function lock() {
-        sessionStorage.removeItem('fzl_pin_ok');
-        document.body.classList.add('pin-locked');
-        pin = ''; updateDots();
-        errEl.style.display = 'none';
-        overlay.classList.add('show');
+        // Clear server-side session, then reload so real data is no longer in the HTML
+        window.location.href = '/dashboard.php?lock=1';
     }
 
-    // Check session storage first (persists within the same tab)
-    if (sessionStorage.getItem('fzl_pin_ok')) {
-        unlock();
-    } else {
-        overlay.classList.add('show');
-    }
+    overlay.classList.add('show');
 
     lockBtn?.addEventListener('click', lock);
 
