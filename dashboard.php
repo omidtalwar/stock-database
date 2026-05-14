@@ -814,7 +814,9 @@ body.pin-locked .debtor-debt .s { filter: blur(7px); user-select: none; pointer-
                     'USD' => ['sym'=>'$','flag'=>'🇺🇸','col'=>'#0067C0','bg'=>'rgba(0,103,192,0.10)'],
                     'PKR' => ['sym'=>'₨','flag'=>'🇵🇰','col'=>'#7719AA','bg'=>'rgba(119,25,170,0.10)'],
                 ];
-                $debtGrand = array_sum(array_column($debtCurData,'afn'));
+                // Use $totalDebt (from customers.total_debt) as the authoritative total —
+                // it reflects payments recorded after invoice creation, unlike the per-currency SUM.
+                $debtGrand = $totalDebt;
                 foreach ($debtMeta as $cur => $meta): $d = $debtCurData[$cur]; ?>
                 <div class="cur-cell">
                     <div><span class="cur-pill" style="background:<?= $meta['bg'] ?>;color:<?= $meta['col'] ?>;"><?= $meta['flag'] ?> <?= $meta['sym'] ?> <?= $cur ?></span></div>
@@ -828,6 +830,7 @@ body.pin-locked .debtor-debt .s { filter: blur(7px); user-select: none; pointer-
                     <div class="cur-val" style="color:var(--w11-red);"><?= formatAFN($debtGrand) ?></div>
                     <div class="cur-sub">≈ <?= formatMoney(fromAFN($debtGrand,$rateUSD),'USD') ?></div>
                     <div class="cur-sub">≈ <?= formatMoney(fromAFN($debtGrand,$ratePKR),'PKR') ?></div>
+                    <div class="cur-sub mt-1" style="font-size:0.62rem;opacity:.65;">from customer ledger</div>
                 </div>
             </div>
         </div>
