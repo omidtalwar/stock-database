@@ -44,6 +44,24 @@ $stockData   = $pdo->query("SELECT COUNT(*) AS items, COALESCE(SUM(quantity),0) 
 $custCount   = (int)$pdo->query("SELECT COUNT(*) FROM customers")->fetchColumn();
 $withDebt    = (int)$pdo->query("SELECT COUNT(*) FROM customers WHERE total_debt>0")->fetchColumn();
 
+// Currency breakdown: total sales per invoice currency for the period
+$salesByCur = $pdo->query("
+    SELECT COALESCE(currency,'AFN') AS currency,
+           COALESCE(SUM(total_amount),0) AS total_afn,
+           COUNT(*) AS cnt
+    FROM sales WHERE $periodWhere
+    GROUP BY currency
+")->fetchAll(PDO::FETCH_ASSOC);
+$curBreakdown = ['AFN'=>['afn'=>0.0,'orig'=>0.0,'cnt'=>0],'USD'=>['afn'=>0.0,'orig'=>0.0,'cnt'=>0],'PKR'=>['afn'=>0.0,'orig'=>0.0,'cnt'=>0]];
+foreach ($salesByCur as $_r) {
+    $_cur = $_r['currency'] ?: 'AFN';
+    if (!array_key_exists($_cur, $curBreakdown)) continue;
+    $_afn  = (float)$_r['total_afn'];
+    $_rate = $rates[$_cur] ?? 1.0;
+    $curBreakdown[$_cur] = ['afn'=>$_afn, 'orig'=>$_cur==='AFN'?$_afn:fromAFN($_afn,$_rate), 'cnt'=>(int)$_r['cnt']];
+}
+$grandAfn = array_sum(array_column($curBreakdown,'afn'));
+
 $recentSales = $pdo->query("
     SELECT s.id, s.total_amount, s.balance, s.created_at,
            c.name AS customer_name, c.shop_name
@@ -320,6 +338,13 @@ body { font-family: 'Segoe UI Variable', 'Noto Naskh Arabic', 'Segoe UI', system
     display: grid; grid-template-columns: repeat(4,1fr); gap: 12px;
 }
 @media (max-width:700px) { .admin-bar { grid-template-columns: repeat(2,1fr); } }
+.cur-break-bar { display:grid; grid-template-columns:repeat(4,1fr); gap:0; background:linear-gradient(135deg,rgba(0,103,192,0.04),rgba(119,25,170,0.03)); border:1px solid rgba(0,103,192,0.1); border-radius:var(--w11-radius-lg); padding:14px 6px; margin-bottom:20px; }
+.cur-cell { text-align:center; padding:6px 12px; }
+.cur-cell + .cur-cell { border-<?= isRTL()?'right':'left' ?>:1px solid var(--w11-border); }
+.cur-pill { display:inline-flex;align-items:center;padding:2px 10px;border-radius:20px;font-size:0.68rem;font-weight:700;letter-spacing:.4px;margin-bottom:6px; }
+.cur-val { font-size:1.05rem; font-weight:700; line-height:1.2; }
+.cur-sub { font-size:0.7rem; color:var(--w11-muted); }
+@media (max-width:700px) { .cur-break-bar { grid-template-columns: repeat(2,1fr); } }
 .admin-bar-item { text-align: center; }
 .admin-bar-item .lbl { font-size: 0.68rem; font-weight: 700; <?php if (!isRTL()): ?>text-transform: uppercase; letter-spacing: .5px;<?php endif; ?> color: var(--w11-muted); margin-bottom: 4px; }
 .admin-bar-item .val { font-size: 1rem; font-weight: 700; }
@@ -699,6 +724,36 @@ body.pin-locked .debtor-debt .s { filter: blur(7px); user-select: none; pointer-
                 <div class="stat-value"><?= $custCount ?></div>
                 <div class="stat-sec"><?= __('dash_shopkeepers') ?></div>
                 <div class="stat-foot"><?= $withDebt ?> <?= __('dash_open_balance') ?></div>
+            </div>
+        </div>
+
+        <!-- Currency Breakdown -->
+        <div class="cur-break-bar">
+            <?php
+            $curMeta = [
+                'AFN' => ['sym'=>'؋','label'=>'AFN','col'=>'#107C10','bg'=>'rgba(16,124,16,0.10)'],
+                'USD' => ['sym'=>'$','label'=>'USD','col'=>'#0067C0','bg'=>'rgba(0,103,192,0.10)'],
+                'PKR' => ['sym'=>'₨','label'=>'PKR','col'=>'#7719AA','bg'=>'rgba(119,25,170,0.10)'],
+            ];
+            foreach ($curMeta as $cur => $meta):
+                $d = $curBreakdown[$cur];
+            ?>
+            <div class="cur-cell">
+                <div><span class="cur-pill" style="background:<?= $meta['bg'] ?>;color:<?= $meta['col'] ?>;"><?= $meta['sym'] ?> <?= $meta['label'] ?></span></div>
+                <div class="cur-val" style="color:<?= $d['cnt']>0 ? $meta['col'] : 'var(--w11-muted)' ?>;">
+                    <?= formatMoney($d['orig'], $cur) ?>
+                </div>
+                <?php if ($cur !== 'AFN' && $d['cnt'] > 0): ?>
+                <div class="cur-sub">≈ <?= formatAFN($d['afn']) ?></div>
+                <?php endif; ?>
+                <div class="cur-sub mt-1"><?= $d['cnt'] ?> <?= __('rep_invoices') ?></div>
+            </div>
+            <?php endforeach; ?>
+            <div class="cur-cell">
+                <div><span class="cur-pill" style="background:rgba(28,28,28,0.07);color:var(--w11-text);">∑ <?= __('field_total') ?></span></div>
+                <div class="cur-val"><?= formatAFN($grandAfn) ?></div>
+                <div class="cur-sub">≈ <?= formatMoney(fromAFN($grandAfn,$rateUSD),'USD') ?></div>
+                <div class="cur-sub">≈ <?= formatMoney(fromAFN($grandAfn,$ratePKR),'PKR') ?></div>
             </div>
         </div>
 
