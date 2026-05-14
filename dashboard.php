@@ -583,7 +583,7 @@ body.pin-locked .debtor-debt .s { filter: blur(7px); user-select: none; pointer-
 .pin-key:active { background: #dee2e6; }
 </style>
 </head>
-<body class="<?= $pinEnabled ? 'pin-locked' : '' ?>">
+<body class="<?= ($pinEnabled && !$pinVerified) ? 'pin-locked' : '' ?>">
 
 <div id="fzl-bar"></div>
 
@@ -607,7 +607,7 @@ body.pin-locked .debtor-debt .s { filter: blur(7px); user-select: none; pointer-
 
 <?= flash() ?>
 
-<?php if ($pinEnabled): ?>
+<?php if ($pinEnabled && !$pinVerified): ?>
 <!-- PIN overlay -->
 <div id="pinOverlay">
     <div style="background:#fff;border-radius:18px;padding:32px 24px;width:300px;max-width:92vw;box-shadow:0 8px 40px rgba(0,0,0,0.25);text-align:center;">
@@ -685,7 +685,7 @@ body.pin-locked .debtor-debt .s { filter: blur(7px); user-select: none; pointer-
                 style="display:flex;align-items:center;gap:6px;padding:4px 11px;border-radius:6px;border:1px solid #0067C0;background:#EFF6FC;color:#0067C0;font-size:0.78rem;font-weight:600;cursor:pointer;white-space:nowrap;">
                 &#8659; <span class="d-sm-inline" style="display:none;">Install App</span>
             </button>
-            <?php if ($pinEnabled): ?>
+            <?php if ($pinEnabled && $pinVerified): ?>
             <button id="lockDashBtn" title="Lock dashboard"
                 style="display:flex;align-items:center;gap:5px;padding:4px 11px;border-radius:6px;border:1px solid rgba(196,43,28,0.35);background:rgba(196,43,28,0.06);color:#C42B1C;font-size:0.78rem;font-weight:600;cursor:pointer;white-space:nowrap;">
                 <i class="bi bi-lock-fill"></i> Lock
