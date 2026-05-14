@@ -708,12 +708,13 @@ body.pin-locked .debtor-debt .s { filter: blur(7px); user-select: none; pointer-
 
             <div class="stat-card">
                 <div class="stat-top">
-                    <span class="stat-label"><?= __('dash_total_stock') ?></span>
-                    <div class="stat-icon ic-green"><i class="bi bi-archive"></i></div>
+                    <span class="stat-label">Total Collected</span>
+                    <div class="stat-icon ic-green"><i class="bi bi-cash-stack"></i></div>
                 </div>
-                <div class="stat-value"><?= number_format($stockData['qty']) ?></div>
-                <div class="stat-sec"><?= __('dash_pieces') ?></div>
-                <div class="stat-foot"><?= $stockData['items'] ?> <?= __('dash_prod_types') ?></div>
+                <?php $totalCollected = ($adminStats['collected'] ?? 0) + ($adminStats['payments'] ?? 0); ?>
+                <div class="stat-value" style="color:var(--w11-green)"><?= formatAFN($totalCollected) ?></div>
+                <div class="stat-sec">≈ <?= formatMoney(fromAFN($totalCollected,$rateUSD),'USD') ?> · <?= formatMoney(fromAFN($totalCollected,$ratePKR),'PKR') ?></div>
+                <div class="stat-foot">At invoice <?= formatAFN($adminStats['collected']??0) ?> + Payments <?= formatAFN($adminStats['payments']??0) ?></div>
             </div>
 
             <div class="stat-card">
@@ -731,15 +732,15 @@ body.pin-locked .debtor-debt .s { filter: blur(7px); user-select: none; pointer-
         <div class="cur-break-bar">
             <?php
             $curMeta = [
-                'AFN' => ['sym'=>'؋','label'=>'AFN','col'=>'#107C10','bg'=>'rgba(16,124,16,0.10)'],
-                'USD' => ['sym'=>'$','label'=>'USD','col'=>'#0067C0','bg'=>'rgba(0,103,192,0.10)'],
-                'PKR' => ['sym'=>'₨','label'=>'PKR','col'=>'#7719AA','bg'=>'rgba(119,25,170,0.10)'],
+                'AFN' => ['sym'=>'؋','label'=>'AFN','flag'=>'🇦🇫','col'=>'#107C10','bg'=>'rgba(16,124,16,0.10)'],
+                'USD' => ['sym'=>'$','label'=>'USD','flag'=>'🇺🇸','col'=>'#0067C0','bg'=>'rgba(0,103,192,0.10)'],
+                'PKR' => ['sym'=>'₨','label'=>'PKR','flag'=>'🇵🇰','col'=>'#7719AA','bg'=>'rgba(119,25,170,0.10)'],
             ];
             foreach ($curMeta as $cur => $meta):
                 $d = $curBreakdown[$cur];
             ?>
             <div class="cur-cell">
-                <div><span class="cur-pill" style="background:<?= $meta['bg'] ?>;color:<?= $meta['col'] ?>;"><?= $meta['sym'] ?> <?= $meta['label'] ?></span></div>
+                <div><span class="cur-pill" style="background:<?= $meta['bg'] ?>;color:<?= $meta['col'] ?>;"><?= $meta['flag'] ?> <?= $meta['sym'] ?> <?= $meta['label'] ?></span></div>
                 <div class="cur-val" style="color:<?= $d['cnt']>0 ? $meta['col'] : 'var(--w11-muted)' ?>;">
                     <?= formatMoney($d['orig'], $cur) ?>
                 </div>
@@ -750,38 +751,13 @@ body.pin-locked .debtor-debt .s { filter: blur(7px); user-select: none; pointer-
             </div>
             <?php endforeach; ?>
             <div class="cur-cell">
-                <div><span class="cur-pill" style="background:rgba(28,28,28,0.07);color:var(--w11-text);">∑ <?= __('field_total') ?></span></div>
+                <div><span class="cur-pill" style="background:rgba(28,28,28,0.07);color:var(--w11-text);">🌐 ∑ <?= __('field_total') ?></span></div>
                 <div class="cur-val"><?= formatAFN($grandAfn) ?></div>
                 <div class="cur-sub">≈ <?= formatMoney(fromAFN($grandAfn,$rateUSD),'USD') ?></div>
                 <div class="cur-sub">≈ <?= formatMoney(fromAFN($grandAfn,$ratePKR),'PKR') ?></div>
             </div>
         </div>
 
-        <!-- Admin summary bar -->
-        <?php if ($adminStats): ?>
-        <div class="admin-bar">
-            <div class="admin-bar-item">
-                <div class="lbl"><?= __('period_showing') ?>: <?= strip_tags($periodLabels[$period]) ?> — <?= __('rep_total_sales') ?></div>
-                <div class="val"><?= formatAFN($adminStats['total_sales']) ?></div>
-                <div class="sec">≈ <?= formatMoney(fromAFN($adminStats['total_sales'], $rateUSD), 'USD') ?> · <?= formatMoney(fromAFN($adminStats['total_sales'], $ratePKR), 'PKR') ?></div>
-            </div>
-            <div class="admin-bar-item">
-                <div class="lbl"><?= __('dash_collected') ?></div>
-                <div class="val" style="color:var(--w11-green)"><?= formatAFN($adminStats['collected']) ?></div>
-                <div class="sec">≈ <?= formatMoney(fromAFN($adminStats['collected'], $rateUSD), 'USD') ?> · <?= formatMoney(fromAFN($adminStats['collected'], $ratePKR), 'PKR') ?></div>
-            </div>
-            <div class="admin-bar-item">
-                <div class="lbl"><?= __('dash_payments_rcvd') ?></div>
-                <div class="val" style="color:var(--w11-green)"><?= formatAFN($adminStats['payments']) ?></div>
-                <div class="sec">≈ <?= formatMoney(fromAFN($adminStats['payments'], $rateUSD), 'USD') ?> · <?= formatMoney(fromAFN($adminStats['payments'], $ratePKR), 'PKR') ?></div>
-            </div>
-            <div class="admin-bar-item">
-                <div class="lbl"><?= __('dash_still_owed') ?></div>
-                <div class="val" style="color:var(--w11-red)"><?= formatAFN($totalDebt) ?></div>
-                <div class="sec">≈ <?= formatMoney(fromAFN($totalDebt, $rateUSD), 'USD') ?> · <?= formatMoney(fromAFN($totalDebt, $ratePKR), 'PKR') ?></div>
-            </div>
-        </div>
-        <?php endif; ?>
 
         <!-- Bottom grid -->
         <div class="bottom-grid">
