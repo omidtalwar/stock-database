@@ -20,6 +20,7 @@ foreach ([
     "ALTER TABLE stock_logs ADD COLUMN bill_image     TEXT          NULL",
     "ALTER TABLE stock_logs ADD COLUMN bill_no        VARCHAR(100)  NULL",
     "ALTER TABLE stock_logs ADD COLUMN currency       VARCHAR(10)   NULL DEFAULT 'AFN'",
+    "ALTER TABLE stock_logs MODIFY quantity DECIMAL(10,3) NOT NULL DEFAULT 0",
 ] as $_sql) { try { $pdo->exec($_sql); } catch (\PDOException $e) {} }
 
 $products       = $pdo->query("SELECT id, name, size, color, quantity FROM products ORDER BY name ASC")->fetchAll();
@@ -57,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     for ($i = 0; $i < $n; $i++) {
         $pid        = (int)($productIds[$i]  ?? 0);
         $customProd = trim($customProds[$i]  ?? '');
-        $qty        = (int)($quantities[$i]  ?? 0);
+        $qty        = (float)($quantities[$i]  ?? 0);
         $bundle     = (int)($bundleCounts[$i] ?? 0);
         $pricing    = in_array($pricingTypes[$i] ?? '', ['per_pcs','per_bundle']) ? $pricingTypes[$i] : 'per_pcs';
         $unitPrice  = (float)($unitPrices[$i] ?? 0);
@@ -279,7 +280,7 @@ require_once '../includes/header.php';
                     <div class="input-group input-group-sm mb-3">
                         <span class="input-group-text"><span class="cur-sym">؋</span></span>
                         <input type="number" name="paid_amount" id="paidAmount" class="form-control"
-                               min="0" step="1" placeholder="0" oninput="calcBalance()"
+                               min="0" step="any" placeholder="0" oninput="calcBalance()"
                                value="<?= htmlspecialchars($_POST['paid_amount'] ?? '0') ?>">
                     </div>
                     <div class="d-flex justify-content-between align-items-center p-2 rounded"
@@ -377,7 +378,7 @@ function rowHTML(idx) {
         + '</td>'
         + '<td style="min-width:100px;">'
         + '<div class="input-group input-group-sm">'
-        + '<input type="number" name="quantity[]" class="form-control row-qty" min="0" placeholder="0" oninput="calcRowTotal(this.closest(\'tr\'))">'
+        + '<input type="number" name="quantity[]" class="form-control row-qty" min="0" step="any" placeholder="0" oninput="calcRowTotal(this.closest(\'tr\'))">'
         + '<span class="input-group-text" style="font-size:.72rem;">pcs</span>'
         + '</div></td>'
         + '<td style="min-width:80px;">'
@@ -391,12 +392,12 @@ function rowHTML(idx) {
         + '<td style="min-width:110px;">'
         + '<div class="input-group input-group-sm">'
         + '<span class="input-group-text"><span class="cur-sym">' + sym + '</span></span>'
-        + '<input type="number" name="unit_price[]" class="form-control row-price" min="0" step="0.01" placeholder="0" oninput="calcRowTotal(this.closest(\'tr\'))">'
+        + '<input type="number" name="unit_price[]" class="form-control row-price" min="0" step="any" placeholder="0" oninput="calcRowTotal(this.closest(\'tr\'))">'
         + '</div></td>'
         + '<td style="min-width:120px;">'
         + '<div class="input-group input-group-sm">'
         + '<span class="input-group-text"><span class="cur-sym">' + sym + '</span></span>'
-        + '<input type="number" name="total_amount[]" class="form-control row-total" min="0" step="0.01" placeholder="Total" oninput="onRowTotalManual(this.closest(\'tr\'))">'
+        + '<input type="number" name="total_amount[]" class="form-control row-total" min="0" step="any" placeholder="Total" oninput="onRowTotalManual(this.closest(\'tr\'))">'
         + '</div>'
         + '<div class="row-total-hint text-muted" style="font-size:.68rem;min-height:14px;margin-top:1px;"></div>'
         + '</td>'
@@ -429,8 +430,8 @@ function matchProd(input) {
 
 function calcRowTotal(tr) {
     if (tr.dataset.manualTotal) { calcGrandTotal(); return; }
-    const qty     = parseInt(tr.querySelector('.row-qty').value)     || 0;
-    const bundles = parseInt(tr.querySelector('.row-bundles').value)  || 0;
+    const qty     = parseFloat(tr.querySelector('.row-qty').value)     || 0;
+    const bundles = parseFloat(tr.querySelector('.row-bundles').value)  || 0;
     const price   = parseFloat(tr.querySelector('.row-price').value)  || 0;
     const pricing = tr.querySelector('.row-pricing').value;
 

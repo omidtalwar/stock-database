@@ -29,6 +29,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['_action'] ?? '') === 'pin_
 
 $settings    = getSettings($pdo);
 $pinEnabled  = !empty(trim($settings['dashboard_pin'] ?? ''));
+
+// PIN session expires after 2 minutes of inactivity
+const PIN_TTL = 120; // seconds
+if ($pinEnabled) {
+    $lastSeen = $_SESSION['pin_verified_at'] ?? 0;
+    if (!empty($_SESSION['pin_verified']) && (time() - $lastSeen) > PIN_TTL) {
+        // Expired — clear and force re-entry
+        unset($_SESSION['pin_verified'], $_SESSION['pin_verified_at']);
+    }
+    if (!empty($_SESSION['pin_verified'])) {
+        // Refresh the timestamp on every active page load
+        $_SESSION['pin_verified_at'] = time();
+    }
+}
 $pinVerified = !$pinEnabled || !empty($_SESSION['pin_verified']);
 $rates   = getAllRates($pdo);
 $rateUSD = $rates['USD'];

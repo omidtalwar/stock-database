@@ -16,7 +16,8 @@ $entered = trim($_POST['pin'] ?? '');
 $ok = $stored && $entered !== '' && $entered === trim($stored);
 
 if ($ok) {
-    $_SESSION['pin_verified'] = true;
+    $_SESSION['pin_verified']    = true;
+    $_SESSION['pin_verified_at'] = time();
 }
 
 echo json_encode(['ok' => (bool)$ok]);
