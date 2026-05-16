@@ -346,18 +346,45 @@ require_once '../includes/header.php';
                         <div id="gregorianBadge" class="mt-1 text-muted" style="font-size:0.71rem;"></div>
                     </div>
 
-                    <!-- Customer -->
+                    <!-- Customer searchable picker -->
                     <div class="col-12">
                         <label class="form-label small fw-semibold"><?= __('sale_select_cust') ?> <span class="text-danger">*</span></label>
-                        <select name="customer_id" class="form-select form-select-sm" required>
-                            <option value=""><?= __('sale_choose_cust') ?></option>
-                            <?php foreach ($customers as $c): ?>
-                            <option value="<?= $c['id'] ?>"
-                                <?= ($preCustomer == $c['id'] || ($_POST['customer_id'] ?? 0) == $c['id']) ? 'selected' : '' ?>>
-                                <?= htmlspecialchars($c['name']) ?> — <?= htmlspecialchars($c['shop_name']) ?>
-                            </option>
-                            <?php endforeach; ?>
-                        </select>
+                        <div class="position-relative" id="custPickerWrap">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted" style="font-size:.78rem;"></i></span>
+                                <input type="text" id="custSearch" class="form-control border-start-0 ps-0"
+                                       placeholder="Search customer by name or shop…"
+                                       autocomplete="off" oninput="filterCustomers()" onfocus="showCustDropdown()">
+                                <span id="custClear" style="display:none;cursor:pointer;" class="input-group-text bg-white text-muted" onclick="clearCustPicker()"><i class="bi bi-x"></i></span>
+                            </div>
+                            <input type="hidden" name="customer_id" id="custIdInput" value="<?= $preCustomer ?: (int)($_POST['customer_id'] ?? 0) ?>" required>
+                            <div id="custDropdown" style="display:none;position:absolute;z-index:1050;width:100%;max-height:220px;overflow-y:auto;background:#fff;border:1px solid rgba(0,0,0,0.12);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.1);margin-top:2px;">
+                                <?php foreach ($customers as $c): ?>
+                                <div class="cust-opt px-3 py-2 d-flex align-items-center gap-2"
+                                     style="cursor:pointer;border-bottom:1px solid rgba(0,0,0,0.05);transition:background .1s;"
+                                     data-id="<?= $c['id'] ?>"
+                                     data-label="<?= htmlspecialchars($c['name'] . ' — ' . $c['shop_name']) ?>"
+                                     data-search="<?= strtolower(htmlspecialchars($c['name'] . ' ' . $c['shop_name'])) ?>"
+                                     onmousedown="selectCust(this)"
+                                     onmouseenter="this.style.background='rgba(0,103,192,0.07)'"
+                                     onmouseleave="this.style.background=''">
+                                    <div class="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold flex-shrink-0"
+                                         style="width:28px;height:28px;background:#0067C0;font-size:0.72rem;border-radius:6px!important;">
+                                        <?= strtoupper(substr($c['name'], 0, 1)) ?>
+                                    </div>
+                                    <div>
+                                        <div class="fw-semibold" style="font-size:0.85rem;"><?= htmlspecialchars($c['name']) ?></div>
+                                        <div class="text-muted" style="font-size:0.72rem;"><?= htmlspecialchars($c['shop_name']) ?></div>
+                                    </div>
+                                </div>
+                                <?php endforeach; ?>
+                                <div id="custNoResults" style="display:none;" class="text-muted text-center py-3 small">No customers found.</div>
+                            </div>
+                        </div>
+                        <div id="custSelected" class="mt-1" style="display:none;font-size:0.8rem;">
+                            <i class="bi bi-person-check text-success me-1"></i>
+                            <span id="custSelectedLabel" class="fw-semibold"></span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -714,6 +741,51 @@ function updateSummary() {
 }
 
 document.getElementById('addRow').addEventListener('click', addRow);
+
+/* ── Customer searchable picker ── */
+function filterCustomers() {
+    const q = document.getElementById('custSearch').value.trim().toLowerCase();
+    let any = false;
+    document.querySelectorAll('.cust-opt').forEach(el => {
+        const match = !q || el.dataset.search.includes(q);
+        el.style.display = match ? '' : 'none';
+        if (match) any = true;
+    });
+    document.getElementById('custNoResults').style.display = any ? 'none' : '';
+    showCustDropdown();
+}
+function showCustDropdown() {
+    document.getElementById('custDropdown').style.display = '';
+}
+function hideCustDropdown() {
+    document.getElementById('custDropdown').style.display = 'none';
+}
+function selectCust(el) {
+    document.getElementById('custIdInput').value = el.dataset.id;
+    document.getElementById('custSearch').value  = el.dataset.label;
+    document.getElementById('custSelectedLabel').textContent = el.dataset.label;
+    document.getElementById('custSelected').style.display = '';
+    document.getElementById('custClear').style.display = '';
+    hideCustDropdown();
+}
+function clearCustPicker() {
+    document.getElementById('custIdInput').value = '';
+    document.getElementById('custSearch').value  = '';
+    document.getElementById('custSelected').style.display = 'none';
+    document.getElementById('custClear').style.display = 'none';
+    document.querySelectorAll('.cust-opt').forEach(el => el.style.display = '');
+    document.getElementById('custNoResults').style.display = 'none';
+}
+document.getElementById('custSearch').addEventListener('blur', () => setTimeout(hideCustDropdown, 150));
+
+// Pre-fill if customer_id already set (page load with preCustomer)
+(function() {
+    const preId = document.getElementById('custIdInput').value;
+    if (preId) {
+        const el = document.querySelector(`.cust-opt[data-id="${preId}"]`);
+        if (el) selectCust(el);
+    }
+})();
 
 /* ──────────────────────────────────────────
    Solar Hijri ↔ Gregorian conversion
