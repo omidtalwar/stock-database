@@ -30,18 +30,22 @@ $openInvoices = $pdo->query("
 
 $invoicesByCustomer = [];
 foreach ($openInvoices as $inv) {
-    $cid = (int)$inv['customer_id'];
-    $bal = max(0.0, (float)$inv['total_amount'] - (float)$inv['paid_amount']);
-    if ($bal < 0.01) continue;
+    $cid  = (int)$inv['customer_id'];
+    $cur  = $inv['currency'];
+    $rate = $allRates[$cur] ?? 1.0;
+    $balAfn = max(0.0, (float)$inv['total_amount'] - (float)$inv['paid_amount']); // always AFN
+    if ($balAfn < 0.01) continue;
+    $balOrig = $cur === 'AFN' ? $balAfn : fromAFN($balAfn, $rate); // in invoice currency
     $invoicesByCustomer[$cid][] = [
-        'id'      => (int)$inv['id'],
-        'num'     => '#' . str_pad($inv['id'], 4, '0', STR_PAD_LEFT),
-        'bill_no' => $inv['bill_no'] ?: null,
-        'cur'     => $inv['currency'],
-        'total'   => (float)$inv['total_amount'],
-        'paid'    => (float)$inv['paid_amount'],
-        'bal'     => $bal,
-        'date'    => date('d M Y', strtotime($inv['created_at'])),
+        'id'       => (int)$inv['id'],
+        'num'      => '#' . str_pad($inv['id'], 4, '0', STR_PAD_LEFT),
+        'bill_no'  => $inv['bill_no'] ?: null,
+        'cur'      => $cur,
+        'total'    => (float)$inv['total_amount'],
+        'paid'     => (float)$inv['paid_amount'],
+        'bal'      => $balAfn,      // AFN — for server-side validation
+        'bal_orig' => $balOrig,     // in invoice currency — for display & pre-fill
+        'date'     => date('d M Y', strtotime($inv['created_at'])),
     ];
 }
 
@@ -325,12 +329,13 @@ function renderInvoices() {
     none.style.display = 'none';
 
     list.innerHTML = invs.map((inv, idx) => {
-        const balLabel = fmtCur(inv.bal, inv.cur)
-            + (inv.cur !== 'AFN' ? ' <span style="font-size:.7rem;color:#888;">≈ ' + fmtAFN(inv.bal * (ALL_RATES[inv.cur] || 1)) + '</span>' : '');
+        // bal_orig is in invoice currency; bal is in AFN
+        const balLabel = fmtCur(inv.bal_orig, inv.cur)
+            + (inv.cur !== 'AFN' ? ' <span style="font-size:.7rem;color:#888;">≈ ' + fmtAFN(inv.bal) + '</span>' : '');
         const billTag  = inv.bill_no ? ' <span style="font-size:.68rem;color:#888;">Bill: ' + inv.bill_no + '</span>' : '';
-        const curBadge = inv.cur !== 'AFN'
-            ? '<span style="background:rgba(0,103,192,.1);color:#0067C0;font-size:.65rem;font-weight:700;padding:1px 5px;border-radius:3px;margin-left:4px;">' + inv.cur + '</span>'
-            : '';
+        const curColors = {USD:'#0067C0', PKR:'#7719AA', AFN:'#107C10'};
+        const curColor  = curColors[inv.cur] || '#666';
+        const curBadge  = '<span style="background:' + curColor.replace(')', ',0.1)').replace('rgb','rgba') + ';color:' + curColor + ';font-size:.65rem;font-weight:700;padding:1px 6px;border-radius:3px;margin-left:4px;">' + inv.cur + '</span>';
         return '<div class="inv-pick-row d-flex align-items-center justify-content-between px-3 py-2'
             + (idx > 0 ? ' border-top' : '')
             + '" style="cursor:pointer;transition:background .12s;" id="inv-row-' + inv.id + '"'
@@ -370,18 +375,21 @@ function selectInvoice(idx, cid) {
     badge.style.borderRadius = '8px';
     badge.style.padding = '10px 14px';
     document.getElementById('selectedInvLabel').textContent = inv.num + (inv.bill_no ? ' · Bill ' + inv.bill_no : '') + ' — ' + inv.date;
-    document.getElementById('selectedInvBalance').textContent = 'Balance: ' + fmtCur(inv.bal, inv.cur);
+    // bal_orig is in invoice currency
+    document.getElementById('selectedInvBalance').textContent = 'Balance: ' + fmtCur(inv.bal_orig, inv.cur)
+        + (inv.cur !== 'AFN' ? ' ≈ ' + fmtAFN(inv.bal) : '');
 
-    // Set currency to match invoice
+    // Lock currency to invoice currency — prevent paying PKR invoice in USD by mistake
     const curSel = document.getElementById('currencySelect');
     if (curSel) {
         curSel.value = inv.cur;
+        curSel.disabled = true;
     }
 
-    // Pre-fill amount with balance due
+    // Pre-fill amount with balance in invoice currency (bal_orig)
     const amtInput = document.getElementById('amountInput');
     const dec = inv.cur === 'USD' ? 2 : 0;
-    amtInput.value = parseFloat(inv.bal).toFixed(dec);
+    amtInput.value = parseFloat(inv.bal_orig).toFixed(dec);
     updateConvert();
 }
 
@@ -389,6 +397,9 @@ function clearInvoice() {
     selectedInv = null;
     document.getElementById('saleIdInput').value = '';
     document.getElementById('selectedInvBadge').style.display = 'none';
+    // Unlock currency when no invoice is selected
+    const curSel = document.getElementById('currencySelect');
+    if (curSel) curSel.disabled = false;
     renderInvoices();
 }
 

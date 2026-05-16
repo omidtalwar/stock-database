@@ -40,6 +40,7 @@ $totalSales    = array_sum(array_column($sales, 'total_amount'));
 $totalPayments = 0;
 $paysByCur  = ['AFN'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0],'USD'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0],'PKR'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0]];
 $salesByCur = ['AFN'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0],'USD'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0],'PKR'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0]];
+$debtByCur  = ['AFN'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0],'USD'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0],'PKR'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0]];
 
 foreach ($payments as $p) {
     $afn = (float)$p['amount_afn'] ?: (float)$p['amount'];
@@ -62,6 +63,12 @@ foreach ($sales as $s) {
         $salesByCur[$sCur]['afn']  += $sAfn;
         $salesByCur[$sCur]['cnt']  ++;
     }
+    $sBal = max(0.0, $sAfn - (float)$s['paid_amount']);
+    if ($sBal > 0.01 && isset($debtByCur[$sCur])) {
+        $debtByCur[$sCur]['orig'] += $sCur === 'AFN' ? $sBal : fromAFN($sBal, $sRate);
+        $debtByCur[$sCur]['afn']  += $sBal;
+        $debtByCur[$sCur]['cnt']  ++;
+    }
 }
 
 require_once '../includes/header.php';
@@ -82,41 +89,86 @@ require_once '../includes/header.php';
     </div>
 </div>
 
+<?php
+$cvCurMeta = [
+    'AFN' => ['flag'=>'🇦🇫','col'=>'#107C10'],
+    'USD' => ['flag'=>'🇺🇸','col'=>'#0067C0'],
+    'PKR' => ['flag'=>'🇵🇰','col'=>'#7719AA'],
+];
+?>
+<style>
+.cv-cur-row { display:flex; align-items:center; justify-content:space-between; padding:4px 0; border-bottom:1px solid rgba(0,0,0,0.06); }
+.cv-cur-row:last-child { border-bottom:none; }
+.cv-cur-lbl { font-size:0.72rem; font-weight:700; display:flex; align-items:center; gap:4px; }
+.cv-cur-amt { font-weight:700; font-size:0.88rem; text-align:right; }
+.cv-cur-eq  { font-size:0.65rem; color:#888; text-align:right; }
+.cv-empty   { font-size:0.78rem; color:#888; padding:6px 0; }
+</style>
+
 <div class="row g-3 mb-4">
+
+    <!-- Total Sales -->
     <div class="col-6 col-md-3">
-        <div class="card text-center">
+        <div class="card h-100">
             <div class="card-body py-3">
-                <div class="text-muted small mb-1"><?= __('cust_total_sales') ?></div>
-                <div class="fw-bold"><?= formatAFN($totalSales) ?></div>
-                <div class="text-muted small">≈ <?= formatMoney(fromAFN($totalSales, $rateUSD), 'USD') ?></div>
-                <div class="text-muted small">≈ <?= formatMoney(fromAFN($totalSales, $ratePKR), 'PKR') ?></div>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3">
-        <div class="card text-center">
-            <div class="card-body py-3">
-                <div class="text-muted small mb-1"><?= __('cust_total_paid') ?></div>
-                <div class="fw-bold text-success"><?= formatAFN($totalPayments) ?></div>
-                <div class="text-muted small">≈ <?= formatMoney(fromAFN($totalPayments, $rateUSD), 'USD') ?></div>
-                <div class="text-muted small">≈ <?= formatMoney(fromAFN($totalPayments, $ratePKR), 'PKR') ?></div>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3">
-        <div class="card text-center">
-            <div class="card-body py-3">
-                <div class="text-muted small mb-1"><?= __('cust_current_debt') ?></div>
-                <div class="fw-bold <?= $customer['total_debt'] > 0 ? 'text-danger' : 'text-success' ?>">
-                    <?= formatAFN($customer['total_debt']) ?>
+                <div class="text-muted small mb-2 fw-semibold"><?= __('cust_total_sales') ?></div>
+                <?php $anySales = false; foreach ($cvCurMeta as $cur => $m): $d = $salesByCur[$cur]; if (!$d['cnt']) continue; $anySales = true; ?>
+                <div class="cv-cur-row">
+                    <span class="cv-cur-lbl"><?= $m['flag'] ?> <span style="color:<?= $m['col'] ?>;"><?= $cur ?></span></span>
+                    <div>
+                        <div class="cv-cur-amt" style="color:<?= $m['col'] ?>;"><?= formatMoney($d['orig'], $cur) ?></div>
+                        <?php if ($cur !== 'AFN'): ?><div class="cv-cur-eq">≈ <?= formatAFN($d['afn']) ?></div><?php endif; ?>
+                    </div>
                 </div>
-                <div class="text-muted small">≈ <?= formatMoney(fromAFN($customer['total_debt'], $rateUSD), 'USD') ?></div>
-                <div class="text-muted small">≈ <?= formatMoney(fromAFN($customer['total_debt'], $ratePKR), 'PKR') ?></div>
+                <?php endforeach; if (!$anySales): ?><div class="cv-empty">—</div><?php endif; ?>
+                <div class="text-muted mt-2" style="font-size:0.68rem;"><?= count($sales) ?> invoices total</div>
             </div>
         </div>
     </div>
+
+    <!-- Total Paid -->
     <div class="col-6 col-md-3">
-        <div class="card">
+        <div class="card h-100">
+            <div class="card-body py-3">
+                <div class="text-muted small mb-2 fw-semibold"><?= __('cust_total_paid') ?></div>
+                <?php $anyPaid = false; foreach ($cvCurMeta as $cur => $m): $d = $paysByCur[$cur]; if (!$d['cnt']) continue; $anyPaid = true; ?>
+                <div class="cv-cur-row">
+                    <span class="cv-cur-lbl"><?= $m['flag'] ?> <span style="color:<?= $m['col'] ?>;"><?= $cur ?></span></span>
+                    <div>
+                        <div class="cv-cur-amt" style="color:#107C10;"><?= formatMoney($d['orig'], $cur) ?></div>
+                        <?php if ($cur !== 'AFN'): ?><div class="cv-cur-eq">≈ <?= formatAFN($d['afn']) ?></div><?php endif; ?>
+                    </div>
+                </div>
+                <?php endforeach; if (!$anyPaid): ?><div class="cv-empty text-muted">No payments yet</div><?php endif; ?>
+                <div class="text-muted mt-2" style="font-size:0.68rem;"><?= count($payments) ?> payments total</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Current Debt -->
+    <div class="col-6 col-md-3">
+        <div class="card h-100">
+            <div class="card-body py-3">
+                <div class="text-muted small mb-2 fw-semibold"><?= __('cust_current_debt') ?></div>
+                <?php $anyDebt = false; foreach ($cvCurMeta as $cur => $m): $d = $debtByCur[$cur]; if (!$d['cnt']) continue; $anyDebt = true; ?>
+                <div class="cv-cur-row">
+                    <span class="cv-cur-lbl"><?= $m['flag'] ?> <span style="color:#C42B1C;"><?= $cur ?></span></span>
+                    <div>
+                        <div class="cv-cur-amt" style="color:#C42B1C;"><?= formatMoney($d['orig'], $cur) ?></div>
+                        <?php if ($cur !== 'AFN'): ?><div class="cv-cur-eq">≈ <?= formatAFN($d['afn']) ?></div><?php endif; ?>
+                    </div>
+                </div>
+                <?php endforeach; if (!$anyDebt): ?>
+                <div class="cv-empty text-success fw-semibold">✓ Fully paid</div>
+                <?php endif; ?>
+                <div class="text-muted mt-2" style="font-size:0.68rem;"><?= $anyDebt ? array_sum(array_column($debtByCur,'cnt')).' open invoices' : 'All settled' ?></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Contact -->
+    <div class="col-6 col-md-3">
+        <div class="card h-100">
             <div class="card-body py-3">
                 <div class="text-muted small mb-1"><?= __('cust_contact') ?></div>
                 <div class="fw-semibold"><?= htmlspecialchars($customer['phone'] ?: '—') ?></div>
@@ -126,112 +178,8 @@ require_once '../includes/header.php';
             </div>
         </div>
     </div>
-</div>
 
-<?php
-$curDefs = [
-    'AFN' => ['flag'=>'🇦🇫','sym'=>'؋','col'=>'#107C10','bg'=>'rgba(16,124,16,0.08)','border'=>'rgba(16,124,16,0.20)','badgeStyle'=>'background:rgba(16,124,16,0.10);color:#107C10;border:1px solid rgba(16,124,16,0.25);'],
-    'USD' => ['flag'=>'🇺🇸','sym'=>'$','col'=>'#0067C0','bg'=>'rgba(0,103,192,0.07)','border'=>'rgba(0,103,192,0.20)','badgeStyle'=>'background:rgba(0,103,192,0.10);color:#0067C0;border:1px solid rgba(0,103,192,0.25);'],
-    'PKR' => ['flag'=>'🇵🇰','sym'=>'₨','col'=>'#7719AA','bg'=>'rgba(119,25,170,0.07)','border'=>'rgba(119,25,170,0.20)','badgeStyle'=>'background:rgba(119,25,170,0.10);color:#7719AA;border:1px solid rgba(119,25,170,0.25);'],
-];
-$anySales = array_sum(array_column($salesByCur, 'cnt')) > 0;
-?>
-
-<!-- ── Sales by currency ── -->
-<?php if ($anySales): ?>
-<div class="mb-1 text-muted small fw-semibold" style="letter-spacing:.3px;text-transform:uppercase;font-size:0.65rem;">
-    <i class="bi bi-receipt me-1"></i><?= __('cust_inv_history') ?> — by currency
 </div>
-<div class="row g-2 mb-4">
-    <?php foreach ($curDefs as $cur => $def):
-        $d = $salesByCur[$cur];
-        if ($d['cnt'] === 0) continue;
-    ?>
-    <div class="col-6 col-md-3">
-        <div class="card h-100" style="border-color:<?= $def['border'] ?>;background:<?= $def['bg'] ?>;">
-            <div class="card-body py-3 text-center">
-                <div class="mb-2">
-                    <span style="<?= $def['badgeStyle'] ?>font-size:0.72rem;font-weight:700;padding:3px 10px;border-radius:20px;">
-                        <?= $def['flag'] ?> <?= $cur ?>
-                    </span>
-                </div>
-                <div class="fw-bold" style="font-size:1.05rem;color:<?= $def['col'] ?>;">
-                    <?= formatMoney($d['orig'], $cur) ?>
-                </div>
-                <?php if ($cur !== 'AFN'): ?>
-                <div class="text-muted" style="font-size:0.72rem;">≈ <?= formatAFN($d['afn']) ?></div>
-                <?php endif; ?>
-                <div class="mt-1" style="font-size:0.7rem;color:<?= $def['col'] ?>;">
-                    <?= $d['cnt'] ?> invoice<?= $d['cnt'] != 1 ? 's' : '' ?>
-                </div>
-            </div>
-        </div>
-    </div>
-    <?php endforeach; ?>
-    <div class="col-6 col-md-3">
-        <div class="card h-100" style="background:rgba(0,0,0,0.02);">
-            <div class="card-body py-3 text-center">
-                <div class="mb-2">
-                    <span style="background:rgba(28,28,28,0.07);color:#333;font-size:0.72rem;font-weight:700;padding:3px 10px;border-radius:20px;">
-                        🌐 Total
-                    </span>
-                </div>
-                <div class="fw-bold" style="font-size:1.05rem;color:#333;"><?= formatAFN($totalSales) ?></div>
-                <div class="text-muted" style="font-size:0.72rem;">≈ <?= formatMoney(fromAFN($totalSales,$rateUSD),'USD') ?></div>
-                <div class="text-muted" style="font-size:0.72rem;">≈ <?= formatMoney(fromAFN($totalSales,$ratePKR),'PKR') ?></div>
-            </div>
-        </div>
-    </div>
-</div>
-<?php endif; ?>
-
-<!-- ── Payments by currency ── -->
-<?php if ($totalPayments > 0): ?>
-<div class="mb-1 text-muted small fw-semibold" style="letter-spacing:.3px;text-transform:uppercase;font-size:0.65rem;">
-    <i class="bi bi-cash-coin me-1"></i><?= __('cust_pay_history') ?> — by currency
-</div>
-<div class="row g-2 mb-4">
-    <?php foreach ($curDefs as $cur => $def):
-        $d = $paysByCur[$cur];
-        if ($d['cnt'] === 0) continue;
-    ?>
-    <div class="col-6 col-md-3">
-        <div class="card h-100" style="border-color:<?= $def['border'] ?>;background:<?= $def['bg'] ?>;">
-            <div class="card-body py-3 text-center">
-                <div class="mb-2">
-                    <span style="<?= $def['badgeStyle'] ?>font-size:0.72rem;font-weight:700;padding:3px 10px;border-radius:20px;">
-                        <?= $def['flag'] ?> <?= $cur ?>
-                    </span>
-                </div>
-                <div class="fw-bold" style="font-size:1.05rem;color:<?= $def['col'] ?>;">
-                    <?= formatMoney($d['orig'], $cur) ?>
-                </div>
-                <?php if ($cur !== 'AFN'): ?>
-                <div class="text-muted" style="font-size:0.72rem;">≈ <?= formatAFN($d['afn']) ?></div>
-                <?php endif; ?>
-                <div class="mt-1" style="font-size:0.7rem;color:<?= $def['col'] ?>;">
-                    <?= $d['cnt'] ?> payment<?= $d['cnt'] != 1 ? 's' : '' ?>
-                </div>
-            </div>
-        </div>
-    </div>
-    <?php endforeach; ?>
-    <div class="col-6 col-md-3">
-        <div class="card h-100" style="background:rgba(16,124,16,0.04);border-color:rgba(16,124,16,0.20);">
-            <div class="card-body py-3 text-center">
-                <div class="mb-2">
-                    <span style="background:rgba(28,28,28,0.07);color:#333;font-size:0.72rem;font-weight:700;padding:3px 10px;border-radius:20px;">
-                        🌐 Total Paid
-                    </span>
-                </div>
-                <div class="fw-bold text-success" style="font-size:1.05rem;"><?= formatAFN($totalPayments) ?></div>
-                <div class="text-muted" style="font-size:0.72rem;">≈ <?= formatMoney(fromAFN($totalPayments,$rateUSD),'USD') ?></div>
-                <div class="text-muted" style="font-size:0.72rem;">≈ <?= formatMoney(fromAFN($totalPayments,$ratePKR),'PKR') ?></div>
-            </div>
-        </div>
-    </div>
-</div>
-<?php endif; ?>
 
 <div class="row g-3">
     <div class="col-lg-7">
