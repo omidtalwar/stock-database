@@ -424,10 +424,10 @@ require_once '../includes/header.php';
             <div class="card-header fw-semibold"><?= __('sale_summary') ?></div>
             <div class="card-body">
                 <div class="d-flex justify-content-between mb-2">
-                    <span class="text-muted"><?= __('sale_subtotal') ?></span>
+                    <span class="text-muted" id="summaryTotalLabel"><?= __('field_total') ?></span>
                     <span class="fw-semibold" id="summaryTotal">؋ 0</span>
                 </div>
-                <div class="d-flex justify-content-between mb-1 text-muted small">
+                <div class="d-flex justify-content-between mb-1 text-muted small" id="summaryAfnRow">
                     <span>≈ ؋ AFN</span>
                     <span id="summaryTotalSec">—</span>
                 </div>
@@ -454,13 +454,17 @@ require_once '../includes/header.php';
                     </div>
                     <div class="text-muted small mt-1" id="paidConvert" style="display:none;"></div>
                 </div>
-                <div class="d-flex justify-content-between mb-1">
-                    <span class="text-muted small"><?= __('sale_paid_afn') ?></span>
+                <div class="d-flex justify-content-between mb-1" id="paidAfnRow">
+                    <span class="text-muted small" id="paidAfnLabel">؋ AFN</span>
                     <span class="text-success small fw-semibold" id="paidAfnDisplay">؋ 0</span>
                 </div>
                 <div class="d-flex justify-content-between mb-1">
                     <span class="fw-semibold"><?= __('sale_remaining') ?></span>
                     <span class="fw-bold text-danger" id="summaryBalance">؋ 0</span>
+                </div>
+                <div class="d-flex justify-content-between mb-1 text-muted small" id="summaryBalanceAfnRow" style="display:none;">
+                    <span>≈ ؋ AFN</span>
+                    <span id="summaryBalanceAfn">—</span>
                 </div>
                 <div class="d-flex justify-content-between mb-3 text-muted small">
                     <span>≈ ₨ PKR</span>
@@ -665,27 +669,45 @@ function updateSummary() {
     const paidAfn   = paidInput * (ALL_RATES_INV[paidCur] || 1);
     const balance   = Math.max(0, totalAfn - paidAfn);
 
-    // Summary in sale currency
-    const r = saleRate();
-    const totalSale = r > 0 ? totalAfn / r : totalAfn;
-    const ratePKR = ALL_RATES_INV['PKR'] || 0.25;
-    const totalPKR = ratePKR > 0 ? totalAfn / ratePKR : 0;
+    const cur     = saleCur();
+    const sym     = saleSym();
+    const r       = saleRate();
+    const isAfn   = cur === 'AFN';
 
-    const balancePKR = ratePKR > 0 ? balance / ratePKR : 0;
+    const totalSale   = r > 0 ? totalAfn / r : totalAfn;
+    const balanceSale = r > 0 ? balance  / r : balance;
+    const ratePKR     = ALL_RATES_INV['PKR'] || 0.25;
+    const totalPKR    = ratePKR > 0 ? totalAfn / ratePKR : 0;
+    const balancePKR  = ratePKR > 0 ? balance  / ratePKR : 0;
 
-    document.getElementById('summaryTotal').textContent      = fmtSale(totalSale);
-    document.getElementById('summaryTotalSec').textContent   = fmtAFN_inv(totalAfn) + ' AFN';
-    document.getElementById('summaryTotalPKR').textContent   = '₨ ' + Math.round(totalPKR).toLocaleString('en-US');
-    document.getElementById('paidAfnDisplay').textContent    = fmtAFN_inv(paidAfn);
-    document.getElementById('summaryBalance').textContent    = fmtAFN_inv(balance);
-    document.getElementById('summaryBalancePKR').textContent = '₨ ' + Math.round(balancePKR).toLocaleString('en-US');
+    // Update labels to reflect sale currency
+    document.getElementById('summaryTotalLabel').textContent = sym + ' ' + cur + ' Total';
+
+    // AFN equivalent rows — only useful when sale currency ≠ AFN
+    const afnRow = document.getElementById('summaryAfnRow');
+    if (afnRow) afnRow.style.display = isAfn ? 'none' : '';
+
+    const balAfnRow = document.getElementById('summaryBalanceAfnRow');
+    if (balAfnRow) balAfnRow.style.display = isAfn ? 'none' : '';
+
+    // Paid-in-AFN row — only useful when paid currency ≠ AFN
+    const paidAfnRow = document.getElementById('paidAfnRow');
+    if (paidAfnRow) paidAfnRow.style.display = (paidCur === 'AFN') ? 'none' : '';
+
+    document.getElementById('summaryTotal').textContent         = fmtSale(totalSale);
+    document.getElementById('summaryTotalSec').textContent      = fmtAFN_inv(totalAfn);
+    document.getElementById('summaryTotalPKR').textContent      = '₨ ' + Math.round(totalPKR).toLocaleString('en-US');
+    document.getElementById('paidAfnDisplay').textContent       = fmtAFN_inv(paidAfn);
+    document.getElementById('summaryBalance').textContent       = fmtSale(balanceSale);
+    document.getElementById('summaryBalanceAfn').textContent    = fmtAFN_inv(balance);
+    document.getElementById('summaryBalancePKR').textContent    = '₨ ' + Math.round(balancePKR).toLocaleString('en-US');
 
     const hint = document.getElementById('paidConvert');
     if (paidCur !== 'AFN' && paidInput > 0) {
         const paidR = ALL_RATES_INV[paidCur] || 1;
-        const sym   = CURRENCIES_INV[paidCur]?.symbol || paidCur;
+        const paidSym = CURRENCIES_INV[paidCur]?.symbol || paidCur;
         hint.style.display = '';
-        hint.innerHTML = `${sym} ${paidInput.toLocaleString()} × ${paidR} = <strong>${fmtAFN_inv(paidAfn)}</strong>`;
+        hint.innerHTML = `${paidSym} ${paidInput.toLocaleString()} × ${paidR} = <strong>${fmtAFN_inv(paidAfn)}</strong>`;
     } else {
         hint.style.display = 'none';
     }

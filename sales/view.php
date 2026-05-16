@@ -145,9 +145,22 @@ require_once '../includes/header.php';
         </div>
 
         <div class="card mt-3">
-            <div class="card-header fw-semibold"><?= __('sale_items') ?></div>
+            <div class="card-header fw-semibold d-flex align-items-center justify-content-between gap-2 flex-wrap">
+                <span><?= __('sale_items') ?></span>
+                <div class="d-flex align-items-center gap-2">
+                    <div class="input-group input-group-sm" style="max-width:220px;">
+                        <span class="input-group-text bg-white border-end-0 text-muted" style="border-radius:8px 0 0 8px;">
+                            <i class="bi bi-search" style="font-size:0.78rem;"></i>
+                        </span>
+                        <input type="text" id="itemSearch" class="form-control border-start-0 ps-0"
+                               placeholder="Search items…" oninput="filterItems()"
+                               style="border-radius:0 8px 8px 0;">
+                    </div>
+                    <span id="itemCount" class="text-muted small" style="white-space:nowrap;"></span>
+                </div>
+            </div>
             <div class="table-responsive">
-                <table class="table align-middle mb-0">
+                <table class="table align-middle mb-0" id="itemsTable">
                     <thead>
                         <tr>
                             <th>#</th>
@@ -205,6 +218,9 @@ require_once '../includes/header.php';
                         </tr>
                     </tfoot>
                 </table>
+                <div id="itemNoResults" style="display:none;" class="text-center text-muted py-4 small">
+                    <i class="bi bi-search me-1"></i> No items match your search.
+                </div>
             </div>
         </div>
     </div>
@@ -380,6 +396,23 @@ require_once '../includes/header.php';
 </style>
 
 <script>
+function filterItems() {
+    const q = document.getElementById('itemSearch').value.trim().toLowerCase();
+    const table = document.getElementById('itemsTable');
+    const rows = table.querySelectorAll('tbody tr');
+    let visible = 0;
+    rows.forEach(row => {
+        const text = row.textContent.toLowerCase();
+        const show = !q || text.includes(q);
+        row.style.display = show ? '' : 'none';
+        if (show) visible++;
+    });
+    const total = rows.length;
+    const countEl = document.getElementById('itemCount');
+    countEl.textContent = q ? visible + ' of ' + total : '';
+    document.getElementById('itemNoResults').style.display = (q && visible === 0) ? '' : 'none';
+}
+
 function copyShareLink(btn) {
     const url = <?= json_encode($shareUrl) ?>;
     navigator.clipboard.writeText(url).then(() => {
