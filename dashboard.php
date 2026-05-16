@@ -133,6 +133,21 @@ $topDebtors = $pdo->query("
         'collected'   => (float)$pdo->query("SELECT COALESCE(SUM(paid_amount),0) FROM sales s WHERE $pwSales")->fetchColumn(),
         'payments'    => (float)$pdo->query("SELECT COALESCE(SUM(COALESCE(NULLIF(amount_afn,0),amount)),0) FROM payments p WHERE $pwPay")->fetchColumn(),
     ];
+
+    // Payments by currency (from payments table, period-filtered)
+    $paysByC = $pdo->query("
+        SELECT COALESCE(p.currency,'AFN') AS currency,
+               SUM(p.amount) AS orig,
+               SUM(COALESCE(NULLIF(p.amount_afn,0), p.amount)) AS afn,
+               COUNT(*) AS cnt
+        FROM payments p WHERE $pwPay
+        GROUP BY COALESCE(p.currency,'AFN')
+    ")->fetchAll(PDO::FETCH_ASSOC);
+    $paysCurData = ['AFN'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0],'USD'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0],'PKR'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0]];
+    foreach ($paysByC as $_r) {
+        $_c = $_r['currency'] ?: 'AFN'; if (!array_key_exists($_c, $paysCurData)) continue;
+        $paysCurData[$_c] = ['orig'=>(float)$_r['orig'], 'afn'=>(float)$_r['afn'], 'cnt'=>(int)$_r['cnt']];
+    }
 } else {
     // PIN not verified — supply zero-value placeholders so real data never enters the HTML
     $periodSales = 0; $periodCount = 0; $totalDebt = 0;
@@ -142,6 +157,7 @@ $topDebtors = $pdo->query("
     $grandAfn     = 0;
     $debtCurData  = array_fill_keys(['AFN','USD','PKR'], ['afn'=>0.0,'orig'=>0.0,'cnt'=>0]);
     $collCurData  = array_fill_keys(['AFN','USD','PKR'], ['afn'=>0.0,'orig'=>0.0,'cnt'=>0]);
+    $paysCurData  = array_fill_keys(['AFN','USD','PKR'], ['orig'=>0.0,'afn'=>0.0,'cnt'=>0]);
     $recentSales  = [];
     $topDebtors   = [];
     $adminStats   = ['total_sales'=>0,'collected'=>0,'payments'=>0];
@@ -410,12 +426,15 @@ body { font-family: 'Segoe UI Variable', 'Noto Naskh Arabic', 'Segoe UI', system
 .breakdown-hdr { padding:10px 18px; font-size:0.8rem; font-weight:700; display:flex; align-items:center; justify-content:space-between; }
 .breakdown-close { width:22px;height:22px;border-radius:50%;border:none;background:rgba(0,0,0,0.1);color:inherit;cursor:pointer;font-size:0.75rem;display:flex;align-items:center;justify-content:center;transition:background .15s; }
 .breakdown-close:hover { background:rgba(0,0,0,0.2); }
-.stat-card.clickable { cursor:pointer; position:relative; }
-.stat-card.clickable:after { content:''; position:absolute; inset:0; border-radius:var(--w11-radius-lg); transition:background .15s; }
-.stat-card.clickable:hover:after { background:rgba(0,0,0,0.025); }
-.stat-expand-hint { font-size:0.68rem; color:var(--w11-muted); display:flex; align-items:center; gap:3px; margin-top:4px; transition:color .15s; }
-.stat-card.clickable:hover .stat-expand-hint { color:var(--w11-blue); }
-.stat-card.active-card { box-shadow:0 0 0 2px var(--w11-blue), var(--w11-shadow-md); }
+.cur-rows { display:flex; flex-direction:column; gap:0; margin:6px 0 2px; }
+.cur-row { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid rgba(0,0,0,0.05); }
+.cur-row:last-child { border-bottom:none; }
+.cur-row-label { font-size:0.7rem; font-weight:700; display:flex; align-items:center; gap:4px; min-width:52px; white-space:nowrap; }
+.cur-row-val { flex:1; }
+.cur-row-amt { font-weight:700; font-size:0.92rem; display:block; line-height:1.2; }
+.cur-row-equiv { font-size:0.65rem; color:var(--w11-muted); }
+.cur-row-cnt { font-size:0.65rem; color:var(--w11-muted); white-space:nowrap; text-align:right; }
+.cur-empty { font-size:0.8rem; color:var(--w11-muted); text-align:center; padding:10px 0; }
 .admin-bar-item { text-align: center; }
 .admin-bar-item .lbl { font-size: 0.68rem; font-weight: 700; <?php if (!isRTL()): ?>text-transform: uppercase; letter-spacing: .5px;<?php endif; ?> color: var(--w11-muted); margin-bottom: 4px; }
 .admin-bar-item .val { font-size: 1rem; font-weight: 700; }
@@ -755,41 +774,89 @@ body.pin-locked .debtor-debt .s { filter: blur(7px); user-select: none; pointer-
             <?php endforeach; ?>
         </div>
 
+        <?php
+        // Currency meta used across all 3 cards
+        $dashCurMeta = [
+            'AFN' => ['flag'=>'🇦🇫','col'=>'#107C10'],
+            'USD' => ['flag'=>'🇺🇸','col'=>'#0067C0'],
+            'PKR' => ['flag'=>'🇵🇰','col'=>'#7719AA'],
+        ];
+        ?>
+
         <!-- Stat cards -->
         <div class="stat-grid">
+
+            <!-- Sales by currency -->
             <div class="stat-card">
                 <div class="stat-top">
                     <span class="stat-label"><?= $periodLabels[$period] ?> <?= __('nav_sales') ?></span>
                     <div class="stat-icon ic-red"><i class="bi bi-receipt"></i></div>
                 </div>
-                <div class="stat-value"><?= formatAFN($periodSales) ?></div>
-                <div class="stat-sec">≈ <?= formatMoney(fromAFN($periodSales, $rateUSD), 'USD') ?> · <?= formatMoney(fromAFN($periodSales, $ratePKR), 'PKR') ?></div>
-                <div class="stat-foot"><?= $periodCount ?> <?= __('rep_invoices') ?></div>
+                <div class="cur-rows">
+                <?php $anySales = false; foreach ($dashCurMeta as $cur => $m): $d = $curBreakdown[$cur]; if ($d['cnt'] === 0) continue; $anySales = true; ?>
+                <div class="cur-row">
+                    <div class="cur-row-label"><?= $m['flag'] ?> <span style="color:<?= $m['col'] ?>;"><?= $cur ?></span></div>
+                    <div class="cur-row-val">
+                        <span class="cur-row-amt" style="color:<?= $m['col'] ?>;"><?= formatMoney($d['orig'], $cur) ?></span>
+                        <?php if ($cur !== 'AFN'): ?><span class="cur-row-equiv">≈ <?= formatAFN($d['afn']) ?></span><?php endif; ?>
+                    </div>
+                    <div class="cur-row-cnt"><?= $d['cnt'] ?> inv</div>
+                </div>
+                <?php endforeach; if (!$anySales): ?>
+                <div class="cur-empty"><?= __('dash_no_inv') ?></div>
+                <?php endif; ?>
+                </div>
+                <div class="stat-foot"><?= $periodCount ?> <?= __('rep_invoices') ?> total</div>
             </div>
 
-            <div class="stat-card clickable" id="stat-receivable" onclick="toggleBreakdown('receivable')">
+            <!-- Receivable by currency -->
+            <div class="stat-card">
                 <div class="stat-top">
                     <span class="stat-label"><?= __('dash_receivable') ?></span>
                     <div class="stat-icon ic-amber"><i class="bi bi-cash-coin"></i></div>
                 </div>
-                <div class="stat-value" style="color:var(--w11-red)"><?= formatAFN($totalDebt) ?></div>
-                <div class="stat-sec">≈ <?= formatMoney(fromAFN($totalDebt, $rateUSD), 'USD') ?> · <?= formatMoney(fromAFN($totalDebt, $ratePKR), 'PKR') ?></div>
-                <div class="stat-foot"><?= __('dash_outstanding') ?></div>
-                <div class="stat-expand-hint"><i class="bi bi-chevron-down" id="chevron-receivable"></i> by currency</div>
+                <div class="cur-rows">
+                <?php $anyDebt = false; foreach ($dashCurMeta as $cur => $m): $d = $debtCurData[$cur]; if ($d['cnt'] === 0) continue; $anyDebt = true; ?>
+                <div class="cur-row">
+                    <div class="cur-row-label"><?= $m['flag'] ?> <span style="color:var(--w11-red);"><?= $cur ?></span></div>
+                    <div class="cur-row-val">
+                        <span class="cur-row-amt" style="color:var(--w11-red);"><?= formatMoney($d['orig'], $cur) ?></span>
+                        <?php if ($cur !== 'AFN'): ?><span class="cur-row-equiv">≈ <?= formatAFN($d['afn']) ?></span><?php endif; ?>
+                    </div>
+                    <div class="cur-row-cnt"><?= $d['cnt'] ?> inv</div>
+                </div>
+                <?php endforeach; if (!$anyDebt): ?>
+                <div class="cur-empty" style="color:var(--w11-green);">✓ <?= __('dash_no_debts') ?></div>
+                <?php endif; ?>
+                </div>
+                <div class="stat-foot"><?= $withDebt ?> <?= __('dash_open_balance') ?></div>
             </div>
 
-            <div class="stat-card clickable" id="stat-collected" onclick="toggleBreakdown('collected')">
+            <!-- Collected (payments received) by currency -->
+            <div class="stat-card">
                 <div class="stat-top">
                     <span class="stat-label">Total Collected</span>
                     <div class="stat-icon ic-green"><i class="bi bi-cash-stack"></i></div>
                 </div>
+                <div class="cur-rows">
+                <?php $anyPays = false; foreach ($dashCurMeta as $cur => $m): $d = $paysCurData[$cur]; if ($d['cnt'] === 0) continue; $anyPays = true; ?>
+                <div class="cur-row">
+                    <div class="cur-row-label"><?= $m['flag'] ?> <span style="color:<?= $m['col'] ?>;"><?= $cur ?></span></div>
+                    <div class="cur-row-val">
+                        <span class="cur-row-amt" style="color:<?= $m['col'] ?>;"><?= formatMoney($d['orig'], $cur) ?></span>
+                        <?php if ($cur !== 'AFN'): ?><span class="cur-row-equiv">≈ <?= formatAFN($d['afn']) ?></span><?php endif; ?>
+                    </div>
+                    <div class="cur-row-cnt"><?= $d['cnt'] ?> pay</div>
+                </div>
+                <?php endforeach; if (!$anyPays): ?>
+                <div class="cur-empty">No payments yet</div>
+                <?php endif; ?>
+                </div>
                 <?php $totalCollected = ($adminStats['collected'] ?? 0) + ($adminStats['payments'] ?? 0); ?>
-                <div class="stat-value" style="color:var(--w11-green)"><?= formatAFN($totalCollected) ?></div>
-                <div class="stat-sec">≈ <?= formatMoney(fromAFN($totalCollected,$rateUSD),'USD') ?> · <?= formatMoney(fromAFN($totalCollected,$ratePKR),'PKR') ?></div>
-                <div class="stat-foot">At invoice <?= formatAFN($adminStats['collected']??0) ?> + Payments <?= formatAFN($adminStats['payments']??0) ?></div>
-                <div class="stat-expand-hint"><i class="bi bi-chevron-down" id="chevron-collected"></i> by currency</div>
+                <div class="stat-foot">≈ <?= formatAFN($totalCollected) ?> total</div>
             </div>
 
+            <!-- Customers -->
             <div class="stat-card">
                 <div class="stat-top">
                     <span class="stat-label"><?= __('dash_customers') ?></span>
@@ -799,78 +866,6 @@ body.pin-locked .debtor-debt .s { filter: blur(7px); user-select: none; pointer-
                 <div class="stat-sec"><?= __('dash_shopkeepers') ?></div>
                 <div class="stat-foot"><?= $withDebt ?> <?= __('dash_open_balance') ?></div>
             </div>
-        </div>
-
-        <!-- Receivable breakdown panel (toggled by clicking Receivable card) -->
-        <div id="breakdown-receivable" class="breakdown-panel">
-            <div class="breakdown-hdr" style="background:rgba(157,93,0,0.07);color:var(--w11-amber);">
-                <span><i class="bi bi-cash-coin me-2"></i>Receivable — by Invoice Currency</span>
-                <button class="breakdown-close" onclick="toggleBreakdown('receivable')">✕</button>
-            </div>
-            <div class="cur-break-bar" style="margin-bottom:0;border-radius:0;border:none;background:rgba(157,93,0,0.03);">
-                <?php
-                $debtMeta = [
-                    'AFN' => ['sym'=>'؋','flag'=>'🇦🇫','col'=>'#9D5D00','bg'=>'rgba(157,93,0,0.10)'],
-                    'USD' => ['sym'=>'$','flag'=>'🇺🇸','col'=>'#0067C0','bg'=>'rgba(0,103,192,0.10)'],
-                    'PKR' => ['sym'=>'₨','flag'=>'🇵🇰','col'=>'#7719AA','bg'=>'rgba(119,25,170,0.10)'],
-                ];
-                // Use $totalDebt (from customers.total_debt) as the authoritative total —
-                // it reflects payments recorded after invoice creation, unlike the per-currency SUM.
-                $debtGrand = $totalDebt;
-                foreach ($debtMeta as $cur => $meta): $d = $debtCurData[$cur]; ?>
-                <div class="cur-cell">
-                    <div><span class="cur-pill" style="background:<?= $meta['bg'] ?>;color:<?= $meta['col'] ?>;"><?= $meta['flag'] ?> <?= $meta['sym'] ?> <?= $cur ?></span></div>
-                    <div class="cur-val" style="color:<?= $d['cnt']>0?$meta['col']:'var(--w11-muted)' ?>;"><?= formatMoney($d['orig'],$cur) ?></div>
-                    <?php if ($cur!=='AFN' && $d['cnt']>0): ?><div class="cur-sub">≈ <?= formatAFN($d['afn']) ?></div><?php endif; ?>
-                    <div class="cur-sub mt-1"><?= $d['cnt'] ?> invoices</div>
-                </div>
-                <?php endforeach; ?>
-                <div class="cur-cell">
-                    <div><span class="cur-pill" style="background:rgba(196,43,28,0.08);color:var(--w11-red);">🌐 ∑ Total Owed</span></div>
-                    <div class="cur-val" style="color:var(--w11-red);"><?= formatAFN($debtGrand) ?></div>
-                    <div class="cur-sub">≈ <?= formatMoney(fromAFN($debtGrand,$rateUSD),'USD') ?></div>
-                    <div class="cur-sub">≈ <?= formatMoney(fromAFN($debtGrand,$ratePKR),'PKR') ?></div>
-                    <div class="cur-sub mt-1" style="font-size:0.62rem;opacity:.65;">from customer ledger</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Collected breakdown panel (toggled by clicking Total Collected card) -->
-        <div id="breakdown-collected" class="breakdown-panel">
-            <div class="breakdown-hdr" style="background:rgba(16,124,16,0.07);color:var(--w11-green);">
-                <span><i class="bi bi-cash-stack me-2"></i>Collected at Invoice — by Invoice Currency</span>
-                <button class="breakdown-close" onclick="toggleBreakdown('collected')">✕</button>
-            </div>
-            <div class="cur-break-bar" style="margin-bottom:0;border-radius:0;border:none;background:rgba(16,124,16,0.03);">
-                <?php
-                $collMeta = [
-                    'AFN' => ['sym'=>'؋','flag'=>'🇦🇫','col'=>'#107C10','bg'=>'rgba(16,124,16,0.10)'],
-                    'USD' => ['sym'=>'$','flag'=>'🇺🇸','col'=>'#0067C0','bg'=>'rgba(0,103,192,0.10)'],
-                    'PKR' => ['sym'=>'₨','flag'=>'🇵🇰','col'=>'#7719AA','bg'=>'rgba(119,25,170,0.10)'],
-                ];
-                $collGrand = array_sum(array_column($collCurData,'afn'));
-                foreach ($collMeta as $cur => $meta): $d = $collCurData[$cur]; ?>
-                <div class="cur-cell">
-                    <div><span class="cur-pill" style="background:<?= $meta['bg'] ?>;color:<?= $meta['col'] ?>;"><?= $meta['flag'] ?> <?= $meta['sym'] ?> <?= $cur ?></span></div>
-                    <div class="cur-val" style="color:<?= $d['cnt']>0?$meta['col']:'var(--w11-muted)' ?>;"><?= formatMoney($d['orig'],$cur) ?></div>
-                    <?php if ($cur!=='AFN' && $d['cnt']>0): ?><div class="cur-sub">≈ <?= formatAFN($d['afn']) ?></div><?php endif; ?>
-                    <div class="cur-sub mt-1"><?= $d['cnt'] ?> invoices</div>
-                </div>
-                <?php endforeach; ?>
-                <div class="cur-cell">
-                    <div><span class="cur-pill" style="background:rgba(16,124,16,0.10);color:var(--w11-green);">🌐 ∑ Total</span></div>
-                    <div class="cur-val" style="color:var(--w11-green);"><?= formatAFN($collGrand) ?></div>
-                    <div class="cur-sub">≈ <?= formatMoney(fromAFN($collGrand,$rateUSD),'USD') ?></div>
-                    <div class="cur-sub">≈ <?= formatMoney(fromAFN($collGrand,$ratePKR),'PKR') ?></div>
-                </div>
-            </div>
-            <?php if (($adminStats['payments']??0) > 0): ?>
-            <div style="padding:8px 18px 10px;background:rgba(16,124,16,0.03);border-top:1px solid rgba(16,124,16,0.08);font-size:0.78rem;color:var(--w11-muted);display:flex;align-items:center;gap:8px;">
-                <i class="bi bi-plus-circle-fill" style="color:var(--w11-green);"></i>
-                Separate payment records: <strong style="color:var(--w11-green);"><?= formatAFN($adminStats['payments']) ?></strong>
-                <span>(≈ <?= formatMoney(fromAFN($adminStats['payments'],$rateUSD),'USD') ?> · <?= formatMoney(fromAFN($adminStats['payments'],$ratePKR),'PKR') ?>)</span>
-            </div>
-            <?php endif; ?>
         </div>
 
 
@@ -978,25 +973,6 @@ body.pin-locked .debtor-debt .s { filter: blur(7px); user-select: none; pointer-
 </div>
 
 <script>
-// ── Breakdown panel toggle ──
-function toggleBreakdown(type) {
-    const panel   = document.getElementById('breakdown-' + type);
-    const chevron = document.getElementById('chevron-' + type);
-    const card    = document.getElementById('stat-' + type);
-    const isOpen  = panel.style.display === 'block';
-    // Close all panels first
-    document.querySelectorAll('.breakdown-panel').forEach(p => p.style.display = 'none');
-    document.querySelectorAll('[id^="chevron-"]').forEach(c => { c.style.transform = ''; });
-    document.querySelectorAll('.stat-card.clickable').forEach(c => c.classList.remove('active-card'));
-    if (!isOpen) {
-        panel.style.display = 'block';
-        chevron.style.transform = 'rotate(180deg)';
-        chevron.style.transition = 'transform .2s ease';
-        card.classList.add('active-card');
-        panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-}
-
 // ── Sidebar ──
 const ham  = document.getElementById('hamburger');
 const side = document.getElementById('sidebar');
