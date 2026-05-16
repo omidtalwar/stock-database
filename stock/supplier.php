@@ -114,15 +114,18 @@ if (!$stats || !$stats['txn_count']) {
     exit;
 }
 
-// Running balance map: cumulative unpaid from oldest → newest transaction
+// Running balance map: cumulative unpaid from oldest → newest, all converted to AFN
 $runningRows = $pdo->prepare(
-    "SELECT id, balance FROM stock_logs WHERE supplier = ? ORDER BY created_at ASC, id ASC"
+    "SELECT id, balance, COALESCE(currency,'AFN') AS currency FROM stock_logs WHERE supplier = ? ORDER BY created_at ASC, id ASC"
 );
 $runningRows->execute([$supplierName]);
 $runningMap = [];
 $cumulative = 0;
 foreach ($runningRows->fetchAll() as $r) {
-    $cumulative += (float)$r['balance'];
+    $cur  = $r['currency'];
+    $rate = $rates[$cur] ?? 1.0;
+    $balAfn = $cur === 'AFN' ? (float)$r['balance'] : (float)$r['balance'] * $rate;
+    $cumulative += $balAfn;
     $runningMap[(int)$r['id']] = $cumulative;
 }
 
@@ -380,6 +383,8 @@ $rateUSD = $rates['USD']; $ratePKR = $rates['PKR'];
                 <?php else: ?>
                 <?php foreach ($logs as $log):
                     $isPayment = ($log['custom_product'] === '_payment_');
+                    $lCur  = $log['currency'] ?? 'AFN';
+                    $lRate = $rates[$lCur] ?? 1.0;
                 ?>
                 <tr class="<?= $isPayment ? 'table-success' : '' ?>">
                     <td style="max-width:160px;">
@@ -412,18 +417,39 @@ $rateUSD = $rates['USD']; $ratePKR = $rates['PKR'];
                     </td>
                     <td class="fw-semibold text-end text-nowrap"><?= !$isPayment ? number_format($log['quantity']).' pcs' : '—' ?></td>
                     <td class="text-end text-muted"><?= (!$isPayment && $log['bundle_count']) ? number_format($log['bundle_count']) : '—' ?></td>
-                    <td class="text-end text-muted"><?= (!$isPayment && $log['unit_price']) ? '؋'.number_format($log['unit_price'], 0) : '—' ?></td>
-                    <td class="text-end text-nowrap"><?= (!$isPayment && $log['total_amount']) ? '؋'.number_format($log['total_amount'], 0) : '—' ?></td>
+                    <td class="text-end text-muted">
+                        <?php if (!$isPayment && $log['unit_price']): ?>
+                            <div><?= formatMoney((float)$log['unit_price'], $lCur) ?></div>
+                            <?php if ($lCur !== 'AFN'): ?><div class="text-muted" style="font-size:0.7rem;">≈ <?= formatAFN((float)$log['unit_price'] * $lRate) ?></div><?php endif; ?>
+                        <?php else: ?>—<?php endif; ?>
+                    </td>
+                    <td class="text-end text-nowrap">
+                        <?php if (!$isPayment && $log['total_amount']): ?>
+                            <div class="fw-semibold"><?= formatMoney((float)$log['total_amount'], $lCur) ?></div>
+                            <?php if ($lCur !== 'AFN'): ?><div class="text-muted" style="font-size:0.7rem;">≈ <?= formatAFN((float)$log['total_amount'] * $lRate) ?></div><?php endif; ?>
+                        <?php else: ?>—<?php endif; ?>
+                    </td>
                     <td class="text-end text-success fw-semibold text-nowrap">
-                        <?= $log['paid_amount'] > 0 ? '؋'.number_format($log['paid_amount'], 0) : '—' ?>
+                        <?php if ($log['paid_amount'] > 0): ?>
+                            <div><?= formatMoney((float)$log['paid_amount'], $lCur) ?></div>
+                            <?php if ($lCur !== 'AFN'): ?><div class="text-muted fw-normal" style="font-size:0.7rem;">≈ <?= formatAFN((float)$log['paid_amount'] * $lRate) ?></div><?php endif; ?>
+                        <?php else: ?>—<?php endif; ?>
                     </td>
                     <td class="text-end fw-semibold text-nowrap <?= $log['balance'] > 0 ? 'text-danger' : ($log['balance'] < 0 ? 'text-success' : 'text-muted') ?>">
-                        <?= $log['balance'] != 0 ? '؋'.number_format(abs($log['balance']), 0).($log['balance'] < 0 ? ' credit' : '') : '—' ?>
+                        <?php if ($log['balance'] != 0): ?>
+                            <div><?= formatMoney(abs((float)$log['balance']), $lCur) ?><?= $log['balance'] < 0 ? ' <small>cr</small>' : '' ?></div>
+                            <?php if ($lCur !== 'AFN'): ?><div class="text-muted fw-normal" style="font-size:0.7rem;">≈ <?= formatAFN(abs((float)$log['balance']) * $lRate) ?></div><?php endif; ?>
+                        <?php else: ?>—<?php endif; ?>
                     </td>
                     <?php $ending = $runningMap[(int)$log['id']] ?? 0; ?>
-                    <td class="text-end fw-bold text-nowrap <?= $ending > 0 ? 'text-danger' : 'text-success' ?>"
-                        title="Total unpaid up to this transaction">
-                        <?= $ending > 0 ? '؋'.number_format($ending, 0) : '<span class="text-success">Settled</span>' ?>
+                    <td class="text-end fw-bold text-nowrap <?= $ending > 0.01 ? 'text-danger' : 'text-success' ?>"
+                        title="Cumulative unpaid balance (in AFN) up to this transaction">
+                        <?php if ($ending > 0.01): ?>
+                            <div><?= formatAFN($ending) ?></div>
+                            <div class="text-muted fw-normal" style="font-size:0.7rem;">≈ <?= formatMoney(fromAFN($ending, $rateUSD), 'USD') ?></div>
+                        <?php else: ?>
+                            <span class="text-success">Settled</span>
+                        <?php endif; ?>
                     </td>
                     <td class="text-center">
                         <?php if ($log['bill_image']): ?>
