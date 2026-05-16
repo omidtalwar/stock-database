@@ -114,44 +114,64 @@ require_once '../includes/header.php';
     </div>
 </div>
 
-<?php if ($totalPayments > 0): ?>
-<div class="mb-3" style="display:grid;grid-template-columns:repeat(4,1fr);gap:0;background:linear-gradient(135deg,rgba(16,124,16,0.04),rgba(0,103,192,0.03));border:1px solid rgba(0,0,0,0.08);border-radius:12px;overflow:hidden;">
-    <?php
-    $curDefs = [
-        'AFN' => ['flag'=>'🇦🇫','sym'=>'؋','col'=>'#107C10','bg'=>'rgba(16,124,16,0.10)'],
-        'USD' => ['flag'=>'🇺🇸','sym'=>'$','col'=>'#0067C0','bg'=>'rgba(0,103,192,0.10)'],
-        'PKR' => ['flag'=>'🇵🇰','sym'=>'₨','col'=>'#7719AA','bg'=>'rgba(119,25,170,0.10)'],
-    ];
-    foreach ($curDefs as $cur => $def):
+<?php
+$curDefs = [
+    'AFN' => ['flag'=>'🇦🇫','sym'=>'؋','col'=>'#107C10','bg'=>'rgba(16,124,16,0.08)','border'=>'rgba(16,124,16,0.20)','badge'=>'bg-success-subtle text-success border border-success-subtle'],
+    'USD' => ['flag'=>'🇺🇸','sym'=>'$','col'=>'#0067C0','bg'=>'rgba(0,103,192,0.07)','border'=>'rgba(0,103,192,0.20)','badge'=>'bg-primary-subtle text-primary border border-primary-subtle'],
+    'PKR' => ['flag'=>'🇵🇰','sym'=>'₨','col'=>'#7719AA','bg'=>'rgba(119,25,170,0.07)','border'=>'rgba(119,25,170,0.20)','badge'=>'bg-purple-subtle','badgeStyle'=>'background:rgba(119,25,170,0.1);color:#7719AA;border:1px solid rgba(119,25,170,0.25);'],
+];
+?>
+<div class="row g-3 mb-4">
+    <?php foreach ($curDefs as $cur => $def):
         $d = $paysByCur[$cur];
+        $hasData = $d['cnt'] > 0;
     ?>
-    <div style="text-align:center;padding:12px 8px;<?= $cur!=='AFN'?'border-left:1px solid rgba(0,0,0,0.07);':'' ?>">
-        <div style="margin-bottom:5px;">
-            <span style="background:<?= $def['bg'] ?>;color:<?= $def['col'] ?>;font-size:0.68rem;font-weight:700;padding:2px 9px;border-radius:20px;letter-spacing:.3px;">
-                <?= $def['flag'] ?> <?= $def['sym'] ?> <?= $cur ?>
-            </span>
+    <div class="col-6 col-md-3">
+        <div class="card h-100" style="border-color:<?= $hasData ? $def['border'] : 'rgba(0,0,0,0.08)' ?>;<?= $hasData ? 'background:'.$def['bg'].';' : '' ?>">
+            <div class="card-body py-3 text-center">
+                <div class="mb-2">
+                    <?php if (isset($def['badgeStyle'])): ?>
+                    <span style="<?= $def['badgeStyle'] ?>font-size:0.72rem;font-weight:700;padding:3px 10px;border-radius:20px;">
+                        <?= $def['flag'] ?> <?= $cur ?>
+                    </span>
+                    <?php else: ?>
+                    <span class="badge <?= $def['badge'] ?>" style="font-size:0.72rem;padding:4px 10px;border-radius:20px;">
+                        <?= $def['flag'] ?> <?= $cur ?>
+                    </span>
+                    <?php endif; ?>
+                </div>
+                <div class="fw-bold" style="font-size:1.05rem;color:<?= $hasData ? $def['col'] : '#bbb' ?>;">
+                    <?= formatMoney($d['orig'], $cur) ?>
+                </div>
+                <?php if ($cur !== 'AFN'): ?>
+                <div class="text-muted" style="font-size:0.72rem;">
+                    <?= $hasData ? '≈ '.formatAFN($d['afn']) : '—' ?>
+                </div>
+                <?php endif; ?>
+                <div class="mt-1" style="font-size:0.7rem;color:<?= $hasData ? $def['col'] : '#bbb' ?>;">
+                    <?= $d['cnt'] ?> payment<?= $d['cnt'] != 1 ? 's' : '' ?>
+                </div>
+            </div>
         </div>
-        <div style="font-size:1rem;font-weight:700;color:<?= $d['cnt']>0?$def['col']:'#bbb' ?>;">
-            <?= formatMoney($d['orig'], $cur) ?>
-        </div>
-        <?php if ($cur !== 'AFN' && $d['cnt'] > 0): ?>
-        <div style="font-size:0.7rem;color:#888;">≈ <?= formatAFN($d['afn']) ?></div>
-        <?php endif; ?>
-        <div style="font-size:0.68rem;color:#aaa;margin-top:2px;"><?= $d['cnt'] ?> payment<?= $d['cnt']!=1?'s':'' ?></div>
     </div>
     <?php endforeach; ?>
-    <div style="text-align:center;padding:12px 8px;border-left:1px solid rgba(0,0,0,0.07);background:rgba(0,0,0,0.015);">
-        <div style="margin-bottom:5px;">
-            <span style="background:rgba(28,28,28,0.07);color:#333;font-size:0.68rem;font-weight:700;padding:2px 9px;border-radius:20px;">
-                🌐 ∑ Total Paid
-            </span>
+    <div class="col-6 col-md-3">
+        <div class="card h-100" style="<?= $totalPayments > 0 ? 'background:rgba(16,124,16,0.05);border-color:rgba(16,124,16,0.25);' : '' ?>">
+            <div class="card-body py-3 text-center">
+                <div class="mb-2">
+                    <span style="background:rgba(28,28,28,0.07);color:#333;font-size:0.72rem;font-weight:700;padding:3px 10px;border-radius:20px;">
+                        🌐 Total Paid
+                    </span>
+                </div>
+                <div class="fw-bold text-success" style="font-size:1.05rem;">
+                    <?= formatAFN($totalPayments) ?>
+                </div>
+                <div class="text-muted" style="font-size:0.72rem;">≈ <?= formatMoney(fromAFN($totalPayments,$rateUSD),'USD') ?></div>
+                <div class="text-muted" style="font-size:0.72rem;">≈ <?= formatMoney(fromAFN($totalPayments,$ratePKR),'PKR') ?></div>
+            </div>
         </div>
-        <div style="font-size:1rem;font-weight:700;color:#107C10;"><?= formatAFN($totalPayments) ?></div>
-        <div style="font-size:0.7rem;color:#888;">≈ <?= formatMoney(fromAFN($totalPayments,$rateUSD),'USD') ?></div>
-        <div style="font-size:0.7rem;color:#888;">≈ <?= formatMoney(fromAFN($totalPayments,$ratePKR),'PKR') ?></div>
     </div>
 </div>
-<?php endif; ?>
 
 <div class="row g-3">
     <div class="col-lg-7">
