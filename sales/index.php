@@ -143,51 +143,46 @@ $searchParam = $search ? '&search=' . urlencode($search) : '';
 </div>
 
 <!-- Summary totals -->
-<?php if (!empty($sales)):
-    // Helper: render per-currency rows for a given field (sum_total / sum_paid / sum_balance)
-    function renderCurRows(array $curTotals, array $rates, string $field, string $colorClass = ''): void {
-        $any = false;
-        foreach (['AFN','USD','PKR'] as $c) {
-            $ct = $curTotals[$c] ?? null;
-            if (!$ct) continue;
-            $afn = (float)$ct[$field];
-            if ($afn < 0.01) continue;
-            $orig = $c === 'AFN' ? $afn : fromAFN($afn, $rates[$c] ?? 1.0);
-            $any  = true;
-            echo '<div style="line-height:1.4;">';
-            echo '<span class="fw-bold ' . $colorClass . '" style="font-size:0.9rem;">' . formatMoney($orig, $c) . '</span>';
-            if ($c !== 'AFN') echo '<div class="text-muted" style="font-size:0.68rem;">≈ ' . formatAFN($afn) . '</div>';
-            echo '</div>';
-        }
-        if (!$any) echo '<span class="fw-bold ' . $colorClass . '">—</span>';
-    }
-?>
+<?php if (!empty($sales)): ?>
 <div class="row g-3 mb-3">
+    <?php
+    $statFields = [
+        ['field'=>'sum_total',   'label'=>__('field_total'),   'cls'=>''],
+        ['field'=>'sum_paid',    'label'=>__('field_paid'),    'cls'=>'text-success'],
+        ['field'=>'sum_balance', 'label'=>__('field_balance'), 'cls'=>'text-danger'],
+    ];
+    foreach ($statFields as $sf):
+    ?>
     <div class="col-6 col-md-3">
         <div class="card">
             <div class="card-body py-2 px-3">
-                <div class="text-muted small mb-1"><?= __('field_total') ?></div>
-                <?php renderCurRows($curTotals, $rates, 'sum_total') ?>
+                <div class="text-muted small mb-1"><?= $sf['label'] ?></div>
+                <?php
+                $anyVal = false;
+                foreach (['AFN','USD','PKR'] as $c):
+                    $ct  = $curTotals[$c] ?? null;
+                    if (!$ct) continue;
+                    $afn = (float)($ct[$sf['field']] ?? 0);
+                    if ($afn < 0.01) continue;
+                    $orig    = $c === 'AFN' ? $afn : fromAFN($afn, $rates[$c] ?? 1.0);
+                    $anyVal  = true;
+                ?>
+                <div style="line-height:1.4;margin-bottom:2px;">
+                    <span class="fw-bold <?= $sf['cls'] ?>" style="font-size:0.9rem;"><?= formatMoney($orig, $c) ?></span>
+                    <?php if ($c !== 'AFN'): ?>
+                    <div class="text-muted" style="font-size:0.68rem;">≈ <?= formatAFN($afn) ?></div>
+                    <?php endif; ?>
+                </div>
+                <?php endforeach;
+                if (!$anyVal) echo '<span class="fw-bold text-muted">—</span>';
+                ?>
+                <?php if ($sf['field'] === 'sum_total'): ?>
                 <div class="text-muted mt-1" style="font-size:0.72rem;"><?= $totalRows ?> <?= __('rep_invoices') ?></div>
+                <?php endif; ?>
             </div>
         </div>
     </div>
-    <div class="col-6 col-md-3">
-        <div class="card">
-            <div class="card-body py-2 px-3">
-                <div class="text-muted small mb-1"><?= __('field_paid') ?></div>
-                <?php renderCurRows($curTotals, $rates, 'sum_paid', 'text-success') ?>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3">
-        <div class="card">
-            <div class="card-body py-2 px-3">
-                <div class="text-muted small mb-1"><?= __('field_balance') ?></div>
-                <?php renderCurRows($curTotals, $rates, 'sum_balance', 'text-danger') ?>
-            </div>
-        </div>
-    </div>
+    <?php endforeach; ?>
     <div class="col-6 col-md-3">
         <div class="card text-center">
             <div class="card-body py-2">
