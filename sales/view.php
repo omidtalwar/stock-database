@@ -30,6 +30,17 @@ $allRates    = getAllRates($pdo);
 $saleCur     = $sale['currency'] ?? 'AFN';
 $saleCurRate = $allRates[$saleCur] ?? 1.0;
 
+// Payments linked to this specific invoice
+$linkedPayments = $pdo->prepare("
+    SELECT p.*, u.full_name AS paid_by
+    FROM payments p
+    LEFT JOIN users u ON u.id = p.created_by
+    WHERE p.sale_id = ?
+    ORDER BY COALESCE(p.payment_date, DATE(p.created_at)) ASC
+");
+$linkedPayments->execute([$id]);
+$linkedPayments = $linkedPayments->fetchAll();
+
 $pageTitle = '#' . str_pad($id, 4, '0', STR_PAD_LEFT);
 
 $shareUrl = 'https://' . $_SERVER['HTTP_HOST'] . '/sales/share.php?id=' . $id;
@@ -245,7 +256,7 @@ require_once '../includes/header.php';
                 </div>
                 <?php if ($viewBalance > 0): ?>
                 <div class="mt-3">
-                    <a href="/payments/add.php?customer_id=<?= $sale['customer_id'] ?>" class="btn btn-success w-100 btn-sm">
+                    <a href="/payments/add.php?customer_id=<?= $sale['customer_id'] ?>&sale_id=<?= $id ?>" class="btn btn-success w-100 btn-sm">
                         <i class="bi bi-cash me-2"></i><?= __('pay_add') ?>
                     </a>
                 </div>
@@ -287,6 +298,45 @@ require_once '../includes/header.php';
                 <?php endif; ?>
             </div>
         </div>
+
+        <?php if (!empty($linkedPayments)): ?>
+        <div class="card mt-3">
+            <div class="card-header fw-semibold d-flex align-items-center justify-content-between">
+                <span><i class="bi bi-cash-coin me-2 text-success"></i>Payments Received</span>
+                <span class="badge bg-success-subtle text-success border border-success-subtle"><?= count($linkedPayments) ?></span>
+            </div>
+            <?php foreach ($linkedPayments as $lp):
+                $lpCur   = $lp['currency'] ?? 'AFN';
+                $lpAmt   = (float)$lp['amount'];
+                $lpAmtAfn= (float)$lp['amount_afn'] ?: $lpAmt;
+                $lpDate  = $lp['payment_date'] ?? date('Y-m-d', strtotime($lp['created_at']));
+            ?>
+            <div class="d-flex align-items-center justify-content-between px-3 py-2 border-top">
+                <div>
+                    <div class="fw-semibold text-success" style="font-size:0.88rem;">
+                        <?= formatMoney($lpAmt, $lpCur) ?>
+                        <?php if ($lpCur !== 'AFN'): ?>
+                        <span class="text-muted fw-normal" style="font-size:0.72rem;">≈ <?= fmtAfn($lpAmtAfn) ?></span>
+                        <?php endif; ?>
+                    </div>
+                    <div class="text-muted" style="font-size:0.7rem;">
+                        <?= date('d M Y', strtotime($lpDate)) ?>
+                        <?php if ($lp['paid_by']): ?> · <?= htmlspecialchars($lp['paid_by']) ?><?php endif; ?>
+                        <?php if ($lp['notes']): ?> · <?= htmlspecialchars($lp['notes']) ?><?php endif; ?>
+                    </div>
+                </div>
+                <?php if (isAdmin()): ?>
+                <a href="/payments/delete.php?id=<?= $lp['id'] ?>"
+                   class="btn btn-sm btn-outline-danger"
+                   onclick="return confirm('Delete this payment?')"
+                   title="Delete">
+                    <i class="bi bi-trash"></i>
+                </a>
+                <?php endif; ?>
+            </div>
+            <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
 
         <?php if (!empty($saleImages)): ?>
         <div class="card mt-3">

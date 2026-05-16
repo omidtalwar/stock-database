@@ -39,14 +39,17 @@ $totalPages = max(1, (int)ceil($totalRows / $perPage));
 $page       = min($page, $totalPages);
 $offset     = ($page - 1) * $perPage;
 
-// Auto-migrate payment_date if not yet present
+// Auto-migrate
 try { $pdo->exec("ALTER TABLE payments ADD COLUMN payment_date DATE NULL AFTER notes"); } catch (\PDOException $e) {}
+try { $pdo->exec("ALTER TABLE payments ADD COLUMN sale_id INT NULL AFTER customer_id"); } catch (\PDOException $e) {}
 
 $payments = $pdo->query("
-    SELECT p.*, c.name AS customer_name, c.shop_name, u.full_name AS created_by
+    SELECT p.*, c.name AS customer_name, c.shop_name, u.full_name AS created_by,
+           s.id AS inv_id, s.bill_no AS inv_bill_no
     FROM payments p
     JOIN customers c ON c.id = p.customer_id
     JOIN users u ON u.id = p.created_by
+    LEFT JOIN sales s ON s.id = p.sale_id
     WHERE 1=1 $periodWhere
     ORDER BY COALESCE(p.payment_date, DATE(p.created_at)) DESC, p.created_at DESC
     LIMIT $perPage OFFSET $offset
@@ -169,6 +172,7 @@ $payPeriodLabels = [
                     <th><?= __('pay_paid_amount') ?></th>
                     <th class="d-none d-sm-table-cell"><?= __('pay_currency') ?></th>
                     <th class="d-none d-sm-table-cell"><?= __('pay_afn_equiv') ?></th>
+                    <th class="d-none d-md-table-cell">Invoice</th>
                     <th class="d-none d-lg-table-cell"><?= __('field_notes') ?></th>
                     <th class="d-none d-md-table-cell"><?= __('field_by') ?></th>
                     <th class="d-none d-md-table-cell"><?= __('field_date') ?></th>
@@ -210,6 +214,18 @@ $payPeriodLabels = [
                         <?php endif; ?>
                     </td>
                     <td class="fw-semibold d-none d-sm-table-cell"><?= formatAFN($amtAfn) ?></td>
+                    <td class="d-none d-md-table-cell">
+                        <?php if ($p['inv_id']): ?>
+                        <a href="/sales/view.php?id=<?= $p['inv_id'] ?>" class="text-decoration-none fw-semibold" style="font-size:0.8rem;">
+                            #<?= str_pad($p['inv_id'], 4, '0', STR_PAD_LEFT) ?>
+                        </a>
+                        <?php if ($p['inv_bill_no']): ?>
+                        <div class="text-muted" style="font-size:0.7rem;"><?= htmlspecialchars($p['inv_bill_no']) ?></div>
+                        <?php endif; ?>
+                        <?php else: ?>
+                        <span class="text-muted" style="font-size:0.75rem;">General</span>
+                        <?php endif; ?>
+                    </td>
                     <td class="text-muted small d-none d-lg-table-cell"><?= htmlspecialchars($p['notes'] ?: '—') ?></td>
                     <td class="text-muted small d-none d-md-table-cell"><?= htmlspecialchars($p['created_by']) ?></td>
                     <td class="text-muted small d-none d-md-table-cell"><?= fmtPayDate($p) ?></td>

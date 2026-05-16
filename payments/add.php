@@ -7,15 +7,43 @@ require_once '../includes/currency.php';
 
 $pageTitle = __('pay_add');
 
-// Auto-migrate payment_date column
+// Migrations
 try { $pdo->exec("ALTER TABLE payments ADD COLUMN payment_date DATE NULL AFTER notes"); } catch (\PDOException $e) {}
+try { $pdo->exec("ALTER TABLE payments ADD COLUMN sale_id INT NULL AFTER customer_id"); } catch (\PDOException $e) {}
 
 $allRates    = getAllRates($pdo);
 $settings    = getSettings($pdo);
 $secCur      = $settings['secondary_currency'] ?? 'USD';
 
-$customers   = $pdo->query("SELECT id, name, shop_name, total_debt FROM customers WHERE total_debt > 0 ORDER BY name ASC")->fetchAll();
+$customers   = $pdo->query("SELECT id, name, shop_name, total_debt FROM customers ORDER BY name ASC")->fetchAll();
 $preCustomer = (int)($_GET['customer_id'] ?? 0);
+$preSaleId   = (int)($_GET['sale_id']    ?? 0);
+
+// Load open invoices for the invoice picker (embedded as JSON for JS)
+$openInvoices = $pdo->query("
+    SELECT s.id, s.customer_id, COALESCE(s.currency,'AFN') AS currency,
+           s.total_amount, s.paid_amount, s.bill_no, s.created_at
+    FROM sales s
+    WHERE s.total_amount > s.paid_amount + 0.01
+    ORDER BY s.customer_id, s.created_at DESC
+")->fetchAll(PDO::FETCH_ASSOC);
+
+$invoicesByCustomer = [];
+foreach ($openInvoices as $inv) {
+    $cid = (int)$inv['customer_id'];
+    $bal = max(0.0, (float)$inv['total_amount'] - (float)$inv['paid_amount']);
+    if ($bal < 0.01) continue;
+    $invoicesByCustomer[$cid][] = [
+        'id'      => (int)$inv['id'],
+        'num'     => '#' . str_pad($inv['id'], 4, '0', STR_PAD_LEFT),
+        'bill_no' => $inv['bill_no'] ?: null,
+        'cur'     => $inv['currency'],
+        'total'   => (float)$inv['total_amount'],
+        'paid'    => (float)$inv['paid_amount'],
+        'bal'     => $bal,
+        'date'    => date('d M Y', strtotime($inv['created_at'])),
+    ];
+}
 
 function toShamsi(int $gy, int $gm, int $gd): array {
     $g_d_m = [0,31,59,90,120,151,181,212,243,273,304,334];
@@ -32,40 +60,79 @@ function toShamsi(int $gy, int $gm, int $gd): array {
 }
 $todayShamsi = toShamsi((int)date('Y'), (int)date('n'), (int)date('j'));
 
+// ── POST handler ──────────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $customer_id  = (int)($_POST['customer_id'] ?? 0);
-    $amount       = (float)($_POST['amount'] ?? 0);
+    $sale_id      = (int)($_POST['sale_id']     ?? 0) ?: null;
+    $amount       = (float)($_POST['amount']    ?? 0);
     $currency     = strtoupper(trim($_POST['currency'] ?? 'AFN'));
     $notes        = trim($_POST['notes'] ?? '');
     $payment_date = $_POST['payment_date'] ?? date('Y-m-d');
     if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $payment_date)) $payment_date = date('Y-m-d');
-
     if (!array_key_exists($currency, CURRENCIES)) $currency = 'AFN';
 
+    $usedRate  = $allRates[$currency] ?? 1.0;
+    $amountAfn = toAFN($amount, $currency, $usedRate);
+
+    $error = null;
     if (!$customer_id) {
-        $_SESSION['error'] = __('pay_select_cust');
+        $error = __('pay_select_cust');
     } elseif ($amount <= 0) {
-        $_SESSION['error'] = __('fill_all_fields');
-    } else {
-        $usedRate  = $allRates[$currency] ?? 1.0;
-        $amountAfn = toAFN($amount, $currency, $usedRate);
-
-        $stmt = $pdo->prepare("SELECT total_debt FROM customers WHERE id = ?");
-        $stmt->execute([$customer_id]);
-        $debt = (float)$stmt->fetchColumn();
-
-        if ($amountAfn > $debt + 0.01) {
-            $_SESSION['error'] = __('pay_exceeds');
+        $error = __('fill_all_fields');
+    } elseif ($sale_id) {
+        // Validate against the specific invoice balance
+        $invRow = $pdo->prepare("SELECT total_amount, paid_amount FROM sales WHERE id = ? AND customer_id = ?");
+        $invRow->execute([$sale_id, $customer_id]);
+        $inv = $invRow->fetch();
+        if (!$inv) {
+            $error = 'Invoice not found or does not belong to this customer.';
+            $sale_id = null;
         } else {
-            $pdo->prepare("INSERT INTO payments (customer_id, amount, currency, exchange_rate, amount_afn, notes, payment_date, created_by) VALUES (?,?,?,?,?,?,?,?)")
-                ->execute([$customer_id, $amount, $currency, $usedRate, $amountAfn, $notes, $payment_date, $_SESSION['user_id']]);
+            $invBal = max(0.0, (float)$inv['total_amount'] - (float)$inv['paid_amount']);
+            if ($amountAfn > $invBal + 0.01) {
+                $error = 'Payment ' . formatAFN($amountAfn) . ' exceeds invoice balance ' . formatAFN($invBal) . '.';
+            }
+        }
+    } else {
+        // General payment: validate against total customer debt
+        $debt = (float)$pdo->prepare("SELECT total_debt FROM customers WHERE id = ?")->execute([$customer_id]) && true
+            ? (float)$pdo->query("SELECT total_debt FROM customers WHERE id = $customer_id")->fetchColumn()
+            : 0;
+        if ($amountAfn > $debt + 0.01) {
+            $error = __('pay_exceeds');
+        }
+    }
+
+    if ($error) {
+        $_SESSION['error'] = $error;
+    } else {
+        $pdo->beginTransaction();
+        try {
+            $pdo->prepare("
+                INSERT INTO payments (customer_id, sale_id, amount, currency, exchange_rate, amount_afn, notes, payment_date, created_by)
+                VALUES (?,?,?,?,?,?,?,?,?)
+            ")->execute([$customer_id, $sale_id, $amount, $currency, $usedRate, $amountAfn, $notes ?: null, $payment_date, $_SESSION['user_id']]);
+
+            // Reduce customer total debt
             $pdo->prepare("UPDATE customers SET total_debt = GREATEST(0, total_debt - ?) WHERE id = ?")
                 ->execute([$amountAfn, $customer_id]);
 
+            // If linked to an invoice, update its paid_amount directly
+            if ($sale_id) {
+                $pdo->prepare("UPDATE sales SET paid_amount = paid_amount + ? WHERE id = ?")
+                    ->execute([$amountAfn, $sale_id]);
+            }
+
+            $pdo->commit();
             $_SESSION['success'] = formatMoney($amount, $currency)
                 . ($currency !== 'AFN' ? ' (' . formatAFN($amountAfn) . ')' : '');
-            header("Location: /customers/view.php?id=$customer_id");
+            header($sale_id
+                ? "Location: /sales/view.php?id=$sale_id"
+                : "Location: /customers/view.php?id=$customer_id");
             exit;
+        } catch (\Throwable $e) {
+            $pdo->rollBack();
+            $_SESSION['error'] = 'Failed to save payment. Please try again.';
         }
     }
 }
@@ -91,38 +158,55 @@ require_once '../includes/header.php';
 </div>
 
 <div class="row justify-content-center">
-    <div class="col-md-6">
+    <div class="col-md-7">
         <div class="card">
             <div class="card-header fw-semibold"><?= __('pay_details') ?></div>
             <div class="card-body">
                 <form method="POST" id="payForm">
+                    <input type="hidden" name="sale_id" id="saleIdInput" value="<?= $preSaleId ?>">
+
+                    <!-- Customer -->
                     <div class="mb-3">
                         <label class="form-label fw-semibold"><?= __('nav_customers') ?> <span class="text-danger">*</span></label>
-                        <select name="customer_id" id="customerSelect" class="form-select" required onchange="updateDebt()">
+                        <select name="customer_id" id="customerSelect" class="form-select" required onchange="onCustomerChange()">
                             <option value=""><?= __('pay_select_cust') ?></option>
                             <?php foreach ($customers as $c): ?>
                             <option value="<?= $c['id'] ?>" data-debt="<?= $c['total_debt'] ?>"
                                 <?= ($preCustomer == $c['id'] || ($_POST['customer_id'] ?? 0) == $c['id']) ? 'selected' : '' ?>>
-                                <?= htmlspecialchars($c['name']) ?> — <?= htmlspecialchars($c['shop_name']) ?>
+                                <?= htmlspecialchars($c['name']) ?>
+                                <?= $c['shop_name'] ? '— ' . htmlspecialchars($c['shop_name']) : '' ?>
+                                <?= $c['total_debt'] > 0 ? ' (؋' . number_format($c['total_debt'], 0) . ' due)' : '' ?>
                             </option>
                             <?php endforeach; ?>
                         </select>
-                        <?php if (empty($customers)): ?>
-                            <small class="text-muted"><?= __('pay_no_cust_debt') ?></small>
-                        <?php endif; ?>
                     </div>
 
-                    <div id="debtInfo" class="p-3 rounded mb-3" style="background:#fff8e1;display:none;">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <span class="text-muted small"><?= __('pay_curr_debt') ?></span>
-                            <span class="fw-bold text-danger" id="debtAfn">؋ 0</span>
-                        </div>
-                        <div class="d-flex justify-content-between align-items-center mt-1 d-none" id="debtSecRow">
-                            <span class="text-muted small" id="debtSecLabel"><?= __('pay_equiv') ?></span>
-                            <span class="fw-semibold text-muted" id="debtSec">—</span>
+                    <!-- Invoice picker -->
+                    <div id="invoiceSection" style="display:none;" class="mb-3">
+                        <label class="form-label fw-semibold d-flex align-items-center gap-2">
+                            <i class="bi bi-receipt text-primary"></i>
+                            Select Invoice <span class="badge bg-danger-subtle text-danger border border-danger-subtle" style="font-size:0.65rem;">Required</span>
+                        </label>
+                        <div id="invoiceList" class="border rounded" style="max-height:280px;overflow-y:auto;"></div>
+                        <div id="noInvoices" style="display:none;" class="text-muted small p-3 border rounded text-center">
+                            <i class="bi bi-check-circle text-success me-1"></i> No open invoices for this customer.
                         </div>
                     </div>
 
+                    <!-- Selected invoice badge -->
+                    <div id="selectedInvBadge" style="display:none;" class="mb-3 p-2 rounded d-flex align-items-center justify-content-between"
+                         style="background:rgba(0,103,192,0.07);border:1px solid rgba(0,103,192,0.2);">
+                        <div>
+                            <i class="bi bi-receipt-cutoff text-primary me-1"></i>
+                            <span class="fw-semibold" id="selectedInvLabel">—</span>
+                            <span class="text-muted small ms-2" id="selectedInvBalance"></span>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearInvoice()">
+                            <i class="bi bi-x"></i> Change
+                        </button>
+                    </div>
+
+                    <!-- Currency & Amount -->
                     <div class="mb-3">
                         <label class="form-label fw-semibold"><?= __('field_currency') ?> &amp; <?= __('field_amount') ?> <span class="text-danger">*</span></label>
                         <div class="input-group">
@@ -141,6 +225,7 @@ require_once '../includes/header.php';
                         <div id="convertHint" class="text-muted small mt-1" style="display:none;"></div>
                     </div>
 
+                    <!-- Notes -->
                     <div class="mb-3">
                         <label class="form-label fw-semibold"><?= __('field_notes') ?></label>
                         <input type="text" name="notes" class="form-control"
@@ -148,7 +233,7 @@ require_once '../includes/header.php';
                                value="<?= htmlspecialchars($_POST['notes'] ?? '') ?>">
                     </div>
 
-                    <!-- Date picker (Shamsi / Solar Hijri) -->
+                    <!-- Shamsi date picker -->
                     <div class="mb-4">
                         <label class="form-label fw-semibold d-flex align-items-center gap-2">
                             <?= __('field_date') ?>
@@ -162,23 +247,17 @@ require_once '../includes/header.php';
                                     '۷ میزان','۸ عقرب','۹ قوس','۱۰ جدی','۱۱ دلو','۱۲ حوت'];
                         ?>
                         <div class="d-flex align-items-center gap-1">
-                            <input type="number" id="jYear" name="shamsi_y"
-                                   class="form-control form-control-sm text-center fw-semibold"
-                                   value="<?= $defJy ?>" min="1300" max="1600"
-                                   style="width:74px;" oninput="syncPayDate()">
+                            <input type="number" id="jYear" name="shamsi_y" class="form-control form-control-sm text-center fw-semibold"
+                                   value="<?= $defJy ?>" min="1300" max="1600" style="width:74px;" oninput="syncPayDate()">
                             <span class="text-muted">/</span>
-                            <select id="jMonth" name="shamsi_m"
-                                    class="form-select form-select-sm" style="width:132px;"
-                                    onchange="syncPayDate()">
+                            <select id="jMonth" name="shamsi_m" class="form-select form-select-sm" style="width:132px;" onchange="syncPayDate()">
                                 <?php foreach ($jMonths as $i => $nm): ?>
                                 <option value="<?= $i+1 ?>" <?= $defJm === $i+1 ? 'selected' : '' ?>><?= $nm ?></option>
                                 <?php endforeach; ?>
                             </select>
                             <span class="text-muted">/</span>
-                            <input type="number" id="jDay" name="shamsi_d"
-                                   class="form-control form-control-sm text-center fw-semibold"
-                                   value="<?= $defJd ?>" min="1" max="31"
-                                   style="width:60px;" oninput="syncPayDate()">
+                            <input type="number" id="jDay" name="shamsi_d" class="form-control form-control-sm text-center fw-semibold"
+                                   value="<?= $defJd ?>" min="1" max="31" style="width:60px;" oninput="syncPayDate()">
                         </div>
                         <input type="hidden" name="payment_date" id="paymentDate"
                                value="<?= htmlspecialchars($_POST['payment_date'] ?? date('Y-m-d')) ?>">
@@ -198,45 +277,123 @@ require_once '../includes/header.php';
 </div>
 
 <?php
-$_json_rates = json_encode($allRates);
-$_json_hint  = json_encode(__('pay_hint'));
+$_json_rates    = json_encode($allRates);
+$_json_invoices = json_encode($invoicesByCustomer);
 $extraScript = <<<JS
 <script>
 const ALL_RATES = {$_json_rates};
-const SYMBOLS   = {AFN:'؋', USD:'$', PKR:'₨'};
-const HINT      = {$_json_hint};
+const INVOICES  = {$_json_invoices};   // keyed by customer_id
+const SYMBOLS   = {AFN:'؋', USD:'\$', PKR:'₨'};
 
 function sym(cur) { return SYMBOLS[cur] || cur; }
-function fmtAFN(v) { return '؋ ' + parseFloat(v).toLocaleString('en-US',{maximumFractionDigits:0}); }
+
+function fmtAFN(v) {
+    return '؋ ' + parseFloat(v).toLocaleString('en-US', {maximumFractionDigits:0});
+}
 function fmtCur(v, cur) {
     const dec = cur === 'USD' ? 2 : 0;
-    return sym(cur) + ' ' + parseFloat(v).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec});
+    return sym(cur) + ' ' + parseFloat(v).toLocaleString('en-US', {minimumFractionDigits:dec, maximumFractionDigits:dec});
 }
 
-function updateDebt() {
-    const sel  = document.getElementById('customerSelect');
-    const opt  = sel.options[sel.selectedIndex];
-    const debt = parseFloat(opt?.dataset.debt || 0);
-    const box  = document.getElementById('debtInfo');
-    if (debt > 0 && opt?.value) {
-        document.getElementById('debtAfn').textContent = fmtAFN(debt);
-        const cur     = document.getElementById('currencySelect').value;
-        const rate    = ALL_RATES[cur] || 1;
-        const secRow  = document.getElementById('debtSecRow');
-        if (cur !== 'AFN' && rate > 0) {
-            document.getElementById('debtSecLabel').textContent = sym(cur) + ' ' + cur + ' equiv.';
-            document.getElementById('debtSec').textContent = fmtCur(debt / rate, cur);
-            secRow.classList.remove('d-none');
-        } else {
-            secRow.classList.add('d-none');
-        }
-        box.style.display = '';
-    } else {
-        box.style.display = 'none';
+// ── Invoice picker ────────────────────────────────────────────────────────────
+let selectedInv = null;
+
+function onCustomerChange() {
+    clearInvoice();
+    renderInvoices();
+    updateConvert();
+}
+
+function renderInvoices() {
+    const cid  = parseInt(document.getElementById('customerSelect').value) || 0;
+    const sec  = document.getElementById('invoiceSection');
+    const list = document.getElementById('invoiceList');
+    const none = document.getElementById('noInvoices');
+
+    if (!cid) { sec.style.display = 'none'; return; }
+
+    const invs = INVOICES[cid] || [];
+    sec.style.display = '';
+
+    if (!invs.length) {
+        list.style.display = 'none';
+        none.style.display = '';
+        return;
     }
+
+    list.style.display = '';
+    none.style.display = 'none';
+
+    list.innerHTML = invs.map((inv, idx) => {
+        const balLabel = fmtCur(inv.bal, inv.cur)
+            + (inv.cur !== 'AFN' ? ' <span style="font-size:.7rem;color:#888;">≈ ' + fmtAFN(inv.bal * (ALL_RATES[inv.cur] || 1)) + '</span>' : '');
+        const billTag  = inv.bill_no ? ' <span style="font-size:.68rem;color:#888;">Bill: ' + inv.bill_no + '</span>' : '';
+        const curBadge = inv.cur !== 'AFN'
+            ? '<span style="background:rgba(0,103,192,.1);color:#0067C0;font-size:.65rem;font-weight:700;padding:1px 5px;border-radius:3px;margin-left:4px;">' + inv.cur + '</span>'
+            : '';
+        return '<div class="inv-pick-row d-flex align-items-center justify-content-between px-3 py-2'
+            + (idx > 0 ? ' border-top' : '')
+            + '" style="cursor:pointer;transition:background .12s;" id="inv-row-' + inv.id + '"'
+            + ' onclick="selectInvoice(' + idx + ',' + cid + ')"'
+            + ' onmouseenter="this.style.background=\'rgba(0,103,192,0.04)\'"'
+            + ' onmouseleave="this.style.background=selectedInv&&selectedInv.id==='+inv.id+'?\'rgba(0,103,192,0.08)\':\'\'">'
+            + '<div>'
+            +   '<span class="fw-semibold">' + inv.num + '</span>' + curBadge + billTag
+            +   '<div class="text-muted" style="font-size:.72rem;">' + inv.date + '</div>'
+            + '</div>'
+            + '<div class="text-end">'
+            +   '<div class="fw-bold text-danger" style="font-size:.9rem;">' + balLabel + '</div>'
+            +   '<div style="font-size:.68rem;color:#aaa;">Due</div>'
+            + '</div>'
+            + '</div>';
+    }).join('');
 }
 
-function onCurrencyChange() { updateDebt(); updateConvert(); }
+function selectInvoice(idx, cid) {
+    const inv = (INVOICES[cid] || [])[idx];
+    if (!inv) return;
+    selectedInv = inv;
+
+    document.getElementById('saleIdInput').value = inv.id;
+
+    // Highlight row
+    document.querySelectorAll('.inv-pick-row').forEach(r => r.style.background = '');
+    const row = document.getElementById('inv-row-' + inv.id);
+    if (row) row.style.background = 'rgba(0,103,192,0.08)';
+
+    // Show selected badge, hide list
+    document.getElementById('invoiceSection').style.display = 'none';
+    const badge = document.getElementById('selectedInvBadge');
+    badge.style.display = '';
+    badge.style.background = 'rgba(0,103,192,0.07)';
+    badge.style.border = '1px solid rgba(0,103,192,0.2)';
+    badge.style.borderRadius = '8px';
+    badge.style.padding = '10px 14px';
+    document.getElementById('selectedInvLabel').textContent = inv.num + (inv.bill_no ? ' · Bill ' + inv.bill_no : '') + ' — ' + inv.date;
+    document.getElementById('selectedInvBalance').textContent = 'Balance: ' + fmtCur(inv.bal, inv.cur);
+
+    // Set currency to match invoice
+    const curSel = document.getElementById('currencySelect');
+    if (curSel) {
+        curSel.value = inv.cur;
+    }
+
+    // Pre-fill amount with balance due
+    const amtInput = document.getElementById('amountInput');
+    const dec = inv.cur === 'USD' ? 2 : 0;
+    amtInput.value = parseFloat(inv.bal).toFixed(dec);
+    updateConvert();
+}
+
+function clearInvoice() {
+    selectedInv = null;
+    document.getElementById('saleIdInput').value = '';
+    document.getElementById('selectedInvBadge').style.display = 'none';
+    renderInvoices();
+}
+
+// ── Currency / amount ─────────────────────────────────────────────────────────
+function onCurrencyChange() { updateConvert(); }
 
 function updateConvert() {
     const cur    = document.getElementById('currencySelect').value;
@@ -247,17 +404,29 @@ function updateConvert() {
     const afn  = amount * rate;
     hint.style.display = '';
     hint.innerHTML = '<i class="bi bi-arrow-right-short"></i> '
-        + fmtCur(amount, cur) + ' &times; ' + rate.toLocaleString('en-US',{maximumFractionDigits:4})
-        + ' = <strong>' + fmtAFN(afn) + '</strong>'
-        + (HINT ? ' &mdash; ' + HINT : '');
+        + fmtCur(amount, cur) + ' &times; ' + rate.toLocaleString('en-US', {maximumFractionDigits:4})
+        + ' = <strong>' + fmtAFN(afn) + '</strong>';
 }
 
 document.getElementById('payForm').addEventListener('submit', function() {
     document.getElementById('submitBtn').disabled = true;
 });
 
-document.addEventListener('DOMContentLoaded', () => { updateDebt(); updateConvert(); syncPayDate(); });
+document.addEventListener('DOMContentLoaded', () => {
+    renderInvoices();
+    updateConvert();
+    syncPayDate();
+    // If a sale_id was pre-set via URL, auto-select that invoice
+    const preSaleId = parseInt(document.getElementById('saleIdInput').value) || 0;
+    if (preSaleId) {
+        const cid = parseInt(document.getElementById('customerSelect').value) || 0;
+        const invs = INVOICES[cid] || [];
+        const idx  = invs.findIndex(i => i.id === preSaleId);
+        if (idx >= 0) selectInvoice(idx, cid);
+    }
+});
 
+// ── Shamsi date picker ────────────────────────────────────────────────────────
 function shamsiToGregorian(jy, jm, jd) {
     var breaks = [-61,9,38,199,426,686,756,818,1111,1181,1210,1635,2060,2097,2192,2262,2324,2394,2456,3178];
     var gy = jy + 621, leapJ = -14, jp = breaks[0], jm2, jump, n, i;

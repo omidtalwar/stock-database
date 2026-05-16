@@ -24,6 +24,11 @@ $pdo->beginTransaction();
 try {
     $pdo->prepare("DELETE FROM payments WHERE id = ?")->execute([$id]);
     $pdo->prepare("UPDATE customers SET total_debt = total_debt + ? WHERE id = ?")->execute([$amtAfn, $payment['customer_id']]);
+    // If this payment was linked to an invoice, reverse its contribution to paid_amount
+    if (!empty($payment['sale_id'])) {
+        $pdo->prepare("UPDATE sales SET paid_amount = GREATEST(0, paid_amount - ?) WHERE id = ?")
+            ->execute([$amtAfn, $payment['sale_id']]);
+    }
     $pdo->commit();
     $_SESSION['success'] = __('pay_deleted');
 } catch (\Throwable $e) {
