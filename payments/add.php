@@ -379,13 +379,13 @@ function selectInvoice(idx, cid) {
     document.getElementById('selectedInvBalance').textContent = 'Balance: ' + fmtCur(inv.bal_orig, inv.cur)
         + (inv.cur !== 'AFN' ? ' ≈ ' + fmtAFN(inv.bal) : '');
 
-    // Lock currency to invoice currency — prevent paying PKR invoice in USD by mistake
+    // Set currency to match invoice — visually indicate it's locked but keep it enabled so it submits
     const curSel = document.getElementById('currencySelect');
     if (curSel) {
         curSel.value = inv.cur;
-        curSel.disabled = true;
+        curSel.style.opacity = '0.7';
+        curSel.title = 'Currency locked to invoice currency (' + inv.cur + ')';
     }
-
     // Pre-fill amount with balance in invoice currency (bal_orig)
     const amtInput = document.getElementById('amountInput');
     const dec = inv.cur === 'USD' ? 2 : 0;
@@ -397,9 +397,11 @@ function clearInvoice() {
     selectedInv = null;
     document.getElementById('saleIdInput').value = '';
     document.getElementById('selectedInvBadge').style.display = 'none';
-    // Unlock currency when no invoice is selected
     const curSel = document.getElementById('currencySelect');
-    if (curSel) curSel.disabled = false;
+    if (curSel) {
+        curSel.style.opacity = '';
+        curSel.title = '';
+    }
     renderInvoices();
 }
 
