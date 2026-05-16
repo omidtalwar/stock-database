@@ -190,13 +190,10 @@ require_once '../includes/header.php';
                 </div>
                 <div class="col-sm-2">
                     <label class="form-label fw-semibold mb-1"><i class="bi bi-currency-exchange me-1 text-primary"></i>Currency</label>
-                    <select name="currency" id="currencySelect" class="form-select" onchange="onCurrencyChange()">
-                        <?php foreach (CURRENCIES as $code => $cur): ?>
-                        <option value="<?= $code ?>" <?= ($code === ($_POST['currency'] ?? 'AFN')) ? 'selected' : '' ?>>
-                            <?= htmlspecialchars($cur['symbol'] . ' ' . $code) ?>
-                        </option>
-                        <?php endforeach; ?>
-                    </select>
+                    <div class="form-control fw-semibold" style="background:rgba(0,103,192,0.06);color:#0067C0;border-color:rgba(0,103,192,0.2);">
+                        $ USD
+                    </div>
+                    <input type="hidden" name="currency" value="USD">
                 </div>
                 <div class="col-sm-3">
                     <label class="form-label fw-semibold mb-1"><?= __('field_type') ?></label>
@@ -246,7 +243,7 @@ require_once '../includes/header.php';
                 <tfoot>
                     <tr style="background:rgba(0,103,192,0.04);">
                         <td colspan="5" class="text-end fw-semibold pe-3 py-2">Grand Total</td>
-                        <td class="fw-bold text-primary py-2" id="grandTotalDisplay">؋ 0</td>
+                        <td class="fw-bold text-primary py-2" id="grandTotalDisplay">$ 0.00</td>
                         <td></td>
                     </tr>
                 </tfoot>
@@ -273,12 +270,12 @@ require_once '../includes/header.php';
                 <div class="card-body">
                     <div class="d-flex justify-content-between mb-2">
                         <span class="text-muted small">Total</span>
-                        <span class="fw-bold" id="summTotal">؋ 0</span>
+                        <span class="fw-bold" id="summTotal">$ 0.00</span>
                     </div>
                     <hr class="my-2">
                     <label class="form-label fw-semibold small mb-1">Paid Amount <span class="text-muted fw-normal">(optional)</span></label>
                     <div class="input-group input-group-sm mb-3">
-                        <span class="input-group-text"><span class="cur-sym">؋</span></span>
+                        <span class="input-group-text"><span class="cur-sym">$</span></span>
                         <input type="number" name="paid_amount" id="paidAmount" class="form-control"
                                min="0" step="any" placeholder="0" oninput="calcBalance()"
                                value="<?= htmlspecialchars($_POST['paid_amount'] ?? '0') ?>">
@@ -286,7 +283,7 @@ require_once '../includes/header.php';
                     <div class="d-flex justify-content-between align-items-center p-2 rounded"
                          style="background:rgba(196,43,28,0.06);border:1px solid rgba(196,43,28,0.15);">
                         <span class="fw-semibold small">Unpaid / Balance</span>
-                        <span class="fw-bold text-danger" id="summBalance">؋ 0</span>
+                        <span class="fw-bold text-danger" id="summBalance">$ 0.00</span>
                     </div>
                 </div>
             </div>
@@ -343,27 +340,12 @@ const PRODS    = <?= json_encode($prodJs) ?>;
 const PROD_MAP = {};
 PRODS.forEach(p => { PROD_MAP[p.label] = p; });
 
-const CURRENCIES = <?= json_encode(array_map(fn($c) => ['symbol' => $c['symbol'], 'decimals' => $c['decimals']], CURRENCIES)) ?>;
-
 let rowIdx = 0;
 
-function curSym() {
-    const sel = document.getElementById('currencySelect');
-    return sel ? (CURRENCIES[sel.value]?.symbol || '؋') : '؋';
-}
-function curDec() {
-    const sel = document.getElementById('currencySelect');
-    return sel ? (CURRENCIES[sel.value]?.decimals ?? 0) : 0;
-}
+function curSym() { return '$'; }
+function curDec() { return 2; }
 function fmtMoney(amount) {
-    const dec = curDec();
-    return curSym() + ' ' + amount.toLocaleString('en-US', {minimumFractionDigits: dec, maximumFractionDigits: dec});
-}
-
-function onCurrencyChange() {
-    const sym = curSym();
-    document.querySelectorAll('.cur-sym').forEach(el => el.textContent = sym);
-    calcGrandTotal();
+    return '$ ' + amount.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
 }
 
 function rowHTML(idx) {
@@ -525,7 +507,6 @@ function uploadBill(file) {
 // Init
 onTypeChange();
 addRow();
-onCurrencyChange();
 
 // Prevent duplicate submission
 document.getElementById('stockForm').addEventListener('submit', function() {
