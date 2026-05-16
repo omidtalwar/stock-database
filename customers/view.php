@@ -26,17 +26,28 @@ $sales->execute([$id]);
 $sales = $sales->fetchAll();
 
 $payments = $pdo->prepare("
-    SELECT p.*, u.full_name AS created_by
-    FROM payments p JOIN users u ON u.id = p.created_by
-    WHERE p.customer_id = ? ORDER BY p.created_at DESC
+    SELECT p.*, u.full_name AS created_by,
+           s.id AS inv_id, s.bill_no AS inv_bill_no
+    FROM payments p
+    JOIN users u ON u.id = p.created_by
+    LEFT JOIN sales s ON s.id = p.sale_id
+    WHERE p.customer_id = ? ORDER BY COALESCE(p.payment_date, DATE(p.created_at)) DESC, p.created_at DESC
 ");
 $payments->execute([$id]);
 $payments = $payments->fetchAll();
 
 $totalSales    = array_sum(array_column($sales, 'total_amount'));
 $totalPayments = 0;
+$paysByCur = ['AFN'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0],'USD'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0],'PKR'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0]];
 foreach ($payments as $p) {
-    $totalPayments += (float)$p['amount_afn'] ?: (float)$p['amount'];
+    $afn = (float)$p['amount_afn'] ?: (float)$p['amount'];
+    $totalPayments += $afn;
+    $cur = $p['currency'] ?? 'AFN';
+    if (isset($paysByCur[$cur])) {
+        $paysByCur[$cur]['orig'] += (float)$p['amount'];
+        $paysByCur[$cur]['afn']  += $afn;
+        $paysByCur[$cur]['cnt']  ++;
+    }
 }
 
 require_once '../includes/header.php';
@@ -103,6 +114,45 @@ require_once '../includes/header.php';
     </div>
 </div>
 
+<?php if ($totalPayments > 0): ?>
+<div class="mb-3" style="display:grid;grid-template-columns:repeat(4,1fr);gap:0;background:linear-gradient(135deg,rgba(16,124,16,0.04),rgba(0,103,192,0.03));border:1px solid rgba(0,0,0,0.08);border-radius:12px;overflow:hidden;">
+    <?php
+    $curDefs = [
+        'AFN' => ['flag'=>'🇦🇫','sym'=>'؋','col'=>'#107C10','bg'=>'rgba(16,124,16,0.10)'],
+        'USD' => ['flag'=>'🇺🇸','sym'=>'$','col'=>'#0067C0','bg'=>'rgba(0,103,192,0.10)'],
+        'PKR' => ['flag'=>'🇵🇰','sym'=>'₨','col'=>'#7719AA','bg'=>'rgba(119,25,170,0.10)'],
+    ];
+    foreach ($curDefs as $cur => $def):
+        $d = $paysByCur[$cur];
+    ?>
+    <div style="text-align:center;padding:12px 8px;<?= $cur!=='AFN'?'border-left:1px solid rgba(0,0,0,0.07);':'' ?>">
+        <div style="margin-bottom:5px;">
+            <span style="background:<?= $def['bg'] ?>;color:<?= $def['col'] ?>;font-size:0.68rem;font-weight:700;padding:2px 9px;border-radius:20px;letter-spacing:.3px;">
+                <?= $def['flag'] ?> <?= $def['sym'] ?> <?= $cur ?>
+            </span>
+        </div>
+        <div style="font-size:1rem;font-weight:700;color:<?= $d['cnt']>0?$def['col']:'#bbb' ?>;">
+            <?= formatMoney($d['orig'], $cur) ?>
+        </div>
+        <?php if ($cur !== 'AFN' && $d['cnt'] > 0): ?>
+        <div style="font-size:0.7rem;color:#888;">≈ <?= formatAFN($d['afn']) ?></div>
+        <?php endif; ?>
+        <div style="font-size:0.68rem;color:#aaa;margin-top:2px;"><?= $d['cnt'] ?> payment<?= $d['cnt']!=1?'s':'' ?></div>
+    </div>
+    <?php endforeach; ?>
+    <div style="text-align:center;padding:12px 8px;border-left:1px solid rgba(0,0,0,0.07);background:rgba(0,0,0,0.015);">
+        <div style="margin-bottom:5px;">
+            <span style="background:rgba(28,28,28,0.07);color:#333;font-size:0.68rem;font-weight:700;padding:2px 9px;border-radius:20px;">
+                🌐 ∑ Total Paid
+            </span>
+        </div>
+        <div style="font-size:1rem;font-weight:700;color:#107C10;"><?= formatAFN($totalPayments) ?></div>
+        <div style="font-size:0.7rem;color:#888;">≈ <?= formatMoney(fromAFN($totalPayments,$rateUSD),'USD') ?></div>
+        <div style="font-size:0.7rem;color:#888;">≈ <?= formatMoney(fromAFN($totalPayments,$ratePKR),'PKR') ?></div>
+    </div>
+</div>
+<?php endif; ?>
+
 <div class="row g-3">
     <div class="col-lg-7">
         <div class="card">
@@ -122,16 +172,36 @@ require_once '../includes/header.php';
                         <?php if (empty($sales)): ?>
                         <tr><td colspan="5" class="text-center text-muted py-4"><?= __('cust_no_inv') ?></td></tr>
                         <?php else: ?>
-                        <?php foreach ($sales as $s): ?>
+                        <?php foreach ($sales as $s):
+                            $sCur     = $s['currency'] ?? 'AFN';
+                            $sCurRate = $rates[$sCur] ?? 1.0;
+                            $sTotal   = (float)$s['total_amount'];
+                            $sBalance = max(0, $sTotal - (float)$s['paid_amount']);
+                            $curColors = ['USD'=>'#0067C0','PKR'=>'#7719AA'];
+                        ?>
                         <tr>
-                            <td><span class="badge bg-light text-dark">#<?= str_pad($s['id'], 4, '0', STR_PAD_LEFT) ?></span></td>
                             <td>
-                                <div><?= formatAFN($s['total_amount']) ?></div>
-                                <div class="text-muted" style="font-size:0.72rem;">≈ <?= formatMoney(fromAFN($s['total_amount'], $rateUSD), 'USD') ?> · <?= formatMoney(fromAFN($s['total_amount'], $ratePKR), 'PKR') ?></div>
+                                <span class="badge bg-light text-dark">#<?= str_pad($s['id'], 4, '0', STR_PAD_LEFT) ?></span>
+                                <?php if ($sCur !== 'AFN'): ?>
+                                <span style="background:<?= $sCur==='USD'?'rgba(0,103,192,0.1)':'rgba(119,25,170,0.1)' ?>;color:<?= $curColors[$sCur]??'#666' ?>;font-size:0.62rem;font-weight:700;padding:1px 5px;border-radius:3px;margin-left:2px;"><?= $sCur ?></span>
+                                <?php endif; ?>
                             </td>
                             <td>
-                                <?php if ($s['balance'] > 0): ?>
-                                    <div class="text-danger fw-semibold"><?= formatAFN($s['balance']) ?></div>
+                                <?php if ($sCur !== 'AFN'): ?>
+                                    <div class="fw-semibold"><?= formatMoney(fromAFN($sTotal, $sCurRate), $sCur) ?></div>
+                                    <div class="text-muted" style="font-size:0.72rem;">≈ <?= formatAFN($sTotal) ?></div>
+                                <?php else: ?>
+                                    <div><?= formatAFN($sTotal) ?></div>
+                                <?php endif; ?>
+                            </td>
+                            <td>
+                                <?php if ($sBalance > 0.01): ?>
+                                    <?php if ($sCur !== 'AFN'): ?>
+                                        <div class="text-danger fw-semibold"><?= formatMoney(fromAFN($sBalance, $sCurRate), $sCur) ?></div>
+                                        <div class="text-muted" style="font-size:0.7rem;">≈ <?= formatAFN($sBalance) ?></div>
+                                    <?php else: ?>
+                                        <div class="text-danger fw-semibold"><?= formatAFN($sBalance) ?></div>
+                                    <?php endif; ?>
                                 <?php else: ?>
                                     <span class="text-success">✓ <?= __('sale_fully_paid') ?></span>
                                 <?php endif; ?>
@@ -154,7 +224,7 @@ require_once '../includes/header.php';
                     <thead>
                         <tr>
                             <th><?= __('pay_paid_amount') ?></th>
-                            <th><?= __('pay_afn_equiv') ?></th>
+                            <th>Invoice</th>
                             <th><?= __('field_notes') ?></th>
                             <th><?= __('field_date') ?></th>
                         </tr>
@@ -166,17 +236,29 @@ require_once '../includes/header.php';
                         <?php foreach ($payments as $p):
                             $afn = (float)$p['amount_afn'] ?: (float)$p['amount'];
                             $cur = $p['currency'] ?? 'AFN';
+                            $pDate = $p['payment_date'] ?? date('Y-m-d', strtotime($p['created_at']));
                         ?>
                         <tr>
                             <td class="fw-bold text-success">
                                 <?= formatMoney((float)$p['amount'], $cur) ?>
                                 <?php if ($cur !== 'AFN'): ?>
-                                <div><span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size:0.65rem;"><?= $cur ?></span></div>
+                                <div class="text-muted fw-normal" style="font-size:0.7rem;">≈ <?= formatAFN($afn) ?></div>
                                 <?php endif; ?>
                             </td>
-                            <td class="small"><?= $cur !== 'AFN' ? formatAFN($afn) : '—' ?></td>
+                            <td>
+                                <?php if (!empty($p['inv_id'])): ?>
+                                <a href="/sales/view.php?id=<?= $p['inv_id'] ?>" class="fw-semibold text-decoration-none" style="font-size:0.82rem;">
+                                    #<?= str_pad($p['inv_id'], 4, '0', STR_PAD_LEFT) ?>
+                                </a>
+                                <?php if ($p['inv_bill_no']): ?>
+                                <div class="text-muted" style="font-size:0.68rem;"><?= htmlspecialchars($p['inv_bill_no']) ?></div>
+                                <?php endif; ?>
+                                <?php else: ?>
+                                <span class="text-muted" style="font-size:0.75rem;">General</span>
+                                <?php endif; ?>
+                            </td>
                             <td class="text-muted small"><?= htmlspecialchars($p['notes'] ?: '—') ?></td>
-                            <td class="text-muted small"><?= date('d M Y', strtotime($p['created_at'])) ?></td>
+                            <td class="text-muted small"><?= date('d M Y', strtotime($pDate)) ?></td>
                         </tr>
                         <?php endforeach; ?>
                         <?php endif; ?>
