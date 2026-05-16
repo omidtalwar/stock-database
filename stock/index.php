@@ -37,11 +37,10 @@ $stats = $pdo->query("
     FROM stock_logs
 ")->fetch();
 
-// Supplier summary — grouped by supplier + currency so amounts display in original currency
+// Supplier summary
 $supplierStats = $pdo->query("
     SELECT
         supplier,
-        COALESCE(currency, 'AFN') AS currency,
         COUNT(*)          AS txn_count,
         SUM(quantity)     AS total_qty,
         SUM(total_amount) AS total_purchased,
@@ -50,8 +49,8 @@ $supplierStats = $pdo->query("
         MAX(created_at)   AS last_txn
     FROM stock_logs
     WHERE supplier IS NOT NULL AND supplier != ''
-    GROUP BY supplier, currency
-    ORDER BY supplier, total_unpaid DESC, last_txn DESC
+    GROUP BY supplier
+    ORDER BY total_unpaid DESC, last_txn DESC
 ")->fetchAll();
 
 require_once '../includes/header.php';
@@ -93,13 +92,15 @@ require_once '../includes/header.php';
     </div>
     <div class="col-6 col-sm-3">
         <div class="card stat-card" style="background:rgba(16,124,16,0.07);">
-            <div class="stat-val text-success">؋<?= number_format($stats['total_paid'], 0) ?></div>
+            <div class="stat-val text-success">$ <?= number_format($stats['total_paid'], 2) ?></div>
+            <div class="text-muted" style="font-size:0.72rem;margin-top:2px;">≈ <?= formatAFN(toAFN($stats['total_paid'], 'USD', $rates['USD'])) ?></div>
             <div class="stat-lbl" style="color:#107C10;"><?= __('stock_total_paid_stat') ?></div>
         </div>
     </div>
     <div class="col-6 col-sm-3">
         <div class="card stat-card" style="background:rgba(157,93,0,0.08);">
-            <div class="stat-val" style="color:#9D5D00;">؋<?= number_format($stats['total_unpaid'], 0) ?></div>
+            <div class="stat-val" style="color:#9D5D00;">$ <?= number_format($stats['total_unpaid'], 2) ?></div>
+            <div class="text-muted" style="font-size:0.72rem;margin-top:2px;">≈ <?= formatAFN(toAFN($stats['total_unpaid'], 'USD', $rates['USD'])) ?></div>
             <div class="stat-lbl" style="color:#9D5D00;"><?= __('stock_unpaid_balance') ?></div>
         </div>
     </div>
@@ -109,16 +110,30 @@ require_once '../includes/header.php';
 <div class="card mb-4" style="background:rgba(0,0,0,0.035);border:none;">
     <div class="card-body py-2 px-3 d-flex align-items-center justify-content-between flex-wrap gap-1">
         <span class="small fw-semibold text-muted"><?= __('stock_wholesalers_total') ?></span>
-        <span class="fw-bold fs-6">؋ <?= number_format($stats['total_purchased'], 0) ?></span>
+        <div class="text-end">
+            <span class="fw-bold fs-6">$ <?= number_format($stats['total_purchased'], 2) ?></span>
+            <div class="text-muted" style="font-size:0.72rem;">≈ <?= formatAFN(toAFN($stats['total_purchased'], 'USD', $rates['USD'])) ?></div>
+        </div>
     </div>
 </div>
 
 <!-- Supplier / Wholesaler Accounts -->
-<div class="d-flex align-items-center justify-content-between mb-2">
+<div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
     <h5 class="mb-0 fw-semibold d-flex align-items-center gap-2">
         <i class="bi bi-people" style="color:#0067C0;"></i>
         <?= __('stock_supplier_accts') ?>
     </h5>
+    <div class="d-flex align-items-center gap-2">
+        <div class="input-group input-group-sm" style="max-width:220px;">
+            <span class="input-group-text bg-white border-end-0 text-muted" style="border-radius:8px 0 0 8px;">
+                <i class="bi bi-search" style="font-size:0.78rem;"></i>
+            </span>
+            <input type="text" id="supplierSearch" class="form-control border-start-0 ps-0"
+                   placeholder="Search supplier…" oninput="filterSuppliers()"
+                   style="border-radius:0 8px 8px 0;">
+        </div>
+        <span id="supplierCount" class="text-muted small" style="white-space:nowrap;"></span>
+    </div>
 </div>
 
 <?php if (empty($supplierStats)): ?>
@@ -131,7 +146,7 @@ require_once '../includes/header.php';
 <?php else: ?>
 <div class="card">
     <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0" style="font-size:0.85rem;">
+        <table class="table table-hover align-middle mb-0" id="supplierTable" style="font-size:0.85rem;">
             <thead class="table-light">
                 <tr>
                     <th><?= __('stock_col_supplier') ?></th>
@@ -146,52 +161,34 @@ require_once '../includes/header.php';
             </thead>
             <tbody>
                 <?php foreach ($supplierStats as $s):
-                    $cur        = $s['currency'];
-                    $rate       = $rates[$cur] ?? 1.0;
-                    $purchased  = (float)$s['total_purchased'];
-                    $paid       = (float)$s['total_paid'];
-                    $unpaid     = (float)$s['total_unpaid'];
-                    $curColors  = ['USD'=>'#0067C0','PKR'=>'#7719AA','AFN'=>'#107C10'];
-                    $curBgs     = ['USD'=>'rgba(0,103,192,0.09)','PKR'=>'rgba(119,25,170,0.09)','AFN'=>'rgba(16,124,16,0.09)'];
-                    $curCol     = $curColors[$cur] ?? '#666';
-                    $curBg      = $curBgs[$cur]    ?? 'rgba(0,0,0,0.06)';
+                    $purchased = (float)$s['total_purchased'];
+                    $paid      = (float)$s['total_paid'];
+                    $unpaid    = (float)$s['total_unpaid'];
+                    $usdRate   = $rates['USD'];
                 ?>
-                <tr style="cursor:pointer;" onclick="location.href='supplier.php?name=<?= urlencode($s['supplier']) ?>'">
-                    <td class="fw-semibold">
-                        <?= htmlspecialchars($s['supplier']) ?>
-                        <?php if ($cur !== 'AFN'): ?>
-                        <span style="background:<?= $curBg ?>;color:<?= $curCol ?>;font-size:0.65rem;font-weight:700;padding:1px 6px;border-radius:4px;margin-<?= isRTL()?'right':'left' ?>:4px;">
-                            <?= htmlspecialchars($cur) ?>
-                        </span>
-                        <?php endif; ?>
-                    </td>
+                <tr style="cursor:pointer;" data-supplier="<?= strtolower(htmlspecialchars($s['supplier'])) ?>" onclick="location.href='supplier.php?name=<?= urlencode($s['supplier']) ?>'">
+                    <td class="fw-semibold"><?= htmlspecialchars($s['supplier']) ?></td>
                     <td class="text-end text-muted"><?= number_format($s['txn_count']) ?></td>
                     <td class="text-end text-muted"><?= number_format($s['total_qty']) ?> <?= __('unit_pcs') ?></td>
 
                     <td class="text-end fw-semibold">
-                        <?php if (!$purchased): ?>—<?php elseif ($cur !== 'AFN'): ?>
-                            <?= formatMoney($purchased, $cur) ?>
-                            <div class="text-muted fw-normal" style="font-size:0.72rem;">≈ <?= formatAFN(toAFN($purchased, $cur, $rate)) ?></div>
-                        <?php else: ?>
-                            <?= formatAFN($purchased) ?>
+                        <?php if (!$purchased): ?>—<?php else: ?>
+                            $ <?= number_format($purchased, 2) ?>
+                            <div class="text-muted fw-normal" style="font-size:0.72rem;">≈ <?= formatAFN(toAFN($purchased, 'USD', $usdRate)) ?></div>
                         <?php endif; ?>
                     </td>
 
                     <td class="text-end text-success fw-semibold">
-                        <?php if (!$paid): ?>—<?php elseif ($cur !== 'AFN'): ?>
-                            <?= formatMoney($paid, $cur) ?>
-                            <div class="text-muted fw-normal" style="font-size:0.72rem;">≈ <?= formatAFN(toAFN($paid, $cur, $rate)) ?></div>
-                        <?php else: ?>
-                            <?= formatAFN($paid) ?>
+                        <?php if (!$paid): ?>—<?php else: ?>
+                            $ <?= number_format($paid, 2) ?>
+                            <div class="text-muted fw-normal" style="font-size:0.72rem;">≈ <?= formatAFN(toAFN($paid, 'USD', $usdRate)) ?></div>
                         <?php endif; ?>
                     </td>
 
                     <td class="text-end fw-bold <?= $unpaid > 0 ? 'text-danger' : 'text-muted' ?>">
-                        <?php if ($unpaid <= 0): ?>—<?php elseif ($cur !== 'AFN'): ?>
-                            <?= formatMoney($unpaid, $cur) ?>
-                            <div class="text-muted fw-normal" style="font-size:0.72rem;">≈ <?= formatAFN(toAFN($unpaid, $cur, $rate)) ?></div>
-                        <?php else: ?>
-                            <?= formatAFN($unpaid) ?>
+                        <?php if ($unpaid <= 0): ?>—<?php else: ?>
+                            $ <?= number_format($unpaid, 2) ?>
+                            <div class="text-muted fw-normal" style="font-size:0.72rem;">≈ <?= formatAFN(toAFN($unpaid, 'USD', $usdRate)) ?></div>
                         <?php endif; ?>
                     </td>
 
@@ -212,10 +209,32 @@ require_once '../includes/header.php';
                     </td>
                 </tr>
                 <?php endforeach; ?>
+                <tr id="supplierNoResults" style="display:none;">
+                    <td colspan="8" class="text-center text-muted py-4 small">
+                        <i class="bi bi-search me-1"></i> No suppliers match your search.
+                    </td>
+                </tr>
             </tbody>
         </table>
     </div>
 </div>
 <?php endif; ?>
+
+<script>
+function filterSuppliers() {
+    const q = document.getElementById('supplierSearch').value.trim().toLowerCase();
+    const rows = document.querySelectorAll('#supplierTable tbody tr[data-supplier]');
+    let visible = 0;
+    rows.forEach(row => {
+        const show = !q || row.dataset.supplier.includes(q);
+        row.style.display = show ? '' : 'none';
+        if (show) visible++;
+    });
+    const countEl = document.getElementById('supplierCount');
+    countEl.textContent = q ? visible + ' of ' + rows.length : '';
+    const noResults = document.getElementById('supplierNoResults');
+    if (noResults) noResults.style.display = (q && visible === 0) ? '' : 'none';
+}
+</script>
 
 <?php require_once '../includes/footer.php'; ?>
