@@ -39,22 +39,32 @@ if ($search) {
 // Aggregate totals over the full filtered set (before pagination)
 $totalsStmt = $pdo->prepare("
     SELECT COUNT(*) AS cnt,
-           COALESCE(SUM(s.total_amount), 0) AS sum_total,
-           COALESCE(SUM(s.paid_amount),  0) AS sum_paid,
-           COALESCE(SUM(s.balance),      0) AS sum_balance,
            SUM(CASE WHEN s.balance = 0 THEN 1 ELSE 0 END) AS fully_paid
     FROM sales s
     JOIN customers c ON c.id = s.customer_id
     WHERE 1=1 $periodWhere $searchWhere
 ");
 $totalsStmt->execute($params);
-$totals = $totalsStmt->fetch();
+$totals    = $totalsStmt->fetch();
+$totalRows = (int)$totals['cnt'];
+$fullyPaid = (int)$totals['fully_paid'];
 
-$totalRows  = (int)$totals['cnt'];
-$sumTotal   = (float)$totals['sum_total'];
-$sumPaid    = (float)$totals['sum_paid'];
-$sumBalance = (float)$totals['sum_balance'];
-$fullyPaid  = (int)$totals['fully_paid'];
+// Per-currency totals (total_amount / paid_amount / balance stored in AFN)
+$curTotalsStmt = $pdo->prepare("
+    SELECT COALESCE(s.currency,'AFN') AS currency,
+           SUM(s.total_amount) AS sum_total,
+           SUM(s.paid_amount)  AS sum_paid,
+           SUM(s.balance)      AS sum_balance
+    FROM sales s
+    JOIN customers c ON c.id = s.customer_id
+    WHERE 1=1 $periodWhere $searchWhere
+    GROUP BY COALESCE(s.currency,'AFN')
+");
+$curTotalsStmt->execute($params);
+$curTotals = ['AFN'=>null,'USD'=>null,'PKR'=>null];
+foreach ($curTotalsStmt->fetchAll() as $ct) {
+    if (isset($curTotals[$ct['currency']])) $curTotals[$ct['currency']] = $ct;
+}
 
 $perPage    = 10;
 $page       = max(1, (int)($_GET['page'] ?? 1));
@@ -133,30 +143,48 @@ $searchParam = $search ? '&search=' . urlencode($search) : '';
 </div>
 
 <!-- Summary totals -->
-<?php if (!empty($sales)): ?>
+<?php if (!empty($sales)):
+    // Helper: render per-currency rows for a given field (sum_total / sum_paid / sum_balance)
+    function renderCurRows(array $curTotals, array $rates, string $field, string $colorClass = ''): void {
+        $any = false;
+        foreach (['AFN','USD','PKR'] as $c) {
+            $ct = $curTotals[$c] ?? null;
+            if (!$ct) continue;
+            $afn = (float)$ct[$field];
+            if ($afn < 0.01) continue;
+            $orig = $c === 'AFN' ? $afn : fromAFN($afn, $rates[$c] ?? 1.0);
+            $any  = true;
+            echo '<div style="line-height:1.4;">';
+            echo '<span class="fw-bold ' . $colorClass . '" style="font-size:0.9rem;">' . formatMoney($orig, $c) . '</span>';
+            if ($c !== 'AFN') echo '<div class="text-muted" style="font-size:0.68rem;">≈ ' . formatAFN($afn) . '</div>';
+            echo '</div>';
+        }
+        if (!$any) echo '<span class="fw-bold ' . $colorClass . '">—</span>';
+    }
+?>
 <div class="row g-3 mb-3">
     <div class="col-6 col-md-3">
-        <div class="card text-center">
-            <div class="card-body py-2">
+        <div class="card">
+            <div class="card-body py-2 px-3">
                 <div class="text-muted small mb-1"><?= __('field_total') ?></div>
-                <div class="fw-bold">؋ <?= number_format($sumTotal, 0) ?></div>
-                <div class="text-muted" style="font-size:0.72rem;"><?= $totalRows ?> <?= __('rep_invoices') ?></div>
+                <?php renderCurRows($curTotals, $rates, 'sum_total') ?>
+                <div class="text-muted mt-1" style="font-size:0.72rem;"><?= $totalRows ?> <?= __('rep_invoices') ?></div>
             </div>
         </div>
     </div>
     <div class="col-6 col-md-3">
-        <div class="card text-center">
-            <div class="card-body py-2">
+        <div class="card">
+            <div class="card-body py-2 px-3">
                 <div class="text-muted small mb-1"><?= __('field_paid') ?></div>
-                <div class="fw-bold text-success">؋ <?= number_format($sumPaid, 0) ?></div>
+                <?php renderCurRows($curTotals, $rates, 'sum_paid', 'text-success') ?>
             </div>
         </div>
     </div>
     <div class="col-6 col-md-3">
-        <div class="card text-center">
-            <div class="card-body py-2">
+        <div class="card">
+            <div class="card-body py-2 px-3">
                 <div class="text-muted small mb-1"><?= __('field_balance') ?></div>
-                <div class="fw-bold text-danger">؋ <?= number_format($sumBalance, 0) ?></div>
+                <?php renderCurRows($curTotals, $rates, 'sum_balance', 'text-danger') ?>
             </div>
         </div>
     </div>
@@ -164,7 +192,7 @@ $searchParam = $search ? '&search=' . urlencode($search) : '';
         <div class="card text-center">
             <div class="card-body py-2">
                 <div class="text-muted small mb-1"><?= __('sale_fully_paid') ?></div>
-                <div class="fw-bold text-primary"><?= $fullyPaid ?></div>
+                <div class="fw-bold text-primary" style="font-size:1.3rem;"><?= $fullyPaid ?></div>
             </div>
         </div>
     </div>
