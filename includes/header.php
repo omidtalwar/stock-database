@@ -10,9 +10,9 @@ $_bsCSS = isRTL()
     ? 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.rtl.min.css'
     : 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css';
 
-function navItem(string $href, string $icon, string $label, bool $active): string {
+function navItem(string $href, string $icon, string $label, bool $active, string $clr = '#818CF8'): string {
     $cls = $active ? 'nav-item active' : 'nav-item';
-    return "<a href=\"$href\" class=\"$cls\"><i class=\"bi bi-$icon\"></i> $label</a>";
+    return "<a href=\"$href\" class=\"$cls\" style=\"--item-clr:{$clr}\"><i class=\"bi bi-$icon\"></i> $label</a>";
 }
 ?>
 <!DOCTYPE html>
@@ -84,36 +84,49 @@ body { font-family: 'Segoe UI Variable', 'Noto Naskh Arabic', 'Segoe UI', system
     position: fixed;
     top: 0;
     <?= isRTL() ? 'right' : 'left' ?>: 0;
-    background: rgba(243,243,243,0.72);
-    backdrop-filter: blur(30px) saturate(200%);
-    -webkit-backdrop-filter: blur(30px) saturate(200%);
-    <?= isRTL() ? 'border-left' : 'border-right' ?>: 1px solid var(--w11-border);
+    background: linear-gradient(165deg, #0F0E17 0%, #1B1047 55%, #0D1B3E 100%);
+    <?= isRTL() ? 'border-left' : 'border-right' ?>: 1px solid rgba(255,255,255,0.07);
     display: flex;
     flex-direction: column;
     z-index: 300;
     transition: transform .25s ease;
     overflow-y: auto;
+    overflow-x: hidden;
+}
+/* Animated rainbow top bar */
+.sidebar::before {
+    content: '';
+    display: block;
+    height: 3px;
+    flex-shrink: 0;
+    background: linear-gradient(90deg, #818CF8, #C084FC, #22D3EE, #4ADE80, #FB923C, #F87171, #818CF8);
+    background-size: 300% 100%;
+    animation: sidebarRainbow 5s linear infinite;
+}
+@keyframes sidebarRainbow {
+    0%   { background-position: 0% 50%; }
+    100% { background-position: 300% 50%; }
 }
 
 .sidebar-brand {
-    padding: 18px 18px 14px;
+    padding: 14px 18px 14px;
     display: flex;
     align-items: center;
     gap: 11px;
-    border-bottom: 1px solid var(--w11-border);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
     flex-shrink: 0;
 }
 .brand-icon {
     width: 36px; height: 36px;
-    background: linear-gradient(135deg, #0067C0, #003E92);
+    background: linear-gradient(135deg, #818CF8 0%, #C084FC 100%);
     border-radius: 8px;
     display: flex; align-items: center; justify-content: center;
     color: #fff; font-weight: 900; font-size: 0.95rem; letter-spacing: 1px;
-    box-shadow: 0 2px 8px rgba(0,103,192,0.35);
+    box-shadow: 0 2px 12px rgba(129,140,248,0.55);
     flex-shrink: 0;
 }
-.brand-name { font-weight: 700; font-size: 0.95rem; color: var(--w11-text); line-height: 1.2; }
-.brand-sub  { font-size: 0.68rem; color: var(--w11-muted); }
+.brand-name { font-weight: 700; font-size: 0.95rem; color: #fff; line-height: 1.2; }
+.brand-sub  { font-size: 0.68rem; color: rgba(255,255,255,0.42); }
 
 .sidebar-nav { flex: 1; padding: 8px 10px; }
 
@@ -122,7 +135,7 @@ body { font-family: 'Segoe UI Variable', 'Noto Naskh Arabic', 'Segoe UI', system
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: .8px;
-    color: var(--w11-muted);
+    color: rgba(255,255,255,0.28);
     padding: 12px 10px 4px;
 }
 
@@ -132,45 +145,67 @@ body { font-family: 'Segoe UI Variable', 'Noto Naskh Arabic', 'Segoe UI', system
     gap: 10px;
     padding: 8px 10px;
     border-radius: var(--w11-radius-sm);
-    color: var(--w11-text);
+    color: rgba(255,255,255,0.65);
     text-decoration: none;
     font-size: 0.875rem;
     transition: background .15s ease, color .15s ease;
     margin-bottom: 1px;
+    position: relative;
 }
-.nav-item i { width: 20px; font-size: 1rem; flex-shrink: 0; color: var(--w11-muted); transition: color .15s; }
-.nav-item:hover { background: rgba(0,0,0,0.05); color: var(--w11-text); }
-.nav-item:hover i { color: var(--w11-text); }
-.nav-item.active { background: var(--w11-blue-light); color: var(--w11-blue); font-weight: 600; }
-.nav-item.active i { color: var(--w11-blue); }
+.nav-item i {
+    width: 20px; font-size: 1rem; flex-shrink: 0;
+    color: var(--item-clr, rgba(255,255,255,0.38));
+    transition: color .15s, transform .15s;
+}
+.nav-item:hover { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.95); }
+.nav-item:hover i { color: var(--item-clr, rgba(255,255,255,0.85)); transform: scale(1.12); }
+.nav-item.active {
+    background: rgba(255,255,255,0.08);
+    color: #fff;
+    font-weight: 600;
+}
+.nav-item.active::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 18%; bottom: 18%;
+    width: 3px; border-radius: 0 2px 2px 0;
+    background: var(--item-clr, #818CF8);
+    box-shadow: 0 0 8px var(--item-clr, #818CF8);
+}
+[dir="rtl"] .nav-item.active::before { left: auto; right: 0; border-radius: 2px 0 0 2px; }
+.nav-item.active i {
+    color: var(--item-clr, #818CF8);
+    filter: drop-shadow(0 0 5px var(--item-clr));
+}
 
 .sidebar-footer {
     padding: 12px 14px;
-    border-top: 1px solid var(--w11-border);
+    border-top: 1px solid rgba(255,255,255,0.08);
     display: flex;
     align-items: center;
     gap: 10px;
     flex-shrink: 0;
+    background: rgba(0,0,0,0.18);
 }
 .s-avatar {
     width: 32px; height: 32px; border-radius: 8px;
     display: flex; align-items: center; justify-content: center;
     font-weight: 800; font-size: 0.8rem; color: #fff; flex-shrink: 0;
 }
-.s-avatar.admin     { background: linear-gradient(135deg,#C42B1C,#8B1E14); }
-.s-avatar.assistant { background: linear-gradient(135deg,#0067C0,#004A8F); }
-.s-name { font-weight: 600; font-size: 0.8rem; line-height: 1.2; }
-.s-role { font-size: 0.67rem; color: var(--w11-muted); }
+.s-avatar.admin     { background: linear-gradient(135deg,#F87171,#C42B1C); box-shadow: 0 2px 8px rgba(248,113,113,0.4); }
+.s-avatar.assistant { background: linear-gradient(135deg,#60A5FA,#0067C0); box-shadow: 0 2px 8px rgba(96,165,250,0.4); }
+.s-name { font-weight: 600; font-size: 0.8rem; line-height: 1.2; color: rgba(255,255,255,0.88); }
+.s-role { font-size: 0.67rem; color: rgba(255,255,255,0.42); }
 .s-logout {
     <?= isRTL() ? 'margin-right' : 'margin-left' ?>: auto;
     width: 28px; height: 28px; border-radius: 6px;
     background: transparent; border: none;
-    color: var(--w11-muted);
+    color: rgba(255,255,255,0.35);
     display: flex; align-items: center; justify-content: center;
     cursor: pointer; text-decoration: none; font-size: 1rem;
     transition: background .15s, color .15s;
 }
-.s-logout:hover { background: rgba(196,43,28,0.1); color: var(--w11-red); }
+.s-logout:hover { background: rgba(248,113,113,0.15); color: #F87171; }
 
 /* ── Layout ── */
 .main-wrap {
@@ -338,7 +373,7 @@ a:hover { color: var(--w11-blue-hover); }
 /* ── Mobile ── */
 @media (max-width: 768px) {
     .sidebar { transform: translateX(<?= isRTL() ? '100%' : '-100%' ?>); }
-    .sidebar.open { transform: translateX(0); box-shadow: <?= isRTL() ? '-4px' : '4px' ?> 0 24px rgba(0,0,0,0.15); }
+    .sidebar.open { transform: translateX(0); box-shadow: <?= isRTL() ? '-4px' : '4px' ?> 0 32px rgba(0,0,0,0.45); }
     .main-wrap { <?= isRTL() ? 'margin-right' : 'margin-left' ?>: 0; }
     .hamburger { display: flex; align-items: center; justify-content: center; }
     .topbar-date { display: none !important; }
@@ -425,21 +460,21 @@ if (!empty($_SESSION['error'])) {
     <nav class="sidebar-nav">
         <div class="nav-section"><?= __('nav_main') ?></div>
         <?php if (isAdmin()): ?>
-        <?= navItem('/dashboard.php', 'grid-1x2', __('nav_dashboard'), $currentPage === 'dashboard') ?>
+        <?= navItem('/dashboard.php', 'grid-1x2', __('nav_dashboard'), $currentPage === 'dashboard', '#818CF8') ?>
         <?php endif; ?>
 
         <div class="nav-section"><?= __('nav_business') ?></div>
-        <?= navItem('/customers/index.php', 'people',      __('nav_customers'), $currentDir === 'customers') ?>
-        <?= navItem('/products/index.php',  'box-seam',    __('nav_products'),  $currentDir === 'products') ?>
-        <?= navItem('/sales/index.php',     'receipt',     __('nav_sales'),     $currentDir === 'sales') ?>
-        <?= navItem('/payments/index.php',  'cash-coin',   __('nav_payments'),  $currentDir === 'payments') ?>
-        <?= navItem('/stock/index.php',     'archive',     __('nav_stock'),     $currentDir === 'stock') ?>
+        <?= navItem('/customers/index.php', 'people',      __('nav_customers'), $currentDir === 'customers', '#C084FC') ?>
+        <?= navItem('/products/index.php',  'box-seam',    __('nav_products'),  $currentDir === 'products',  '#34D399') ?>
+        <?= navItem('/sales/index.php',     'receipt',     __('nav_sales'),     $currentDir === 'sales',     '#FB923C') ?>
+        <?= navItem('/payments/index.php',  'cash-coin',   __('nav_payments'),  $currentDir === 'payments',  '#4ADE80') ?>
+        <?= navItem('/stock/index.php',     'archive',     __('nav_stock'),     $currentDir === 'stock',     '#22D3EE') ?>
 
         <?php if (isAdmin()): ?>
         <div class="nav-section"><?= __('nav_admin') ?></div>
-        <?= navItem('/admin/users.php',    'person-gear',       __('nav_users'),    $currentDir === 'admin' && $currentPage === 'users') ?>
-        <?= navItem('/admin/reports.php',  'bar-chart',         __('nav_reports'),  $currentDir === 'admin' && $currentPage === 'reports') ?>
-        <?= navItem('/admin/settings.php', 'currency-exchange', __('nav_exchange'), $currentDir === 'admin' && $currentPage === 'settings') ?>
+        <?= navItem('/admin/users.php',    'person-gear',       __('nav_users'),    $currentDir === 'admin' && $currentPage === 'users',     '#F87171') ?>
+        <?= navItem('/admin/reports.php',  'bar-chart',         __('nav_reports'),  $currentDir === 'admin' && $currentPage === 'reports',   '#60A5FA') ?>
+        <?= navItem('/admin/settings.php', 'currency-exchange', __('nav_exchange'), $currentDir === 'admin' && $currentPage === 'settings',  '#FBBF24') ?>
         <?php endif; ?>
     </nav>
 
