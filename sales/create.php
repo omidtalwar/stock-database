@@ -613,7 +613,7 @@ function addRow() {
         <td>
             <input type="number" name="items[${idx}][quantity]"
                    class="form-control form-control-sm qty-input"
-                   value="1" min="0.001" step="any" oninput="updateRow(${idx})" required>
+                   value="0" min="0" step="any" oninput="updateRow(${idx})" required>
         </td>
         <td>
             <div class="input-group input-group-sm">

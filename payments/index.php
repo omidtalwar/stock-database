@@ -18,7 +18,21 @@ $periodWhere = match($period) {
     default => "",
 };
 
-$totalRows = (int)$pdo->query("SELECT COUNT(*) FROM payments p WHERE 1=1 $periodWhere")->fetchColumn();
+$search      = trim($_GET['search'] ?? '');
+$searchWhere = '';
+$params      = [];
+if ($search) {
+    $searchWhere = "AND (c.name LIKE ? OR c.shop_name LIKE ?)";
+    $params      = ["%$search%", "%$search%"];
+}
+
+$countStmt = $pdo->prepare("
+    SELECT COUNT(*) FROM payments p
+    JOIN customers c ON c.id = p.customer_id
+    WHERE 1=1 $periodWhere $searchWhere
+");
+$countStmt->execute($params);
+$totalRows = (int)$countStmt->fetchColumn();
 
 $perPage    = 10;
 $page       = max(1, (int)($_GET['page'] ?? 1));
@@ -30,17 +44,19 @@ $offset     = ($page - 1) * $perPage;
 try { $pdo->exec("ALTER TABLE payments ADD COLUMN payment_date DATE NULL AFTER notes"); } catch (\PDOException $e) {}
 try { $pdo->exec("ALTER TABLE payments ADD COLUMN sale_id INT NULL AFTER customer_id"); } catch (\PDOException $e) {}
 
-$payments = $pdo->query("
+$stmt = $pdo->prepare("
     SELECT p.*, c.name AS customer_name, c.shop_name, u.full_name AS created_by,
            s.id AS inv_id, s.bill_no AS inv_bill_no
     FROM payments p
     JOIN customers c ON c.id = p.customer_id
     JOIN users u ON u.id = p.created_by
     LEFT JOIN sales s ON s.id = p.sale_id
-    WHERE 1=1 $periodWhere
+    WHERE 1=1 $periodWhere $searchWhere
     ORDER BY COALESCE(p.payment_date, DATE(p.created_at)) DESC, p.created_at DESC
     LIMIT $perPage OFFSET $offset
-")->fetchAll();
+");
+$stmt->execute($params);
+$payments = $stmt->fetchAll();
 
 foreach ($payments as &$p) {
     if ((float)$p['amount_afn'] == 0 && (float)$p['amount'] > 0) {
@@ -92,22 +108,46 @@ $payPeriodLabels = [
     'month' => __('period_month'),
 ];
 ?>
-<div class="d-flex align-items-center gap-2 flex-wrap mb-3">
-    <span class="small fw-semibold text-muted"><?= __('period_showing') ?>:</span>
-    <?php foreach ($payPeriodLabels as $pk => $pl): ?>
-    <a href="?period=<?= $pk ?>" class="btn btn-sm <?= $period === $pk ? 'btn-primary' : 'btn-outline-secondary' ?>">
-        <?php if ($pk === 'today'): ?><i class="bi bi-sun me-1"></i>
-        <?php elseif ($pk === 'week'): ?><i class="bi bi-calendar-week me-1"></i>
-        <?php elseif ($pk === 'month'): ?><i class="bi bi-calendar-month me-1"></i>
-        <?php else: ?><i class="bi bi-infinity me-1"></i>
-        <?php endif; ?>
-        <?= $pl ?>
-    </a>
-    <?php endforeach; ?>
-</div>
-
-
 <div class="card">
+    <div class="card-header py-3">
+        <form method="GET" class="d-flex align-items-center gap-2 justify-content-between flex-wrap">
+            <input type="hidden" name="period" value="<?= htmlspecialchars($period) ?>">
+            <!-- Search -->
+            <div class="input-group" style="max-width:340px;">
+                <span class="input-group-text bg-white border-end-0 text-muted">
+                    <i class="bi bi-search" style="font-size:.8rem;"></i>
+                </span>
+                <input type="text" name="search" class="form-control border-start-0 ps-0"
+                       placeholder="Search customer or shop…"
+                       value="<?= htmlspecialchars($search) ?>">
+                <?php if ($search): ?>
+                <a href="?period=<?= $period ?>" class="btn btn-outline-secondary border-start-0" title="Clear">
+                    <i class="bi bi-x"></i>
+                </a>
+                <?php else: ?>
+                <button class="btn btn-outline-secondary border-start-0" type="submit">
+                    <i class="bi bi-arrow-right" style="font-size:.8rem;"></i>
+                </button>
+                <?php endif; ?>
+            </div>
+            <!-- Period pills -->
+            <div class="d-flex gap-1 flex-wrap">
+                <?php
+                $icons = ['all'=>'infinity','today'=>'sun','week'=>'calendar-week','month'=>'calendar-month'];
+                foreach ($payPeriodLabels as $pk => $pl):
+                    $active = $period === $pk;
+                ?>
+                <a href="?period=<?= $pk ?><?= $search ? '&search='.urlencode($search) : '' ?>"
+                   class="btn btn-sm <?= $active ? 'btn-primary' : 'btn-light' ?>"
+                   style="border-radius:20px;font-size:.78rem;">
+                    <i class="bi bi-<?= $icons[$pk] ?> me-1"></i><?= $pl ?>
+                </a>
+                <?php endforeach; ?>
+            </div>
+            <!-- Count -->
+            <span class="text-muted small ms-auto"><?= $totalRows ?> payments</span>
+        </form>
+    </div>
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
             <thead>
