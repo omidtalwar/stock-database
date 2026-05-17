@@ -589,6 +589,7 @@ function onSaleCurrencyChange() {
         }
         updateRow(idx);
     });
+    document.getElementById('paidCurrency').value = saleCur();
     updateSummary();
 }
 
