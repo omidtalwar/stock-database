@@ -75,30 +75,56 @@ require_once '../includes/header.php';
 </div>
 
 <style>
-.rs-drop {
-    display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;
-    background:#fff;border:1px solid rgba(0,0,0,0.09);border-radius:12px;
-    box-shadow:0 8px 32px rgba(0,0,0,0.13);z-index:1055;overflow:hidden;
-    animation:rsFadeIn .15s ease;
+/* ── Recent searches banner ── */
+#rs-banner {
+    display: none;
+    padding: 10px 18px 12px;
+    background: linear-gradient(135deg, rgba(0,103,192,0.04) 0%, rgba(67,56,202,0.05) 100%);
+    border-bottom: 1px solid rgba(0,103,192,0.1);
 }
-@keyframes rsFadeIn { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
-.rs-item {
-    display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer;
-    transition:background .12s;border-bottom:1px solid rgba(0,0,0,0.04);
+#rs-banner .rs-label {
+    font-size: .7rem; font-weight: 700; letter-spacing: .5px;
+    text-transform: uppercase; color: #605E5C;
+    display: flex; align-items: center; gap: 5px;
+    margin-bottom: 8px;
 }
-.rs-item:last-of-type{border-bottom:none;}
-.rs-item:hover{background:rgba(0,103,192,0.05);}
-.rs-term {flex:1;font-size:.84rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#1C1C1C;}
-.rs-del {
-    width:22px;height:22px;border-radius:50%;border:none;background:transparent;
-    color:#aaa;font-size:.8rem;display:flex;align-items:center;justify-content:center;
-    cursor:pointer;flex-shrink:0;transition:background .12s,color .12s;
+#rs-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.rs-chip {
+    display: inline-flex; align-items: center; gap: 0;
+    border-radius: 22px; overflow: hidden;
+    border: 1px solid rgba(0,103,192,0.18);
+    background: #fff;
+    box-shadow: 0 1px 4px rgba(0,103,192,0.08);
+    transition: box-shadow .15s, border-color .15s;
 }
-.rs-del:hover{background:rgba(196,43,28,0.1);color:#C42B1C;}
-.rs-footer {
-    display:flex;justify-content:space-between;align-items:center;
-    padding:7px 14px;background:rgba(0,0,0,0.02);border-top:1px solid rgba(0,0,0,0.06);
+.rs-chip:hover { box-shadow: 0 2px 10px rgba(0,103,192,0.15); border-color: rgba(0,103,192,0.35); }
+.rs-chip-search {
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 10px 5px 11px;
+    color: #0067C0; font-size: .8rem; font-weight: 600;
+    text-decoration: none; cursor: pointer;
+    border: none; background: none;
+    transition: background .12s;
+    white-space: nowrap;
 }
+.rs-chip-search:hover { background: rgba(0,103,192,0.07); color: #0067C0; }
+.rs-chip-search i { font-size: .7rem; color: #7B8FA1; }
+.rs-chip-del {
+    display: flex; align-items: center; justify-content: center;
+    width: 26px; height: 100%; min-height: 30px;
+    border: none; background: none; cursor: pointer;
+    color: #aaa; font-size: .75rem;
+    border-left: 1px solid rgba(0,103,192,0.1);
+    transition: background .12s, color .12s;
+}
+.rs-chip-del:hover { background: rgba(196,43,28,0.07); color: #C42B1C; }
+#rs-clear-all {
+    font-size: .72rem; color: #888; border: none; background: none;
+    cursor: pointer; padding: 0; margin-left: auto; align-self: flex-end;
+    text-decoration: underline; text-underline-offset: 2px;
+    transition: color .12s;
+}
+#rs-clear-all:hover { color: #C42B1C; }
 </style>
 
 <div class="card">
@@ -124,13 +150,17 @@ require_once '../includes/header.php';
                     </button>
                     <?php endif; ?>
                 </div>
-                <!-- Recent searches dropdown -->
-                <div class="rs-drop" id="rsDrop">
-                    <div id="rsList"></div>
-                </div>
             </div>
             <span class="text-muted small"><?= $totalRows ?> <?= __('nav_customers') ?></span>
         </form>
+    </div>
+    <!-- Recent searches banner — rendered by JS, always visible when searches exist -->
+    <div id="rs-banner">
+        <div class="rs-label"><i class="bi bi-clock-history"></i> Recent Searches</div>
+        <div style="display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap;">
+            <div id="rs-chips"></div>
+            <button id="rs-clear-all" type="button">Clear all</button>
+        </div>
     </div>
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
@@ -244,85 +274,58 @@ require_once '../includes/header.php';
 
 <script>
 (function () {
-    const KEY  = 'fzl_cust_searches';
-    const MAX  = 7;
-    const form = document.getElementById('custSearchForm');
-    const inp  = document.getElementById('custSearchInput');
-    const drop = document.getElementById('rsDrop');
-    const list = document.getElementById('rsList');
+    const KEY    = 'fzl_cust_searches';
+    const MAX    = 8;
+    const form   = document.getElementById('custSearchForm');
+    const inp    = document.getElementById('custSearchInput');
+    const banner = document.getElementById('rs-banner');
+    const chips  = document.getElementById('rs-chips');
+    const clearBtn = document.getElementById('rs-clear-all');
 
     function esc(s) {
         return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
-    function load()  { try { return JSON.parse(localStorage.getItem(KEY)||'[]'); } catch { return []; } }
+    function load()  { try { return JSON.parse(localStorage.getItem(KEY) || '[]'); } catch { return []; } }
     function save(a) { localStorage.setItem(KEY, JSON.stringify(a)); }
 
     function add(term) {
-        if (!term) return;
+        if (!term.trim()) return;
         let a = load().filter(t => t.toLowerCase() !== term.toLowerCase());
-        a.unshift(term);
+        a.unshift(term.trim());
         save(a.slice(0, MAX));
     }
     function remove(term) { save(load().filter(t => t !== term)); render(); }
-    function clearAll()   { save([]); hide(); }
 
     function render() {
         const items = load();
-        if (!items.length) { hide(); return; }
+        if (!items.length) { banner.style.display = 'none'; return; }
 
-        list.innerHTML = items.map(t => `
-            <div class="rs-item" data-term="${esc(t)}">
-                <i class="bi bi-clock-history text-muted" style="font-size:.78rem;flex-shrink:0;"></i>
-                <span class="rs-term">${esc(t)}</span>
-                <a href="/customers/index.php?search=${encodeURIComponent(t)}"
-                   class="btn btn-sm btn-light py-0 px-2 rs-action" style="font-size:.72rem;border-radius:6px;white-space:nowrap;"
-                   title="Search">
-                    <i class="bi bi-arrow-up-left"></i>
+        chips.innerHTML = items.map(t => `
+            <span class="rs-chip">
+                <a class="rs-chip-search" href="/customers/index.php?search=${encodeURIComponent(t)}">
+                    <i class="bi bi-clock-history"></i>${esc(t)}
                 </a>
-                <button type="button" class="rs-del rs-remove" data-term="${esc(t)}" title="Remove">
+                <button type="button" class="rs-chip-del" data-term="${esc(t)}" title="Remove">
                     <i class="bi bi-x"></i>
                 </button>
-            </div>`
-        ).join('') + `
-        <div class="rs-footer">
-            <span style="font-size:.72rem;color:#888;">Recent searches</span>
-            <button type="button" id="rsClearAll"
-                    style="font-size:.72rem;border:none;background:none;color:#888;cursor:pointer;padding:0;">
-                Clear all
-            </button>
-        </div>`;
+            </span>`
+        ).join('');
 
-        drop.style.display = '';
+        banner.style.display = '';
 
-        list.querySelectorAll('.rs-item').forEach(el => {
-            el.addEventListener('mousedown', e => {
-                if (e.target.closest('.rs-remove') || e.target.closest('.rs-action')) return;
-                e.preventDefault();
-                inp.value = el.dataset.term;
-                hide();
-                add(el.dataset.term);
-                form.submit();
-            });
+        chips.querySelectorAll('.rs-chip-del').forEach(btn => {
+            btn.addEventListener('click', () => remove(btn.dataset.term));
         });
-        list.querySelectorAll('.rs-remove').forEach(btn => {
-            btn.addEventListener('mousedown', e => { e.preventDefault(); remove(btn.dataset.term); });
-        });
-        const ca = document.getElementById('rsClearAll');
-        if (ca) ca.addEventListener('mousedown', e => { e.preventDefault(); clearAll(); });
     }
 
-    function show() { render(); }
-    function hide() { drop.style.display = 'none'; }
-
-    inp.addEventListener('focus', () => { if (!inp.value.trim()) show(); });
-    inp.addEventListener('input', () => { inp.value.trim() ? hide() : show(); });
-    inp.addEventListener('blur',  () => { setTimeout(hide, 180); });
-
+    clearBtn.addEventListener('click', () => { save([]); render(); });
     form.addEventListener('submit', () => { const v = inp.value.trim(); if (v) add(v); });
 
     <?php if ($search): ?>
     add(<?= json_encode($search) ?>);
     <?php endif; ?>
+
+    render();
 })();
 </script>
 

@@ -247,16 +247,7 @@ document.querySelectorAll('.modal').forEach(function(m){ document.body.appendChi
     position: fixed; inset: 0; z-index: 1039;
     pointer-events: none;
 }
-#fzl-fab-scrim {
-    position: fixed; inset: 0;
-    background: rgba(0,0,0,0.42);
-    backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
-    opacity: 0; pointer-events: none;
-    transition: opacity .35s ease;
-}
-#fzl-fab-root.fab-open #fzl-fab-scrim {
-    opacity: 1; pointer-events: auto;
-}
+#fzl-fab-scrim { display: none; }
 
 /* ── Wrap (magnetic target) ── */
 #fzl-fab-wrap {
@@ -373,51 +364,47 @@ document.querySelectorAll('.modal').forEach(function(m){ document.body.appendChi
 
 <script>
 (function () {
-    const root  = document.getElementById('fzl-fab-root');
-    const wrap  = document.getElementById('fzl-fab-wrap');
-    const btn   = document.getElementById('fzl-fab-btn');
-    const ico   = document.getElementById('fzl-fab-ico');
-    const scrim = document.getElementById('fzl-fab-scrim');
-    const acts  = Array.from(document.querySelectorAll('.fzl-act'));
+    const root = document.getElementById('fzl-fab-root');
+    const wrap = document.getElementById('fzl-fab-wrap');
+    const btn  = document.getElementById('fzl-fab-btn');
+    const ico  = document.getElementById('fzl-fab-ico');
+    const acts = Array.from(document.querySelectorAll('.fzl-act'));
     if (!root) return;
 
-    // ── Compute arc positions ──────────────────────────────────────
+    // ── Arc positions ─────────────────────────────────────────────
     const N = acts.length;
-    const RADIUS  = 105;
-    const ANG_START = -150, ANG_END = -30;
     acts.forEach((el, i) => {
-        const deg = N > 1 ? ANG_START + (ANG_END - ANG_START) * i / (N - 1) : -90;
+        const deg = N > 1 ? -150 + 120 * i / (N - 1) : -90;
         const rad = deg * Math.PI / 180;
-        const tx  = Math.cos(rad) * RADIUS;
-        const ty  = Math.sin(rad) * RADIUS;
+        const tx  = Math.cos(rad) * 108;
+        const ty  = Math.sin(rad) * 108;
         el.style.setProperty('--tx', tx.toFixed(1) + 'px');
         el.style.setProperty('--ty', ty.toFixed(1) + 'px');
         el.classList.add(tx <= 0 ? 'tip-left' : 'tip-right');
     });
 
-    // ── Open / Close ──────────────────────────────────────────────
+    // ── Toggle ────────────────────────────────────────────────────
     let isOpen = false;
 
-    function morphIcon(toClose) {
+    function morphIcon(toX) {
         ico.style.opacity = '0';
-        ico.style.transform = 'scale(0.4) rotate(' + (toClose ? 90 : -90) + 'deg)';
+        ico.style.transform = 'scale(0.3) rotate(' + (toX ? 120 : -120) + 'deg)';
         setTimeout(() => {
-            ico.className = toClose ? 'bi bi-x-lg' : 'bi bi-lightning-charge-fill';
-            ico.style.transform = 'scale(0.4) rotate(' + (toClose ? -90 : 90) + 'deg)';
+            ico.className = toX ? 'bi bi-x-lg' : 'bi bi-lightning-charge-fill';
+            ico.style.transform = 'scale(0.3) rotate(' + (toX ? -120 : 120) + 'deg)';
             requestAnimationFrame(() => requestAnimationFrame(() => {
                 ico.style.opacity = '1';
                 ico.style.transform = 'scale(1) rotate(0deg)';
             }));
-        }, 140);
+        }, 130);
     }
 
-    function openFab() {
+    function openFab(silent) {
         isOpen = true;
         root.classList.remove('fab-closing');
         root.classList.add('fab-open');
         btn.setAttribute('aria-expanded', 'true');
-        morphIcon(true);
-        // Reset magnetic
+        if (!silent) morphIcon(true);
         targetX = 0; targetY = 0;
     }
 
@@ -427,23 +414,25 @@ document.querySelectorAll('.modal').forEach(function(m){ document.body.appendChi
         root.classList.remove('fab-open');
         btn.setAttribute('aria-expanded', 'false');
         morphIcon(false);
-        setTimeout(() => root.classList.remove('fab-closing'), 500);
+        setTimeout(() => root.classList.remove('fab-closing'), 520);
     }
 
     btn.addEventListener('click', () => isOpen ? closeFab() : openFab());
-    scrim.addEventListener('click', closeFab);
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && isOpen) closeFab(); });
 
-    // Close on action click (navigate away)
-    acts.forEach(a => a.addEventListener('click', () => closeFab()));
+    // ── Auto-open on load ─────────────────────────────────────────
+    // silent=true skips the icon morph so it stays as lightning
+    setTimeout(() => openFab(true), 550);
 
-    // ── Magnetic gravity ──────────────────────────────────────────
-    const BTN_H      = 62;
-    const WRAP_BOT   = 28;
-    const MAG_RADIUS = 240;    // px — activation distance
-    const MAG_PULL   = 0.24;   // 0–1 — max pull ratio
+    // ── Magnetic pull ─────────────────────────────────────────────
+    // Active only when closed. Pulls strongly as cursor nears bottom.
+    const BTN_H    = 62;
+    const WRAP_BOT = 28;
+    const MAG_R    = 480;   // activation radius in px
+    const MAX_MOVE = 38;    // max pixel displacement
 
-    let targetX = 0, targetY = 0, curX = 0, curY = 0;
+    let targetX = 0, targetY = 0;
+    let curX    = 0, curY    = 0;
     let rafId   = null;
 
     function fabCenter() {
@@ -454,15 +443,15 @@ document.querySelectorAll('.modal').forEach(function(m){ document.body.appendChi
     }
 
     function animMag() {
-        curX += (targetX - curX) * 0.13;
-        curY += (targetY - curY) * 0.13;
+        curX += (targetX - curX) * 0.17;
+        curY += (targetY - curY) * 0.17;
         wrap.style.transform =
-            'translate(calc(-50% + ' + curX.toFixed(2) + 'px), ' + curY.toFixed(2) + 'px)';
+            'translate(calc(-50% + ' + curX.toFixed(2) + 'px),' + curY.toFixed(2) + 'px)';
         const d = Math.abs(targetX - curX) + Math.abs(targetY - curY);
-        rafId = d > 0.04 ? requestAnimationFrame(animMag) : null;
+        rafId = d > 0.03 ? requestAnimationFrame(animMag) : null;
     }
 
-    function kickMag() { if (!rafId) rafId = requestAnimationFrame(animMag); }
+    function kick() { if (!rafId) rafId = requestAnimationFrame(animMag); }
 
     document.addEventListener('mousemove', function (e) {
         if (isOpen) return;
@@ -470,18 +459,20 @@ document.querySelectorAll('.modal').forEach(function(m){ document.body.appendChi
         const dx   = e.clientX - c.x;
         const dy   = e.clientY - c.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < MAG_RADIUS) {
-            const t  = Math.pow(1 - dist / MAG_RADIUS, 2);
-            targetX = dx * t * MAG_PULL;
-            targetY = dy * t * MAG_PULL;
+        if (dist < MAG_R) {
+            // Quadratic falloff — strong near, fades far
+            const t   = Math.pow(1 - dist / MAG_R, 2);
+            const len = dist || 1;
+            targetX = (dx / len) * t * MAX_MOVE;
+            targetY = (dy / len) * t * MAX_MOVE;
         } else {
             targetX = 0; targetY = 0;
         }
-        kickMag();
+        kick();
     });
 
-    document.addEventListener('mouseleave', function () {
-        targetX = 0; targetY = 0; kickMag();
+    document.addEventListener('mouseleave', () => {
+        targetX = 0; targetY = 0; kick();
     });
 })();
 </script>
