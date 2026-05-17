@@ -156,7 +156,6 @@ $payPeriodLabels = [
                     <th><?= __('nav_customers') ?></th>
                     <th><?= __('pay_paid_amount') ?></th>
                     <th class="d-none d-sm-table-cell"><?= __('pay_currency') ?></th>
-                    <th class="d-none d-sm-table-cell"><?= __('pay_afn_equiv') ?></th>
                     <th class="d-none d-md-table-cell">Invoice</th>
                     <th class="d-none d-lg-table-cell"><?= __('field_notes') ?></th>
                     <th class="d-none d-md-table-cell"><?= __('field_by') ?></th>
@@ -166,7 +165,7 @@ $payPeriodLabels = [
             </thead>
             <tbody>
                 <?php if (empty($payments)): ?>
-                <tr><td colspan="<?= isAdmin() ? 9 : 8 ?>" class="text-center text-muted py-5"><?= __('pay_no_data') ?></td></tr>
+                <tr><td colspan="<?= isAdmin() ? 8 : 7 ?>" class="text-center text-muted py-5"><?= __('pay_no_data') ?></td></tr>
                 <?php else: ?>
                 <?php foreach ($payments as $i => $p):
                     $amtAfn = (float)$p['amount_afn'] ?: (float)$p['amount'];
@@ -198,7 +197,6 @@ $payPeriodLabels = [
                         <div class="text-muted" style="font-size:0.7rem;"><?= __('set_rate_label') ?> <?= number_format($exRate, 2) ?></div>
                         <?php endif; ?>
                     </td>
-                    <td class="fw-semibold d-none d-sm-table-cell"><?= formatAFN($amtAfn) ?></td>
                     <td class="d-none d-md-table-cell">
                         <?php if ($p['inv_id']): ?>
                         <a href="/sales/view.php?id=<?= $p['inv_id'] ?>" class="text-decoration-none fw-semibold" style="font-size:0.8rem;">
