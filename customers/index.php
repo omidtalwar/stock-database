@@ -74,16 +74,62 @@ require_once '../includes/header.php';
     </a>
 </div>
 
+<style>
+.rs-drop {
+    display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;
+    background:#fff;border:1px solid rgba(0,0,0,0.09);border-radius:12px;
+    box-shadow:0 8px 32px rgba(0,0,0,0.13);z-index:1055;overflow:hidden;
+    animation:rsFadeIn .15s ease;
+}
+@keyframes rsFadeIn { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
+.rs-item {
+    display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer;
+    transition:background .12s;border-bottom:1px solid rgba(0,0,0,0.04);
+}
+.rs-item:last-of-type{border-bottom:none;}
+.rs-item:hover{background:rgba(0,103,192,0.05);}
+.rs-term {flex:1;font-size:.84rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#1C1C1C;}
+.rs-del {
+    width:22px;height:22px;border-radius:50%;border:none;background:transparent;
+    color:#aaa;font-size:.8rem;display:flex;align-items:center;justify-content:center;
+    cursor:pointer;flex-shrink:0;transition:background .12s,color .12s;
+}
+.rs-del:hover{background:rgba(196,43,28,0.1);color:#C42B1C;}
+.rs-footer {
+    display:flex;justify-content:space-between;align-items:center;
+    padding:7px 14px;background:rgba(0,0,0,0.02);border-top:1px solid rgba(0,0,0,0.06);
+}
+</style>
+
 <div class="card">
-    <div class="card-header">
-        <form method="GET" class="d-flex gap-2">
-            <input type="text" name="search" class="form-control form-control-sm"
-                   placeholder="<?= __('cust_search') ?>"
-                   value="<?= htmlspecialchars($search) ?>" style="max-width:300px;">
-            <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-search"></i></button>
-            <?php if ($search): ?>
-                <a href="index.php" class="btn btn-sm btn-light"><?= __('btn_clear') ?></a>
-            <?php endif; ?>
+    <div class="card-header py-3">
+        <form method="GET" id="custSearchForm" class="d-flex align-items-center gap-2 justify-content-between flex-wrap">
+            <div class="position-relative" style="max-width:380px;flex:1 1 260px;">
+                <div class="input-group">
+                    <span class="input-group-text bg-white border-end-0 text-muted">
+                        <i class="bi bi-search" style="font-size:.8rem;"></i>
+                    </span>
+                    <input type="text" name="search" id="custSearchInput"
+                           class="form-control border-start-0 ps-0"
+                           placeholder="<?= __('cust_search') ?>"
+                           value="<?= htmlspecialchars($search) ?>"
+                           autocomplete="off">
+                    <?php if ($search): ?>
+                    <a href="index.php" class="btn btn-outline-secondary border-start-0" title="Clear">
+                        <i class="bi bi-x"></i>
+                    </a>
+                    <?php else: ?>
+                    <button class="btn btn-outline-secondary border-start-0" type="submit">
+                        <i class="bi bi-arrow-right" style="font-size:.8rem;"></i>
+                    </button>
+                    <?php endif; ?>
+                </div>
+                <!-- Recent searches dropdown -->
+                <div class="rs-drop" id="rsDrop">
+                    <div id="rsList"></div>
+                </div>
+            </div>
+            <span class="text-muted small"><?= $totalRows ?> <?= __('nav_customers') ?></span>
         </form>
     </div>
     <div class="table-responsive">
@@ -195,5 +241,89 @@ require_once '../includes/header.php';
     </div>
     <?php endif; ?>
 </div>
+
+<script>
+(function () {
+    const KEY  = 'fzl_cust_searches';
+    const MAX  = 7;
+    const form = document.getElementById('custSearchForm');
+    const inp  = document.getElementById('custSearchInput');
+    const drop = document.getElementById('rsDrop');
+    const list = document.getElementById('rsList');
+
+    function esc(s) {
+        return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function load()  { try { return JSON.parse(localStorage.getItem(KEY)||'[]'); } catch { return []; } }
+    function save(a) { localStorage.setItem(KEY, JSON.stringify(a)); }
+
+    function add(term) {
+        if (!term) return;
+        let a = load().filter(t => t.toLowerCase() !== term.toLowerCase());
+        a.unshift(term);
+        save(a.slice(0, MAX));
+    }
+    function remove(term) { save(load().filter(t => t !== term)); render(); }
+    function clearAll()   { save([]); hide(); }
+
+    function render() {
+        const items = load();
+        if (!items.length) { hide(); return; }
+
+        list.innerHTML = items.map(t => `
+            <div class="rs-item" data-term="${esc(t)}">
+                <i class="bi bi-clock-history text-muted" style="font-size:.78rem;flex-shrink:0;"></i>
+                <span class="rs-term">${esc(t)}</span>
+                <a href="/customers/index.php?search=${encodeURIComponent(t)}"
+                   class="btn btn-sm btn-light py-0 px-2 rs-action" style="font-size:.72rem;border-radius:6px;white-space:nowrap;"
+                   title="Search">
+                    <i class="bi bi-arrow-up-left"></i>
+                </a>
+                <button type="button" class="rs-del rs-remove" data-term="${esc(t)}" title="Remove">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>`
+        ).join('') + `
+        <div class="rs-footer">
+            <span style="font-size:.72rem;color:#888;">Recent searches</span>
+            <button type="button" id="rsClearAll"
+                    style="font-size:.72rem;border:none;background:none;color:#888;cursor:pointer;padding:0;">
+                Clear all
+            </button>
+        </div>`;
+
+        drop.style.display = '';
+
+        list.querySelectorAll('.rs-item').forEach(el => {
+            el.addEventListener('mousedown', e => {
+                if (e.target.closest('.rs-remove') || e.target.closest('.rs-action')) return;
+                e.preventDefault();
+                inp.value = el.dataset.term;
+                hide();
+                add(el.dataset.term);
+                form.submit();
+            });
+        });
+        list.querySelectorAll('.rs-remove').forEach(btn => {
+            btn.addEventListener('mousedown', e => { e.preventDefault(); remove(btn.dataset.term); });
+        });
+        const ca = document.getElementById('rsClearAll');
+        if (ca) ca.addEventListener('mousedown', e => { e.preventDefault(); clearAll(); });
+    }
+
+    function show() { render(); }
+    function hide() { drop.style.display = 'none'; }
+
+    inp.addEventListener('focus', () => { if (!inp.value.trim()) show(); });
+    inp.addEventListener('input', () => { inp.value.trim() ? hide() : show(); });
+    inp.addEventListener('blur',  () => { setTimeout(hide, 180); });
+
+    form.addEventListener('submit', () => { const v = inp.value.trim(); if (v) add(v); });
+
+    <?php if ($search): ?>
+    add(<?= json_encode($search) ?>);
+    <?php endif; ?>
+})();
+</script>
 
 <?php require_once '../includes/footer.php'; ?>
