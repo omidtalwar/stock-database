@@ -1166,5 +1166,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').cat
     });
 })();
 </script>
+<?php require_once __DIR__ . '/includes/fab.php'; ?>
 </body>
 </html>
