@@ -247,6 +247,16 @@ require_once '../includes/header.php';
     max-width: 96px;
 }
 
+/* ── Customer picker ── */
+#custDrop .cust-opt {
+    padding: 9px 14px;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+    transition: background .1s;
+}
+#custDrop .cust-opt:last-of-type { border-bottom: none; }
+#custDrop .cust-opt:hover, #custDrop .cust-opt.active { background: rgba(0,103,192,0.07); }
+
 /* ── Shamsi badge ── */
 .shamsi-badge {
     display: inline-flex; align-items: center; gap: 4px;
@@ -349,41 +359,36 @@ require_once '../includes/header.php';
                     <!-- Customer searchable picker -->
                     <div class="col-12">
                         <label class="form-label small fw-semibold"><?= __('sale_select_cust') ?> <span class="text-danger">*</span></label>
-                        <div class="position-relative" id="custPickerWrap">
-                            <div class="input-group input-group-sm">
-                                <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted" style="font-size:.78rem;"></i></span>
-                                <input type="text" id="custSearch" class="form-control border-start-0 ps-0"
-                                       placeholder="Search customer by name or shop…"
-                                       autocomplete="off" oninput="filterCustomers()" onfocus="showCustDropdown()">
-                                <span id="custClear" style="display:none;cursor:pointer;" class="input-group-text bg-white text-muted" onclick="clearCustPicker()"><i class="bi bi-x"></i></span>
-                            </div>
-                            <input type="hidden" name="customer_id" id="custIdInput" value="<?= $preCustomer ?: (int)($_POST['customer_id'] ?? 0) ?>" required>
-                            <div id="custDropdown" style="display:none;position:absolute;z-index:1050;width:100%;max-height:220px;overflow-y:auto;background:#fff;border:1px solid rgba(0,0,0,0.12);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.1);margin-top:2px;">
+                        <input type="hidden" name="customer_id" id="custIdInput"
+                               value="<?= $preCustomer ?: (int)($_POST['customer_id'] ?? 0) ?>">
+                        <div class="position-relative">
+                            <input type="text" id="custSearch" class="form-control form-control-sm"
+                                   placeholder="Search by name or shop…" autocomplete="off"
+                                   style="padding-right:2rem;">
+                            <i class="bi bi-search position-absolute text-muted"
+                               style="right:10px;top:50%;transform:translateY(-50%);font-size:.75rem;pointer-events:none;"></i>
+                            <div id="custDrop"
+                                 style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;
+                                        background:#fff;border:1px solid rgba(0,0,0,0.1);border-radius:10px;
+                                        box-shadow:0 8px 24px rgba(0,0,0,0.12);z-index:1055;
+                                        max-height:240px;overflow-y:auto;">
                                 <?php foreach ($customers as $c): ?>
-                                <div class="cust-opt px-3 py-2 d-flex align-items-center gap-2"
-                                     style="cursor:pointer;border-bottom:1px solid rgba(0,0,0,0.05);transition:background .1s;"
+                                <div class="cust-opt" tabindex="-1"
                                      data-id="<?= $c['id'] ?>"
-                                     data-label="<?= htmlspecialchars($c['name'] . ' — ' . $c['shop_name']) ?>"
-                                     data-search="<?= strtolower(htmlspecialchars($c['name'] . ' ' . $c['shop_name'])) ?>"
-                                     onmousedown="selectCust(this)"
-                                     onmouseenter="this.style.background='rgba(0,103,192,0.07)'"
-                                     onmouseleave="this.style.background=''">
-                                    <div class="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold flex-shrink-0"
-                                         style="width:28px;height:28px;background:#0067C0;font-size:0.72rem;border-radius:6px!important;">
-                                        <?= strtoupper(substr($c['name'], 0, 1)) ?>
-                                    </div>
-                                    <div>
-                                        <div class="fw-semibold" style="font-size:0.85rem;"><?= htmlspecialchars($c['name']) ?></div>
-                                        <div class="text-muted" style="font-size:0.72rem;"><?= htmlspecialchars($c['shop_name']) ?></div>
-                                    </div>
+                                     data-name="<?= htmlspecialchars($c['name']) ?>"
+                                     data-shop="<?= htmlspecialchars($c['shop_name']) ?>"
+                                     data-q="<?= strtolower(htmlspecialchars($c['name'].' '.$c['shop_name'])) ?>">
+                                    <div class="fw-semibold" style="font-size:.85rem;line-height:1.2;"><?= htmlspecialchars($c['name']) ?></div>
+                                    <div class="text-muted" style="font-size:.72rem;"><?= htmlspecialchars($c['shop_name']) ?></div>
                                 </div>
                                 <?php endforeach; ?>
-                                <div id="custNoResults" style="display:none;" class="text-muted text-center py-3 small">No customers found.</div>
+                                <div id="custNone" class="text-center text-muted py-3 small" style="display:none;">No customers found</div>
                             </div>
                         </div>
-                        <div id="custSelected" class="mt-1" style="display:none;font-size:0.8rem;">
-                            <i class="bi bi-person-check text-success me-1"></i>
-                            <span id="custSelectedLabel" class="fw-semibold"></span>
+                        <div id="custChosen" style="display:none;" class="mt-1 d-flex align-items-center justify-content-between px-2 py-1 rounded"
+                             style="background:rgba(16,124,16,0.06);border:1px solid rgba(16,124,16,0.2);">
+                            <span style="font-size:.82rem;"><i class="bi bi-person-check-fill text-success me-1"></i><span id="custChosenName" class="fw-semibold"></span></span>
+                            <button type="button" onclick="clearCust()" class="btn btn-sm p-0 text-muted ms-2" style="line-height:1;font-size:.8rem;" title="Change"><i class="bi bi-x-lg"></i></button>
                         </div>
                     </div>
                 </div>
@@ -742,48 +747,60 @@ function updateSummary() {
 
 document.getElementById('addRow').addEventListener('click', addRow);
 
-/* ── Customer searchable picker ── */
-function filterCustomers() {
-    const q = document.getElementById('custSearch').value.trim().toLowerCase();
-    let any = false;
-    document.querySelectorAll('.cust-opt').forEach(el => {
-        const match = !q || el.dataset.search.includes(q);
-        el.style.display = match ? '' : 'none';
-        if (match) any = true;
-    });
-    document.getElementById('custNoResults').style.display = any ? 'none' : '';
-    showCustDropdown();
-}
-function showCustDropdown() {
-    document.getElementById('custDropdown').style.display = '';
-}
-function hideCustDropdown() {
-    document.getElementById('custDropdown').style.display = 'none';
-}
-function selectCust(el) {
-    document.getElementById('custIdInput').value = el.dataset.id;
-    document.getElementById('custSearch').value  = el.dataset.label;
-    document.getElementById('custSelectedLabel').textContent = el.dataset.label;
-    document.getElementById('custSelected').style.display = '';
-    document.getElementById('custClear').style.display = '';
-    hideCustDropdown();
-}
-function clearCustPicker() {
-    document.getElementById('custIdInput').value = '';
-    document.getElementById('custSearch').value  = '';
-    document.getElementById('custSelected').style.display = 'none';
-    document.getElementById('custClear').style.display = 'none';
-    document.querySelectorAll('.cust-opt').forEach(el => el.style.display = '');
-    document.getElementById('custNoResults').style.display = 'none';
-}
-document.getElementById('custSearch').addEventListener('blur', () => setTimeout(hideCustDropdown, 150));
-
-// Pre-fill if customer_id already set (page load with preCustomer)
+/* ── Customer picker ── */
 (function() {
-    const preId = document.getElementById('custIdInput').value;
+    const inp    = document.getElementById('custSearch');
+    const drop   = document.getElementById('custDrop');
+    const hidden = document.getElementById('custIdInput');
+    const chosen = document.getElementById('custChosen');
+    const chosenName = document.getElementById('custChosenName');
+    const opts   = Array.from(document.querySelectorAll('.cust-opt'));
+    const none   = document.getElementById('custNone');
+
+    function openDrop() { drop.style.display = ''; }
+    function closeDrop() { drop.style.display = 'none'; }
+
+    function filterOpts() {
+        const q = inp.value.trim().toLowerCase();
+        let any = false;
+        opts.forEach(o => {
+            const show = !q || o.dataset.q.includes(q);
+            o.style.display = show ? '' : 'none';
+            if (show) any = true;
+        });
+        none.style.display = any ? 'none' : '';
+        openDrop();
+    }
+
+    function pick(el) {
+        hidden.value = el.dataset.id;
+        inp.value    = el.dataset.name + (el.dataset.shop ? ' — ' + el.dataset.shop : '');
+        chosenName.textContent = el.dataset.name + (el.dataset.shop ? ' — ' + el.dataset.shop : '');
+        chosen.style.display = '';
+        inp.closest('.position-relative').style.display = 'none';
+        closeDrop();
+    }
+
+    window.clearCust = function() {
+        hidden.value = '';
+        inp.value    = '';
+        chosen.style.display = 'none';
+        inp.closest('.position-relative').style.display = '';
+        opts.forEach(o => o.style.display = '');
+        none.style.display = 'none';
+        inp.focus();
+    };
+
+    opts.forEach(o => o.addEventListener('mousedown', e => { e.preventDefault(); pick(o); }));
+    inp.addEventListener('input',  filterOpts);
+    inp.addEventListener('focus',  () => { filterOpts(); openDrop(); });
+    inp.addEventListener('blur',   () => setTimeout(closeDrop, 180));
+
+    // Pre-select if customer_id is already set (e.g. ?customer_id= URL param)
+    const preId = hidden.value;
     if (preId) {
-        const el = document.querySelector(`.cust-opt[data-id="${preId}"]`);
-        if (el) selectCust(el);
+        const pre = opts.find(o => o.dataset.id === preId);
+        if (pre) pick(pre);
     }
 })();
 

@@ -187,20 +187,19 @@ require_once '../includes/header.php';
 
                     <!-- Invoice picker -->
                     <div id="invoiceSection" style="display:none;" class="mb-3">
-                        <label class="form-label fw-semibold d-flex align-items-center justify-content-between gap-2 flex-wrap">
-                            <span class="d-flex align-items-center gap-2">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <label class="form-label fw-semibold mb-0 d-flex align-items-center gap-2">
                                 <i class="bi bi-receipt text-primary"></i>
-                                Select Invoice <span class="badge bg-danger-subtle text-danger border border-danger-subtle" style="font-size:0.65rem;">Required</span>
-                            </span>
-                            <div class="input-group input-group-sm" style="max-width:200px;" id="invSearchWrap">
-                                <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted" style="font-size:.75rem;"></i></span>
-                                <input type="text" id="invSearch" class="form-control border-start-0 ps-0"
-                                       placeholder="Search invoice…" oninput="filterInvoices()">
-                            </div>
-                        </label>
-                        <div id="invoiceList" class="border rounded" style="max-height:280px;overflow-y:auto;"></div>
-                        <div id="invNoResults" style="display:none;" class="text-muted small p-3 border rounded text-center">
-                            <i class="bi bi-search me-1"></i> No invoices match your search.
+                                Select Invoice
+                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle" style="font-size:0.62rem;">Required</span>
+                            </label>
+                            <input type="text" id="invSearch" class="form-control form-control-sm"
+                                   placeholder="Search…" oninput="filterInvoices()"
+                                   style="max-width:160px;border-radius:8px;">
+                        </div>
+                        <div id="invoiceList" class="border rounded" style="max-height:260px;overflow-y:auto;"></div>
+                        <div id="invNoResults" style="display:none;" class="text-muted small p-3 border rounded text-center mt-1">
+                            <i class="bi bi-search me-1"></i> No invoices match.
                         </div>
                         <div id="noInvoices" style="display:none;" class="text-muted small p-3 border rounded text-center">
                             <i class="bi bi-check-circle text-success me-1"></i> No open invoices for this customer.
@@ -321,16 +320,15 @@ function onCustomerChange() {
 }
 
 function filterInvoices() {
-    const q = (document.getElementById('invSearch')?.value || '').trim().toLowerCase();
+    const q    = (document.getElementById('invSearch')?.value || '').trim().toLowerCase();
     const rows = document.querySelectorAll('#invoiceList .inv-pick-row');
     let visible = 0;
     rows.forEach(row => {
-        const match = !q || row.textContent.toLowerCase().includes(q);
-        row.style.display = match ? '' : 'none';
-        if (match) visible++;
+        const show = !q || row.textContent.toLowerCase().includes(q);
+        row.style.display = show ? '' : 'none';
+        if (show) visible++;
     });
-    const noRes = document.getElementById('invNoResults');
-    if (noRes) noRes.style.display = (q && visible === 0) ? '' : 'none';
+    document.getElementById('invNoResults').style.display = (q && visible === 0) ? '' : 'none';
 }
 
 function renderInvoices() {

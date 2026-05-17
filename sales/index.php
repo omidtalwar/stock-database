@@ -63,7 +63,7 @@ $curTotalsStmt = $pdo->prepare("
 $curTotalsStmt->execute($params);
 $curTotals = ['AFN'=>null,'USD'=>null,'PKR'=>null];
 foreach ($curTotalsStmt->fetchAll() as $ct) {
-    if (isset($curTotals[$ct['currency']])) $curTotals[$ct['currency']] = $ct;
+    if (array_key_exists($ct['currency'], $curTotals)) $curTotals[$ct['currency']] = $ct;
 }
 
 $perPage    = 10;
