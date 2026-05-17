@@ -169,20 +169,56 @@ require_once '../includes/header.php';
                 <form method="POST" id="payForm">
                     <input type="hidden" name="sale_id" id="saleIdInput" value="<?= $preSaleId ?>">
 
-                    <!-- Customer -->
+                    <!-- Customer searchable picker -->
                     <div class="mb-3">
                         <label class="form-label fw-semibold"><?= __('nav_customers') ?> <span class="text-danger">*</span></label>
-                        <select name="customer_id" id="customerSelect" class="form-select" required onchange="onCustomerChange()">
-                            <option value=""><?= __('pay_select_cust') ?></option>
-                            <?php foreach ($customers as $c): ?>
-                            <option value="<?= $c['id'] ?>" data-debt="<?= $c['total_debt'] ?>"
-                                <?= ($preCustomer == $c['id'] || ($_POST['customer_id'] ?? 0) == $c['id']) ? 'selected' : '' ?>>
-                                <?= htmlspecialchars($c['name']) ?>
-                                <?= $c['shop_name'] ? '— ' . htmlspecialchars($c['shop_name']) : '' ?>
-                                <?= $c['total_debt'] > 0 ? ' (؋' . number_format($c['total_debt'], 0) . ' due)' : '' ?>
-                            </option>
-                            <?php endforeach; ?>
-                        </select>
+                        <input type="hidden" name="customer_id" id="customerSelect" value="<?= $preCustomer ?: (int)($_POST['customer_id'] ?? 0) ?>">
+                        <div class="position-relative">
+                            <input type="text" id="payCustSearch" class="form-control"
+                                   placeholder="Search by name or shop…" autocomplete="off"
+                                   style="padding-right:2rem;">
+                            <i class="bi bi-search position-absolute text-muted"
+                               style="right:10px;top:50%;transform:translateY(-50%);font-size:.75rem;pointer-events:none;"></i>
+                            <div id="payCustDrop"
+                                 style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;
+                                        background:#fff;border:1px solid rgba(0,0,0,0.1);border-radius:10px;
+                                        box-shadow:0 8px 24px rgba(0,0,0,0.12);z-index:1055;
+                                        max-height:240px;overflow-y:auto;">
+                                <?php foreach ($customers as $c): ?>
+                                <div class="pay-cust-opt"
+                                     data-id="<?= $c['id'] ?>"
+                                     data-name="<?= htmlspecialchars($c['name']) ?>"
+                                     data-shop="<?= htmlspecialchars($c['shop_name']) ?>"
+                                     data-debt="<?= $c['total_debt'] ?>"
+                                     data-q="<?= strtolower(htmlspecialchars($c['name'].' '.$c['shop_name'])) ?>"
+                                     style="padding:9px 14px;cursor:pointer;border-bottom:1px solid rgba(0,0,0,0.05);transition:background .1s;">
+                                    <div class="d-flex align-items-center justify-content-between gap-2">
+                                        <div>
+                                            <div class="fw-semibold" style="font-size:.85rem;line-height:1.2;"><?= htmlspecialchars($c['name']) ?></div>
+                                            <?php if ($c['shop_name']): ?>
+                                            <div class="text-muted" style="font-size:.72rem;"><?= htmlspecialchars($c['shop_name']) ?></div>
+                                            <?php endif; ?>
+                                        </div>
+                                        <?php if ($c['total_debt'] > 0): ?>
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle" style="font-size:.65rem;white-space:nowrap;">
+                                            🇦🇫 ؋ <?= number_format($c['total_debt'], 0) ?> due
+                                        </span>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                                <?php endforeach; ?>
+                                <div id="payCustNone" style="display:none;" class="text-center text-muted py-3 small">No customers found</div>
+                            </div>
+                        </div>
+                        <div id="payCustChosen" style="display:none;" class="mt-2 d-flex align-items-center justify-content-between px-3 py-2 rounded"
+                             style="background:rgba(16,124,16,0.05);border:1px solid rgba(16,124,16,0.18);">
+                            <span style="font-size:.85rem;">
+                                <i class="bi bi-person-check-fill text-success me-1"></i>
+                                <span id="payCustChosenName" class="fw-semibold"></span>
+                                <span id="payCustChosenDebt" class="ms-2" style="font-size:.75rem;"></span>
+                            </span>
+                            <button type="button" onclick="clearPayCust()" class="btn btn-sm p-0 text-muted ms-2" title="Change"><i class="bi bi-x-lg" style="font-size:.8rem;"></i></button>
+                        </div>
                     </div>
 
                     <!-- Invoice picker -->
@@ -297,15 +333,17 @@ $extraScript = <<<JS
 const ALL_RATES = {$_json_rates};
 const INVOICES  = {$_json_invoices};   // keyed by customer_id
 const SYMBOLS   = {AFN:'؋', USD:'\$', PKR:'₨'};
+const FLAGS     = {AFN:'🇦🇫', USD:'🇺🇸', PKR:'🇵🇰'};
 
 function sym(cur) { return SYMBOLS[cur] || cur; }
+function flag(cur) { return FLAGS[cur] ? FLAGS[cur] + ' ' : ''; }
 
 function fmtAFN(v) {
-    return '؋ ' + parseFloat(v).toLocaleString('en-US', {maximumFractionDigits:0});
+    return '🇦🇫 ؋ ' + parseFloat(v).toLocaleString('en-US', {maximumFractionDigits:0});
 }
 function fmtCur(v, cur) {
     const dec = cur === 'USD' ? 2 : 0;
-    return sym(cur) + ' ' + parseFloat(v).toLocaleString('en-US', {minimumFractionDigits:dec, maximumFractionDigits:dec});
+    return flag(cur) + sym(cur) + ' ' + parseFloat(v).toLocaleString('en-US', {minimumFractionDigits:dec, maximumFractionDigits:dec});
 }
 
 // ── Invoice picker ────────────────────────────────────────────────────────────
@@ -447,6 +485,73 @@ function updateConvert() {
 document.getElementById('payForm').addEventListener('submit', function() {
     document.getElementById('submitBtn').disabled = true;
 });
+
+/* ── Customer picker ── */
+(function() {
+    const inp    = document.getElementById('payCustSearch');
+    const drop   = document.getElementById('payCustDrop');
+    const hidden = document.getElementById('customerSelect');
+    const chosen = document.getElementById('payCustChosen');
+    const chosenName = document.getElementById('payCustChosenName');
+    const chosenDebt = document.getElementById('payCustChosenDebt');
+    const opts   = Array.from(document.querySelectorAll('.pay-cust-opt'));
+    const none   = document.getElementById('payCustNone');
+
+    function openDrop() { drop.style.display = ''; }
+    function closeDrop() { drop.style.display = 'none'; }
+
+    function filter() {
+        const q = inp.value.trim().toLowerCase();
+        let any = false;
+        opts.forEach(o => {
+            const show = !q || o.dataset.q.includes(q);
+            o.style.display = show ? '' : 'none';
+            if (show) any = true;
+        });
+        none.style.display = any ? 'none' : '';
+        openDrop();
+    }
+
+    function pick(el) {
+        hidden.value = el.dataset.id;
+        inp.value    = el.dataset.name + (el.dataset.shop ? ' — ' + el.dataset.shop : '');
+        chosenName.textContent = el.dataset.name + (el.dataset.shop ? ' — ' + el.dataset.shop : '');
+        const debt = parseFloat(el.dataset.debt) || 0;
+        chosenDebt.textContent = debt > 0 ? '🇦🇫 ؋ ' + Math.round(debt).toLocaleString() + ' due' : '';
+        chosenDebt.style.color = debt > 0 ? '#C42B1C' : '';
+        chosen.style.display = '';
+        inp.closest('.position-relative').style.display = 'none';
+        closeDrop();
+        onCustomerChange();
+    }
+
+    window.clearPayCust = function() {
+        hidden.value = '';
+        inp.value    = '';
+        chosen.style.display = 'none';
+        inp.closest('.position-relative').style.display = '';
+        opts.forEach(o => o.style.display = '');
+        none.style.display = 'none';
+        onCustomerChange();
+        inp.focus();
+    };
+
+    opts.forEach(o => {
+        o.addEventListener('mouseenter', () => o.style.background = 'rgba(0,103,192,0.07)');
+        o.addEventListener('mouseleave', () => o.style.background = '');
+        o.addEventListener('mousedown',  e => { e.preventDefault(); pick(o); });
+    });
+    inp.addEventListener('input', filter);
+    inp.addEventListener('focus', () => { filter(); openDrop(); });
+    inp.addEventListener('blur',  () => setTimeout(closeDrop, 180));
+
+    // Pre-select if customer_id already set via URL
+    const preId = hidden.value;
+    if (preId) {
+        const pre = opts.find(o => o.dataset.id === preId);
+        if (pre) pick(pre);
+    }
+})();
 
 document.addEventListener('DOMContentLoaded', () => {
     renderInvoices();

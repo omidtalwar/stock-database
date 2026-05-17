@@ -1,9 +1,9 @@
 <?php
 // Currency symbols
 const CURRENCIES = [
-    'AFN' => ['symbol' => '؋',  'name' => 'Afghani',          'decimals' => 0],
-    'USD' => ['symbol' => '$',  'name' => 'US Dollar',         'decimals' => 2],
-    'PKR' => ['symbol' => '₨', 'name' => 'Pakistani Rupee',   'decimals' => 0],
+    'AFN' => ['symbol' => '؋',  'name' => 'Afghani',        'decimals' => 0, 'flag' => '🇦🇫'],
+    'USD' => ['symbol' => '$',  'name' => 'US Dollar',       'decimals' => 2, 'flag' => '🇺🇸'],
+    'PKR' => ['symbol' => '₨', 'name' => 'Pakistani Rupee', 'decimals' => 0, 'flag' => '🇵🇰'],
 ];
 
 function getSettings(PDO $pdo): array {
@@ -34,14 +34,19 @@ function currencySymbol(string $currency): string {
     return CURRENCIES[$currency]['symbol'] ?? $currency;
 }
 
+function currencyFlag(string $currency): string {
+    return CURRENCIES[$currency]['flag'] ?? '';
+}
+
 function formatMoney(float $amount, string $currency = 'AFN'): string {
-    $sym = currencySymbol($currency);
-    $dec = CURRENCIES[$currency]['decimals'] ?? 0;
-    return $sym . ' ' . number_format($amount, $dec);
+    $flag = CURRENCIES[$currency]['flag'] ?? '';
+    $sym  = CURRENCIES[$currency]['symbol'] ?? $currency;
+    $dec  = CURRENCIES[$currency]['decimals'] ?? 0;
+    return $flag . ' ' . $sym . ' ' . number_format($amount, $dec);
 }
 
 function formatAFN(float $amount): string {
-    return '؋ ' . number_format($amount, 0);
+    return '🇦🇫 ؋ ' . number_format($amount, 0);
 }
 
 function formatUSD(float $amount): string {

@@ -345,7 +345,7 @@ let rowIdx = 0;
 function curSym() { return '$'; }
 function curDec() { return 2; }
 function fmtMoney(amount) {
-    return '$ ' + amount.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    return '🇺🇸 $ ' + amount.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
 }
 
 function rowHTML(idx) {

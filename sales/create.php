@@ -537,7 +537,8 @@ const PRODUCTS = <?= json_encode(array_map(fn($p) => [
 ], $products)) ?>;
 
 const ALL_RATES_INV = <?= json_encode($allRates) ?>;
-const CURRENCIES_INV = <?= json_encode(array_map(fn($c) => ['symbol' => $c['symbol'], 'decimals' => $c['decimals']], CURRENCIES)) ?>;
+const CURRENCIES_INV = <?= json_encode(array_map(fn($c) => ['symbol' => $c['symbol'], 'decimals' => $c['decimals'], 'flag' => $c['flag']], CURRENCIES)) ?>;
+const FLAGS_INV = {AFN:'🇦🇫', USD:'🇺🇸', PKR:'🇵🇰'};
 const SEC_CUR_INV = <?= json_encode($secCur) ?>;
 const EMPTY_MSG   = <?= json_encode(__('sale_click_add')) ?>;
 
@@ -560,14 +561,15 @@ function saleSym()  { return CURRENCIES_INV[saleCur()]?.symbol || '؋'; }
 function saleDec()  { return Math.max(2, CURRENCIES_INV[saleCur()]?.decimals ?? 2); }
 function saleRate() { return ALL_RATES_INV[saleCur()] || 1; }
 
+function saleFlag() { return FLAGS_INV[saleCur()] || ''; }
 function fmtSale(v) {
     const dec = saleDec();
-    return saleSym() + ' ' + parseFloat(v).toLocaleString('en-US', {minimumFractionDigits:dec, maximumFractionDigits:dec});
+    return saleFlag() + ' ' + saleSym() + ' ' + parseFloat(v).toLocaleString('en-US', {minimumFractionDigits:dec, maximumFractionDigits:dec});
 }
 function fmtAFN_inv(v) {
     const n = parseFloat(v);
     const dec = Number.isInteger(n) ? 0 : 2;
-    return '؋ ' + n.toLocaleString('en-US', {minimumFractionDigits:dec, maximumFractionDigits:dec});
+    return '🇦🇫 ؋ ' + n.toLocaleString('en-US', {minimumFractionDigits:dec, maximumFractionDigits:dec});
 }
 
 function onSaleCurrencyChange() {
