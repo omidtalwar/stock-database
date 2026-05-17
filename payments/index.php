@@ -7,10 +7,6 @@ require_once '../includes/currency.php';
 
 $pageTitle = __('pay_title');
 
-$settings  = getSettings($pdo);
-$rate      = (float)($settings['exchange_rate'] ?? 90);
-$secCur    = $settings['secondary_currency'] ?? 'USD';
-
 // ── Period filter ──
 $period = in_array($_GET['period'] ?? '', ['today','week','month','all'])
     ? $_GET['period'] : 'all';
@@ -22,16 +18,7 @@ $periodWhere = match($period) {
     default => "",
 };
 
-// Aggregate totals over full filtered set (before pagination)
-$totalsRow = $pdo->query("
-    SELECT COUNT(*) AS cnt,
-           COALESCE(SUM(CASE WHEN p.amount_afn > 0 THEN p.amount_afn ELSE p.amount END), 0) AS sum_afn
-    FROM payments p
-    WHERE 1=1 $periodWhere
-")->fetch();
-$totalRows = (int)$totalsRow['cnt'];
-$totalAfn  = (float)$totalsRow['sum_afn'];
-$debt      = (float)$pdo->query("SELECT COALESCE(SUM(total_debt),0) FROM customers")->fetchColumn();
+$totalRows = (int)$pdo->query("SELECT COUNT(*) FROM payments p WHERE 1=1 $periodWhere")->fetchColumn();
 
 $perPage    = 10;
 $page       = max(1, (int)($_GET['page'] ?? 1));
@@ -119,48 +106,6 @@ $payPeriodLabels = [
     <?php endforeach; ?>
 </div>
 
-<div class="alert alert-secondary py-2 small mb-3">
-    <i class="bi bi-currency-exchange me-1"></i>
-    <?= __('pay_rate_label') ?>: <strong>1 <?= htmlspecialchars($secCur) ?> = <?= number_format($rate, 2) ?> ؋</strong>
-    <?php if (isAdmin()): ?>
-    &nbsp;—&nbsp;<a href="/admin/settings.php"><?= __('btn_update') ?></a>
-    <?php endif; ?>
-</div>
-
-<div class="row g-3 mb-4">
-    <div class="col-md-4">
-        <div class="card text-center">
-            <div class="card-body py-3">
-                <div class="text-muted small mb-1">
-                    <?= __('pay_total_collected') ?>
-                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle ms-1" style="font-size:0.65rem;"><?= $payPeriodLabels[$period] ?></span>
-                </div>
-                <div class="fw-bold fs-5 text-success"><?= formatAFN($totalAfn) ?></div>
-                <div class="text-muted small">≈ <?= formatMoney(fromAFN($totalAfn, $rate), $secCur) ?></div>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="card text-center">
-            <div class="card-body py-3">
-                <div class="text-muted small mb-1"><?= __('pay_total_rec') ?></div>
-                <div class="fw-bold fs-5 text-danger"><?= formatAFN($debt) ?></div>
-                <div class="text-muted small">≈ <?= formatMoney(fromAFN($debt, $rate), $secCur) ?></div>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="card text-center">
-            <div class="card-body py-3">
-                <div class="text-muted small mb-1">
-                    <?= __('pay_records') ?>
-                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle ms-1" style="font-size:0.65rem;"><?= $payPeriodLabels[$period] ?></span>
-                </div>
-                <div class="fw-bold fs-5"><?= $totalRows ?></div>
-            </div>
-        </div>
-    </div>
-</div>
 
 <div class="card">
     <div class="table-responsive">
