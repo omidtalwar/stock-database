@@ -1,280 +1,262 @@
 <?php if (empty($_SESSION['user_id'])) return; ?>
 <?php $_fabAdmin = function_exists('isAdmin') && isAdmin(); ?>
-<!-- ── Global FAB ── -->
+<!-- ── Global FAB (right-to-left parade) ── -->
 <div id="fzl-fab-root">
-    <div id="fzl-fab-wrap">
-        <div id="fzl-fab-actions">
-            <?php if ($_fabAdmin): ?>
-            <a class="fzl-act" href="/dashboard.php"       style="--clr:#4F46E5;--i:0"><i class="bi bi-grid-1x2-fill"></i><span class="fzl-tip">Dashboard</span></a>
-            <?php endif; ?>
-            <a class="fzl-act" href="/customers/index.php" style="--clr:#7719AA;--i:<?= $_fabAdmin?1:0 ?>"><i class="bi bi-people-fill"></i><span class="fzl-tip">Customers</span></a>
-            <a class="fzl-act" href="/sales/index.php"     style="--clr:#9D5D00;--i:<?= $_fabAdmin?2:1 ?>"><i class="bi bi-receipt"></i><span class="fzl-tip">Sales</span></a>
-            <a class="fzl-act fzl-act--star" href="/sales/create.php"  style="--clr:#0067C0;--i:<?= $_fabAdmin?3:2 ?>"><i class="bi bi-plus-circle-fill"></i><span class="fzl-tip">New Invoice</span></a>
-            <a class="fzl-act" href="/payments/add.php"    style="--clr:#107C10;--i:<?= $_fabAdmin?4:3 ?>"><i class="bi bi-cash-stack"></i><span class="fzl-tip">Record Payment</span></a>
-            <a class="fzl-act" href="/stock/add.php"       style="--clr:#0E7490;--i:<?= $_fabAdmin?5:4 ?>"><i class="bi bi-box-seam-fill"></i><span class="fzl-tip">Stock In</span></a>
-        </div>
-        <button id="fzl-fab-btn" aria-expanded="false" aria-label="Quick actions">
-            <i class="bi bi-lightning-charge-fill" id="fzl-fab-ico"></i>
-        </button>
-    </div>
+    <?php if ($_fabAdmin): ?>
+    <a class="fzl-act" href="/dashboard.php"      style="--clr:#4F46E5"><i class="bi bi-grid-1x2-fill"></i><span class="fzl-tip">Dashboard</span></a>
+    <?php endif; ?>
+    <a class="fzl-act" href="/stock/add.php"       style="--clr:#0E7490"><i class="bi bi-box-seam-fill"></i><span class="fzl-tip">Stock In</span></a>
+    <a class="fzl-act" href="/payments/add.php"    style="--clr:#107C10"><i class="bi bi-cash-stack"></i><span class="fzl-tip">Record Payment</span></a>
+    <a class="fzl-act fzl-act--star" href="/sales/create.php" style="--clr:#0067C0"><i class="bi bi-plus-circle-fill"></i><span class="fzl-tip">New Invoice</span></a>
+    <a class="fzl-act" href="/sales/index.php"     style="--clr:#9D5D00"><i class="bi bi-receipt"></i><span class="fzl-tip">Sales</span></a>
+    <a class="fzl-act" href="/customers/index.php" style="--clr:#7719AA"><i class="bi bi-people-fill"></i><span class="fzl-tip">Customers</span></a>
+    <button id="fzl-fab-btn" aria-label="Quick actions" aria-expanded="false">
+        <i class="bi bi-lightning-charge-fill" id="fzl-fab-ico"></i>
+    </button>
 </div>
 
 <style>
+/* ── Root: flex row, FAB at far right ── */
 #fzl-fab-root {
-    position: fixed; inset: 0; z-index: 1039;
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    z-index: 1039;
     pointer-events: none;
 }
-#fzl-fab-wrap {
-    position: absolute; bottom: 28px; left: 50%;
-    transform: translateX(-50%);
-    pointer-events: auto;
-    will-change: transform;
-    transition: none;
-}
+
+/* ── FAB button ── */
 #fzl-fab-btn {
-    position: relative; z-index: 2;
-    width: 62px; height: 62px; border-radius: 50%;
-    border: none; cursor: pointer; color: #fff; font-size: 1.4rem;
+    flex-shrink: 0;
+    pointer-events: auto;
+    width: 46px; height: 46px;
+    border-radius: 50%;
+    border: none; cursor: pointer; color: #fff;
+    font-size: 1.2rem;
     background: linear-gradient(135deg, #0067C0 0%, #4338CA 100%);
     display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 4px 22px rgba(0,103,192,0.52);
-    transition: transform .3s cubic-bezier(.34,1.56,.64,1), background .3s, box-shadow .3s;
+    box-shadow: 0 4px 18px rgba(0,103,192,0.5);
     outline: none;
-    animation: fabPulse 4s ease-in-out infinite 5s;
+    position: relative; z-index: 2;
+    transition: background .25s, box-shadow .25s;
+    animation: fabPulse 4s ease-in-out infinite 6s;
 }
 #fzl-fab-btn:hover {
-    transform: scale(1.1) !important;
-    box-shadow: 0 8px 30px rgba(0,103,192,0.65), 0 0 0 10px rgba(0,103,192,0.1);
+    box-shadow: 0 6px 24px rgba(0,103,192,0.65);
     animation: none;
 }
-#fzl-fab-root.fab-open #fzl-fab-btn {
+#fzl-fab-root.fab-pinned #fzl-fab-btn {
     background: linear-gradient(135deg, #C42B1C 0%, #7F1D1D 100%);
-    box-shadow: 0 4px 22px rgba(196,43,28,0.5);
+    box-shadow: 0 4px 18px rgba(196,43,28,0.5);
     animation: none;
 }
 @keyframes fabPulse {
-    0%,100% { box-shadow: 0 4px 22px rgba(0,103,192,0.52), 0 0 0 0   rgba(0,103,192,0.3); }
-    55%     { box-shadow: 0 4px 22px rgba(0,103,192,0.52), 0 0 0 18px rgba(0,103,192,0);  }
+    0%,100% { box-shadow: 0 4px 18px rgba(0,103,192,0.5), 0 0 0 0   rgba(0,103,192,0.35); }
+    55%     { box-shadow: 0 4px 18px rgba(0,103,192,0.5), 0 0 0 13px rgba(0,103,192,0); }
 }
 #fzl-fab-ico {
     display: block; line-height: 1;
-    transition: transform .22s ease, opacity .16s ease;
+    transition: transform .2s ease, opacity .15s ease;
 }
-#fzl-fab-actions {
-    position: absolute; bottom: 0; left: 0;
-    width: 62px; pointer-events: none;
-}
+
+/* ── Action buttons ── */
 .fzl-act {
-    position: absolute;
-    width: 50px; height: 50px;
-    bottom: 6px; left: 6px;
-    border-radius: 15px;
+    flex-shrink: 0;
+    width: 38px; height: 38px;
+    border-radius: 12px;
     background: var(--clr, #0067C0);
     color: #fff; text-decoration: none;
     display: flex; align-items: center; justify-content: center;
-    font-size: 1.1rem;
-    box-shadow: 0 4px 18px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.18);
-    transform: translate(0px, 0px) scale(0);
-    opacity: 0; pointer-events: none;
-    will-change: transform, opacity;
-    transition:
-        transform  .5s  cubic-bezier(0.34, 1.65, 0.64, 1),
-        opacity    .3s  ease,
-        box-shadow .2s  ease,
-        filter     .2s  ease;
-    transition-delay: calc(var(--i, 0) * 0.055s);
+    font-size: 1rem;
+    box-shadow: 0 3px 14px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.18);
+    opacity: 0;
+    pointer-events: none;
+    position: relative;
 }
 .fzl-act--star {
-    width: 56px; height: 56px;
-    bottom: 3px; left: 3px;
-    border-radius: 18px; font-size: 1.25rem;
-    box-shadow: 0 6px 24px rgba(0,103,192,0.45), inset 0 1px 0 rgba(255,255,255,0.22);
+    width: 44px; height: 44px;
+    border-radius: 14px; font-size: 1.1rem;
+    box-shadow: 0 4px 18px rgba(0,103,192,0.38), inset 0 1px 0 rgba(255,255,255,0.22);
+}
+.fzl-act.fab-live {
+    pointer-events: auto;
 }
 .fzl-act:hover {
-    box-shadow: 0 8px 28px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.25);
-    filter: brightness(1.14);
+    filter: brightness(1.15);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.25);
 }
-#fzl-fab-root.fab-open .fzl-act {
-    transform: translate(var(--tx,0px), var(--ty,0px)) scale(1);
-    opacity: 1; pointer-events: auto;
-}
-#fzl-fab-root.fab-closing .fzl-act {
-    transition-delay: calc((5 - var(--i,0)) * 0.04s);
-}
+
+/* ── Tooltip (above each button) ── */
 .fzl-tip {
-    position: absolute; top: 50%;
-    background: rgba(10,10,10,0.9);
+    position: absolute;
+    bottom: calc(100% + 7px);
+    left: 50%;
+    transform: translateX(-50%) translateY(5px);
+    background: rgba(10,10,10,0.88);
     backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-    color: #fff; font-size: .72rem; font-weight: 600; letter-spacing: .2px;
-    padding: 5px 12px; border-radius: 22px;
+    color: #fff; font-size: .68rem; font-weight: 600; letter-spacing: .2px;
+    padding: 4px 10px; border-radius: 18px;
     white-space: nowrap; pointer-events: none; opacity: 0;
-    transition: opacity .18s, transform .18s;
+    transition: opacity .15s, transform .15s;
 }
-.fzl-act.tip-left  .fzl-tip { right: calc(100% + 10px); transform: translateY(-50%) translateX(5px); }
-.fzl-act.tip-right .fzl-tip { left:  calc(100% + 10px); transform: translateY(-50%) translateX(-5px); }
-.fzl-act:hover      .fzl-tip { opacity: 1; }
-.fzl-act.tip-left:hover  .fzl-tip { transform: translateY(-50%) translateX(0); }
-.fzl-act.tip-right:hover .fzl-tip { transform: translateY(-50%) translateX(0); }
+.fzl-act:hover .fzl-tip {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
 @media (max-width: 480px) {
-    #fzl-fab-wrap { bottom: 14px; }
+    #fzl-fab-root { bottom: 14px; right: 14px; gap: 6px; }
     .fzl-tip { display: none; }
+    #fzl-fab-btn { width: 42px; height: 42px; font-size: 1.05rem; }
+    .fzl-act { width: 34px; height: 34px; font-size: .9rem; }
+    .fzl-act--star { width: 40px; height: 40px; }
 }
 </style>
 
 <script>
 (function () {
     const root = document.getElementById('fzl-fab-root');
-    const wrap = document.getElementById('fzl-fab-wrap');
     const btn  = document.getElementById('fzl-fab-btn');
     const ico  = document.getElementById('fzl-fab-ico');
+    // acts[0] = leftmost (Dashboard), acts[last] = rightmost closest to FAB (Customers)
     const acts = Array.from(document.querySelectorAll('.fzl-act'));
-    if (!root) return;
+    if (!root || !btn || !acts.length) return;
 
-    const N = acts.length;
+    // ── Config ────────────────────────────────────────────────────
+    const ENTER_MS  = 460;   // enter transition duration
+    const EXIT_MS   = 280;   // exit transition duration
+    const ENTER_GAP = 150;   // ms stagger between buttons (right→left entry)
+    const EXIT_GAP  = 70;    // ms stagger between buttons (left→right exit)
+    const STAY_MS   = 2600;  // ms all buttons stay visible
+    const PAUSE_MS  = 700;   // ms gap before next parade cycle
+    const BTN_STEP  = 46;    // px per button slot (38px + 8px gap)
 
-    // ── Arc configurations (rotate every 4 s) ─────────────────────
-    const ARC_PHASES = [
-        [-150, -30],   // default: top spread
-        [-175, -55],   // tilted left
-        [-125,  -5],   // tilted right
-    ];
-    let arcPhase = 0;
+    let paradeTimer = null;
+    let isPinned    = false;
 
-    function applyArc(startDeg, endDeg) {
-        acts.forEach((el, i) => {
-            const deg = N > 1 ? startDeg + (endDeg - startDeg) * i / (N - 1) : -90;
-            const rad = deg * Math.PI / 180;
-            const tx  = +(Math.cos(rad) * 108).toFixed(1);
-            const ty  = +(Math.sin(rad) * 108).toFixed(1);
-            el.style.setProperty('--tx', tx + 'px');
-            el.style.setProperty('--ty', ty + 'px');
-            el.classList.toggle('tip-left',  tx <= 0);
-            el.classList.toggle('tip-right', tx >  0);
-        });
+    // Pre-compute start position for each act (all buttons initially appear to come from FAB)
+    // acts[i] is i slots from the right end (FAB). Distance = (acts.length - i) * BTN_STEP
+    acts.forEach((act, i) => {
+        const startX = (acts.length - i) * BTN_STEP + 16;
+        act._startX  = startX;
+        // Initial state: at FAB position, scaled down, invisible
+        act.style.transition = 'none';
+        act.style.transform  = `translateX(${startX}px) scale(0.55)`;
+        act.style.opacity    = '0';
+    });
+
+    // ── Show / Hide helpers ───────────────────────────────────────
+    function showAct(act) {
+        act.style.transition = `transform ${ENTER_MS}ms cubic-bezier(0.34,1.58,0.64,1), opacity ${Math.round(ENTER_MS*0.55)}ms ease`;
+        act.style.transform  = 'translateX(0) scale(1)';
+        act.style.opacity    = '1';
+        act.classList.add('fab-live');
     }
-    applyArc(...ARC_PHASES[0]);
 
-    setInterval(() => {
-        if (!isOpen) return;
-        arcPhase = (arcPhase + 1) % ARC_PHASES.length;
-        applyArc(...ARC_PHASES[arcPhase]);
-    }, 4000);
+    function hideAct(act) {
+        act.style.transition = `transform ${EXIT_MS}ms cubic-bezier(0.6,0,0.8,0.4), opacity ${Math.round(EXIT_MS*0.65)}ms ease`;
+        act.style.transform  = `translateX(${act._startX}px) scale(0.55)`;
+        act.style.opacity    = '0';
+        act.classList.remove('fab-live');
+    }
 
-    // ── Open / Close ──────────────────────────────────────────────
-    let isOpen = false;
+    // ── FAB launch bounce ─────────────────────────────────────────
+    // Called when a button is dispatched; FAB squishes then springs
+    function fabBounce() {
+        btn.style.transition = 'transform 0.11s ease-in';
+        btn.style.transform  = 'scale(0.82)';
+        setTimeout(() => {
+            btn.style.transition = 'transform 0.38s cubic-bezier(0.34,1.65,0.64,1)';
+            btn.style.transform  = 'scale(1)';
+        }, 110);
+    }
 
+    // ── Parade ────────────────────────────────────────────────────
+    // Entry order: rightmost first (closest to FAB) → leftmost last
+    // Exit  order: leftmost first → rightmost last
+    function runParade() {
+        if (isPinned) return;
+        clearTimeout(paradeTimer);
+
+        const reversed = acts.slice().reverse(); // reversed[0] = Customers (rightmost)
+
+        // Entry: right → left
+        reversed.forEach((act, ri) => {
+            paradeTimer = setTimeout(() => {
+                if (isPinned) return;
+                showAct(act);
+                fabBounce();
+            }, ri * ENTER_GAP);
+        });
+
+        // Schedule exit after all entered + stay time
+        const enterDone = reversed.length * ENTER_GAP + ENTER_MS + 60;
+        paradeTimer = setTimeout(() => {
+            if (isPinned) return;
+
+            // Exit: left → right
+            acts.forEach((act, i) => {
+                setTimeout(() => {
+                    if (!isPinned) hideAct(act);
+                }, i * EXIT_GAP);
+            });
+
+            // Schedule next cycle
+            const exitDone = acts.length * EXIT_GAP + EXIT_MS + 60;
+            paradeTimer = setTimeout(() => {
+                if (!isPinned) runParade();
+            }, exitDone + PAUSE_MS);
+
+        }, enterDone + STAY_MS);
+    }
+
+    // ── Icon morph ────────────────────────────────────────────────
     function morphIcon(toX) {
         ico.style.opacity   = '0';
-        ico.style.transform = 'scale(0.3) rotate(' + (toX ? 110 : -110) + 'deg)';
+        ico.style.transform = `scale(0.3) rotate(${toX ? 100 : -100}deg)`;
         setTimeout(() => {
             ico.className       = toX ? 'bi bi-x-lg' : 'bi bi-lightning-charge-fill';
-            ico.style.transform = 'scale(0.3) rotate(' + (toX ? -110 : 110) + 'deg)';
+            ico.style.transform = `scale(0.3) rotate(${toX ? -100 : 100}deg)`;
             requestAnimationFrame(() => requestAnimationFrame(() => {
                 ico.style.opacity   = '1';
                 ico.style.transform = 'scale(1) rotate(0deg)';
             }));
-        }, 125);
+        }, 110);
     }
 
-    function openFab(silent) {
-        isOpen = true;
-        root.classList.remove('fab-closing');
-        root.classList.add('fab-open');
+    // ── Pin open (user click: show all instantly, stop parade) ───
+    function pinOpen() {
+        isPinned = true;
+        clearTimeout(paradeTimer);
+        root.classList.add('fab-pinned');
         btn.setAttribute('aria-expanded', 'true');
-        if (!silent) morphIcon(true);
+        morphIcon(true);
+        // Cascade in right→left
+        acts.slice().reverse().forEach((act, ri) => {
+            setTimeout(() => showAct(act), ri * 65);
+        });
     }
 
-    function closeFab() {
-        isOpen = false;
-        root.classList.add('fab-closing');
-        root.classList.remove('fab-open');
+    // ── Unpin (user click again: hide all, resume parade) ────────
+    function unpin() {
+        isPinned = false;
+        root.classList.remove('fab-pinned');
         btn.setAttribute('aria-expanded', 'false');
         morphIcon(false);
-        setTimeout(() => root.classList.remove('fab-closing'), 520);
+        acts.forEach((act, i) => {
+            setTimeout(() => hideAct(act), i * 45);
+        });
+        const done = acts.length * 45 + EXIT_MS + 60;
+        paradeTimer = setTimeout(runParade, done + PAUSE_MS);
     }
 
-    btn.addEventListener('click', () => isOpen ? closeFab() : openFab());
-    document.addEventListener('keydown', e => { if (e.key === 'Escape' && isOpen) closeFab(); });
+    btn.addEventListener('click', () => isPinned ? unpin() : pinOpen());
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && isPinned) unpin(); });
 
-    // Auto-open on load
-    setTimeout(() => openFab(true), 500);
-
-    // ── Rise + Magnetic ───────────────────────────────────────────
-    const WRAP_BOT  = 28;
-    const BTN_HALF  = 31;         // half of 62px button
-    const RISE_PCT  = 0.30;       // rise 30% of viewport height
-    const MAG_R     = 380;        // magnetic activation radius (px)
-    const MAG_MAX   = 28;         // max magnetic displacement (px)
-    const LERP      = 0.20;       // interpolation speed (higher = snappier)
-    const RETURN_MS = 1600;       // ms before auto-return after cursor leaves
-
-    let targetX = 0, targetY = 0;
-    let curX    = 0, curY    = 0;
-    let rafId   = null;
-    let riseOn  = false;
-    let riseTimer = null;
-
-    function animFrame() {
-        curX += (targetX - curX) * LERP;
-        curY += (targetY - curY) * LERP;
-        wrap.style.transform =
-            'translate(calc(-50% + ' + curX.toFixed(2) + 'px),' + curY.toFixed(2) + 'px)';
-        rafId = (Math.abs(targetX - curX) + Math.abs(targetY - curY)) > 0.04
-            ? requestAnimationFrame(animFrame) : null;
-    }
-    function kick() { if (!rafId) rafId = requestAnimationFrame(animFrame); }
-
-    function startReturn() {
-        clearTimeout(riseTimer);
-        riseTimer = setTimeout(() => {
-            riseOn  = false;
-            targetY = 0;
-            kick();
-        }, RETURN_MS);
-    }
-
-    document.addEventListener('mousemove', function (e) {
-        const vh  = window.innerHeight;
-        const vw  = window.innerWidth;
-
-        // Current FAB centre (accounting for already-applied offset)
-        const cx  = vw / 2 + curX;
-        const cy  = vh - WRAP_BOT - BTN_HALF + curY;
-        const dx  = e.clientX - cx;
-        const dy  = e.clientY - cy;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-
-        // Magnetic: pull toward cursor within MAG_R
-        let magX = 0, magY = 0;
-        if (dist < MAG_R && dist > 0) {
-            const t = Math.pow(1 - dist / MAG_R, 1.8);
-            magX = (dx / dist) * t * MAG_MAX;
-            magY = (dy / dist) * t * MAG_MAX;
-        }
-
-        // Rise: cursor in bottom 35% of screen → float up 30%
-        if (e.clientY > vh * 0.65) {
-            clearTimeout(riseTimer);
-            riseOn  = true;
-            targetX = magX;
-            targetY = -(vh * RISE_PCT) + magY;
-        } else {
-            targetX = magX;
-            if (riseOn) {
-                // Cursor left the rise zone — wait before returning
-                startReturn();
-                targetY = -(vh * RISE_PCT) + magY; // hold position until timer
-            } else {
-                targetY = magY;
-            }
-        }
-        kick();
-    });
-
-    document.addEventListener('mouseleave', function () {
-        targetX = 0;
-        if (riseOn) startReturn();
-        else { targetY = 0; kick(); }
-    });
+    // Kick off parade on load
+    setTimeout(runParade, 1000);
 })();
 </script>
