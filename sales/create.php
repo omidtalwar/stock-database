@@ -486,8 +486,8 @@ require_once '../includes/header.php';
                     </div>
                     <div class="text-muted small mt-1" id="paidConvert" style="display:none;"></div>
                 </div>
-                <div class="d-flex justify-content-between mb-1" id="paidAfnRow">
-                    <span class="text-muted small" id="paidAfnLabel">؋ AFN</span>
+                <div class="d-flex justify-content-between mb-1" id="paidAfnRow" style="display:none;">
+                    <span class="text-muted small" id="paidAfnLabel">≈ 🇦🇫 ؋ AFN</span>
                     <span class="text-success small fw-semibold" id="paidAfnDisplay">؋ 0</span>
                 </div>
                 <div class="d-flex justify-content-between mb-1">
@@ -589,7 +589,11 @@ function onSaleCurrencyChange() {
         }
         updateRow(idx);
     });
-    document.getElementById('paidCurrency').value = saleCur();
+    const newCur = saleCur();
+    const paidCurEl = document.getElementById('paidCurrency');
+    const paidAmtEl = document.getElementById('paidAmount');
+    paidCurEl.value = newCur;
+    paidAmtEl.value = 0;
     updateSummary();
 }
 
@@ -749,6 +753,7 @@ function updateSummary() {
 }
 
 document.getElementById('addRow').addEventListener('click', addRow);
+updateSummary();
 
 /* ── Customer picker ── */
 (function() {
