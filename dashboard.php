@@ -114,6 +114,7 @@ foreach ($collByCur as $_r) {
 
 $recentSales = $pdo->query("
     SELECT s.id, s.total_amount, s.balance, s.created_at,
+           COALESCE(s.currency,'AFN') AS currency,
            c.name AS customer_name, c.shop_name
     FROM sales s
     JOIN customers c ON c.id=s.customer_id
@@ -905,13 +906,21 @@ body.pin-locked .debtor-debt .s { filter: blur(7px); user-select: none; pointer-
                                     <div class="cust-name"><?= htmlspecialchars($s['customer_name']) ?></div>
                                     <div class="cust-shop"><?= htmlspecialchars($s['shop_name']) ?></div>
                                 </td>
+                                <?php
+                                $sCur  = $s['currency'] ?: 'AFN';
+                                $sRate = $rates[$sCur] ?? 1.0;
+                                $sTotalOrig = $sCur === 'AFN' ? $s['total_amount'] : fromAFN($s['total_amount'], $sRate);
+                                $sBalOrig   = $sCur === 'AFN' ? $s['balance']      : fromAFN($s['balance'],      $sRate);
+                                ?>
                                 <td>
-                                    <div class="amt-main"><?= formatAFN($s['total_amount']) ?></div>
-                                    <div class="amt-sec">≈ <?= formatMoney(fromAFN($s['total_amount'], $rateUSD), 'USD') ?> · <?= formatMoney(fromAFN($s['total_amount'], $ratePKR), 'PKR') ?></div>
+                                    <div class="amt-main"><?= formatMoney($sTotalOrig, $sCur) ?></div>
+                                    <?php if ($sCur !== 'AFN'): ?>
+                                    <div class="amt-sec">≈ <?= formatAFN($s['total_amount']) ?></div>
+                                    <?php endif; ?>
                                 </td>
                                 <td>
                                     <?php if ($s['balance'] > 0): ?>
-                                        <span class="status-owed"><i class="bi bi-dot"></i><?= formatAFN($s['balance']) ?></span>
+                                        <span class="status-owed"><i class="bi bi-dot"></i><?= formatMoney($sBalOrig, $sCur) ?></span>
                                     <?php else: ?>
                                         <span class="status-paid"><i class="bi bi-check2"></i><?= __('sale_fully_paid') ?></span>
                                     <?php endif; ?>

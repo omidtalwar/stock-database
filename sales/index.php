@@ -36,35 +36,14 @@ if ($search) {
     $params      = ["%$search%", "%$search%"];
 }
 
-// Aggregate totals over the full filtered set (before pagination)
-$totalsStmt = $pdo->prepare("
-    SELECT COUNT(*) AS cnt,
-           SUM(CASE WHEN s.balance = 0 THEN 1 ELSE 0 END) AS fully_paid
-    FROM sales s
+// Count total rows for pagination
+$countStmt = $pdo->prepare("
+    SELECT COUNT(*) FROM sales s
     JOIN customers c ON c.id = s.customer_id
     WHERE 1=1 $periodWhere $searchWhere
 ");
-$totalsStmt->execute($params);
-$totals    = $totalsStmt->fetch();
-$totalRows = (int)$totals['cnt'];
-$fullyPaid = (int)$totals['fully_paid'];
-
-// Per-currency totals (total_amount / paid_amount / balance stored in AFN)
-$curTotalsStmt = $pdo->prepare("
-    SELECT COALESCE(s.currency,'AFN') AS currency,
-           SUM(s.total_amount) AS sum_total,
-           SUM(s.paid_amount)  AS sum_paid,
-           SUM(s.balance)      AS sum_balance
-    FROM sales s
-    JOIN customers c ON c.id = s.customer_id
-    WHERE 1=1 $periodWhere $searchWhere
-    GROUP BY COALESCE(s.currency,'AFN')
-");
-$curTotalsStmt->execute($params);
-$curTotals = ['AFN'=>null,'USD'=>null,'PKR'=>null];
-foreach ($curTotalsStmt->fetchAll() as $ct) {
-    if (array_key_exists($ct['currency'], $curTotals)) $curTotals[$ct['currency']] = $ct;
-}
+$countStmt->execute($params);
+$totalRows = (int)$countStmt->fetchColumn();
 
 $perPage    = 10;
 $page       = max(1, (int)($_GET['page'] ?? 1));
@@ -118,7 +97,6 @@ require_once '../includes/header.php';
     <a href="create.php" class="btn btn-primary"><i class="bi bi-plus-circle me-2"></i><?= __('sale_add') ?></a>
 </div>
 
-<!-- Period filter bar -->
 <?php
 $salePeriodLabels = [
     'all'   => __('period_all'),
@@ -126,83 +104,46 @@ $salePeriodLabels = [
     'week'  => __('period_week'),
     'month' => __('period_month'),
 ];
-$searchParam = $search ? '&search=' . urlencode($search) : '';
 ?>
-<div class="d-flex align-items-center gap-2 flex-wrap mb-3">
-    <span class="small fw-semibold text-muted"><?= __('period_showing') ?>:</span>
-    <?php foreach ($salePeriodLabels as $pk => $pl): ?>
-    <a href="?period=<?= $pk ?><?= $searchParam ?>" class="btn btn-sm <?= $period === $pk ? 'btn-primary' : 'btn-outline-secondary' ?>">
-        <?php if ($pk === 'today'): ?><i class="bi bi-sun me-1"></i>
-        <?php elseif ($pk === 'week'): ?><i class="bi bi-calendar-week me-1"></i>
-        <?php elseif ($pk === 'month'): ?><i class="bi bi-calendar-month me-1"></i>
-        <?php else: ?><i class="bi bi-infinity me-1"></i>
-        <?php endif; ?>
-        <?= $pl ?>
-    </a>
-    <?php endforeach; ?>
-</div>
-
-<!-- Summary totals -->
-<?php if (!empty($sales)): ?>
-<div class="row g-3 mb-3">
-    <?php
-    $statFields = [
-        ['field'=>'sum_total',   'label'=>__('field_total'),   'cls'=>''],
-        ['field'=>'sum_paid',    'label'=>__('field_paid'),    'cls'=>'text-success'],
-        ['field'=>'sum_balance', 'label'=>__('field_balance'), 'cls'=>'text-danger'],
-    ];
-    foreach ($statFields as $sf):
-    ?>
-    <div class="col-6 col-md-3">
-        <div class="card">
-            <div class="card-body py-2 px-3">
-                <div class="text-muted small mb-1"><?= $sf['label'] ?></div>
-                <?php
-                $anyVal = false;
-                foreach (['AFN','USD','PKR'] as $c):
-                    $ct  = $curTotals[$c] ?? null;
-                    if (!$ct) continue;
-                    $afn = (float)($ct[$sf['field']] ?? 0);
-                    if ($afn < 0.01) continue;
-                    $orig    = $c === 'AFN' ? $afn : fromAFN($afn, $rates[$c] ?? 1.0);
-                    $anyVal  = true;
-                ?>
-                <div style="line-height:1.4;margin-bottom:2px;">
-                    <span class="fw-bold <?= $sf['cls'] ?>" style="font-size:0.9rem;"><?= formatMoney($orig, $c) ?></span>
-                    <?php if ($c !== 'AFN'): ?>
-                    <div class="text-muted" style="font-size:0.68rem;">≈ <?= formatAFN($afn) ?></div>
-                    <?php endif; ?>
-                </div>
-                <?php endforeach;
-                if (!$anyVal) echo '<span class="fw-bold text-muted">—</span>';
-                ?>
-                <?php if ($sf['field'] === 'sum_total'): ?>
-                <div class="text-muted mt-1" style="font-size:0.72rem;"><?= $totalRows ?> <?= __('rep_invoices') ?></div>
-                <?php endif; ?>
-            </div>
-        </div>
-    </div>
-    <?php endforeach; ?>
-    <div class="col-6 col-md-3">
-        <div class="card text-center">
-            <div class="card-body py-2">
-                <div class="text-muted small mb-1"><?= __('sale_fully_paid') ?></div>
-                <div class="fw-bold text-primary" style="font-size:1.3rem;"><?= $fullyPaid ?></div>
-            </div>
-        </div>
-    </div>
-</div>
-<?php endif; ?>
 
 <div class="card">
-    <div class="card-header">
-        <form method="GET" class="d-flex gap-2">
+    <div class="card-header py-3">
+        <form method="GET" class="d-flex align-items-center gap-2 justify-content-between flex-wrap">
             <input type="hidden" name="period" value="<?= htmlspecialchars($period) ?>">
-            <input type="text" name="search" class="form-control form-control-sm"
-                   placeholder="<?= __('btn_search') ?>..."
-                   value="<?= htmlspecialchars($search) ?>" style="max-width:300px;">
-            <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-search"></i></button>
-            <?php if ($search): ?><a href="?period=<?= $period ?>" class="btn btn-sm btn-light"><?= __('btn_clear') ?></a><?php endif; ?>
+            <!-- Search -->
+            <div class="input-group" style="max-width:340px;">
+                <span class="input-group-text bg-white border-end-0 text-muted">
+                    <i class="bi bi-search" style="font-size:.8rem;"></i>
+                </span>
+                <input type="text" name="search" class="form-control border-start-0 ps-0"
+                       placeholder="Search customer or shop…"
+                       value="<?= htmlspecialchars($search) ?>">
+                <?php if ($search): ?>
+                <a href="?period=<?= $period ?>" class="btn btn-outline-secondary border-start-0" title="Clear">
+                    <i class="bi bi-x"></i>
+                </a>
+                <?php else: ?>
+                <button class="btn btn-outline-secondary border-start-0" type="submit">
+                    <i class="bi bi-arrow-right" style="font-size:.8rem;"></i>
+                </button>
+                <?php endif; ?>
+            </div>
+            <!-- Period pills -->
+            <div class="d-flex gap-1 flex-wrap">
+                <?php
+                $icons = ['all'=>'infinity','today'=>'sun','week'=>'calendar-week','month'=>'calendar-month'];
+                foreach ($salePeriodLabels as $pk => $pl):
+                    $active = $period === $pk;
+                ?>
+                <a href="?period=<?= $pk ?><?= $search ? '&search='.urlencode($search) : '' ?>"
+                   class="btn btn-sm <?= $active ? 'btn-primary' : 'btn-light' ?>"
+                   style="border-radius:20px;font-size:.78rem;">
+                    <i class="bi bi-<?= $icons[$pk] ?> me-1"></i><?= $pl ?>
+                </a>
+                <?php endforeach; ?>
+            </div>
+            <!-- Count -->
+            <span class="text-muted small ms-auto"><?= $totalRows ?> <?= __('rep_invoices') ?></span>
         </form>
     </div>
     <div class="table-responsive">
