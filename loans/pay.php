@@ -12,28 +12,29 @@ $loan = $loan->fetch();
 
 if (!$loan) { header('Location: index.php'); exit; }
 
-// Auto-migrate: add bill_file column if missing
+// Auto-migrate
 try { $pdo->exec("ALTER TABLE loan_payments ADD COLUMN bill_file VARCHAR(255) NULL AFTER notes"); } catch (\PDOException $e) {}
+try { $pdo->exec("ALTER TABLE loan_payments ADD COLUMN hawala_number VARCHAR(100) NULL AFTER bill_file"); } catch (\PDOException $e) {}
 
 $remaining = (float)$loan['amount'] - (float)$loan['paid'];
 $pageTitle = 'Record Payment';
 $errors    = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $amount   = (float)($_POST['amount'] ?? 0);
-    $currency = in_array($_POST['currency'] ?? '', ['AFN','USD','PKR']) ? $_POST['currency'] : $loan['currency'];
-    $notes    = trim($_POST['notes'] ?? '');
-    $pdate    = trim($_POST['payment_date'] ?? '') ?: null;
-    $billFile = null;
+    $amount       = (float)($_POST['amount'] ?? 0);
+    $notes        = trim($_POST['notes']         ?? '');
+    $pdate        = trim($_POST['payment_date']  ?? '') ?: null;
+    $hawalaNo     = trim($_POST['hawala_number'] ?? '');
+    $billFile     = null;
 
     if ($amount <= 0)         $errors[] = 'Payment amount must be greater than zero.';
-    if ($amount > $remaining) $errors[] = 'Payment exceeds remaining balance (' . formatMoney($remaining, $loan['currency']) . ').';
+    if ($amount > $remaining) $errors[] = 'Payment exceeds remaining balance ($ ' . number_format($remaining, 2) . ').';
 
     // Handle file upload
     if (!empty($_FILES['bill']['name'])) {
         $file     = $_FILES['bill'];
         $allowed  = ['image/jpeg','image/png','image/webp','image/gif','application/pdf'];
-        $maxBytes = 8 * 1024 * 1024; // 8 MB
+        $maxBytes = 8 * 1024 * 1024;
 
         if ($file['error'] !== UPLOAD_ERR_OK) {
             $errors[] = 'File upload failed (error code ' . $file['error'] . ').';
@@ -42,9 +43,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($file['size'] > $maxBytes) {
             $errors[] = 'File is too large. Maximum size is 8 MB.';
         } else {
-            $ext      = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-            $fname    = 'bill_' . $loan['id'] . '_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
-            $dest     = __DIR__ . '/../uploads/loan-bills/' . $fname;
+            $ext  = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+            $fname = 'bill_' . $loan['id'] . '_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+            $dest  = __DIR__ . '/../uploads/loan-bills/' . $fname;
             if (!move_uploaded_file($file['tmp_name'], $dest)) {
                 $errors[] = 'Could not save the uploaded file. Check folder permissions.';
             } else {
@@ -55,15 +56,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!$errors) {
         $pdo->prepare("
-            INSERT INTO loan_payments (loan_id, amount, currency, payment_date, notes, bill_file, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ")->execute([$loan['id'], $amount, $currency, $pdate, $notes, $billFile, $_SESSION['user_id']]);
+            INSERT INTO loan_payments (loan_id, amount, currency, payment_date, notes, bill_file, hawala_number, created_by)
+            VALUES (?, ?, 'USD', ?, ?, ?, ?, ?)
+        ")->execute([$loan['id'], $amount, $pdate, $notes, $billFile, $hawalaNo ?: null, $_SESSION['user_id']]);
 
         $newPaid   = (float)$loan['paid'] + $amount;
         $newStatus = $newPaid >= (float)$loan['amount'] ? 'paid' : $loan['status'];
         $pdo->prepare("UPDATE loans SET paid = ?, status = ? WHERE id = ?")->execute([$newPaid, $newStatus, $loan['id']]);
 
-        $_SESSION['success'] = 'Payment of ' . formatMoney($amount, $currency) . ' recorded.';
+        $_SESSION['success'] = 'Payment of $' . number_format($amount, 2) . ' recorded.';
         header('Location: view.php?id=' . $loan['id']);
         exit;
     }
@@ -73,11 +74,10 @@ require_once '../includes/header.php';
 ?>
 
 <style>
-/* ── Bill drop-zone ── */
 #bill-zone {
     border: 2px dashed rgba(0,103,192,0.25);
     border-radius: 12px;
-    padding: 28px 20px;
+    padding: 26px 20px;
     text-align: center;
     cursor: pointer;
     transition: border-color .2s, background .2s;
@@ -106,6 +106,12 @@ require_once '../includes/header.php';
     cursor: pointer; text-decoration: underline;
 }
 #bill-clear:hover { color: #C42B1C; }
+.usd-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 6px 14px; border-radius: 8px;
+    background: rgba(16,124,16,0.08); border: 1px solid rgba(16,124,16,0.2);
+    color: #107C10; font-weight: 700; font-size: .88rem;
+}
 </style>
 
 <div class="page-header">
@@ -123,19 +129,19 @@ require_once '../includes/header.php';
     <div class="col-6 col-md-3">
         <div class="card p-3 text-center">
             <div class="text-muted" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.4px;">Total Loan</div>
-            <div class="fw-bold mt-1"><?= formatMoney($loan['amount'], $loan['currency']) ?></div>
+            <div class="fw-bold mt-1">$ <?= number_format($loan['amount'], 2) ?></div>
         </div>
     </div>
     <div class="col-6 col-md-3">
         <div class="card p-3 text-center">
             <div class="text-muted" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.4px;">Already Paid</div>
-            <div class="fw-bold text-success mt-1"><?= formatMoney($loan['paid'], $loan['currency']) ?></div>
+            <div class="fw-bold text-success mt-1">$ <?= number_format($loan['paid'], 2) ?></div>
         </div>
     </div>
     <div class="col-12 col-md-6">
         <div class="card p-3 text-center" style="border-color:rgba(248,113,113,0.3);background:rgba(248,113,113,0.04);">
             <div class="text-muted" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.4px;">Remaining Balance</div>
-            <div class="fw-bold text-danger mt-1" style="font-size:1.3rem;"><?= formatMoney($remaining, $loan['currency']) ?></div>
+            <div class="fw-bold text-danger mt-1" style="font-size:1.3rem;">$ <?= number_format($remaining, 2) ?></div>
         </div>
     </div>
 </div>
@@ -145,22 +151,39 @@ require_once '../includes/header.php';
         <form method="POST" enctype="multipart/form-data">
             <div class="row g-3">
 
-                <!-- Amount + Currency -->
-                <div class="col-7">
+                <!-- Amount (USD only) -->
+                <div class="col-8">
                     <label class="form-label fw-semibold">Payment Amount <span class="text-danger">*</span></label>
-                    <input type="number" name="amount" class="form-control" step="0.01" min="0.01"
-                           max="<?= $remaining ?>"
-                           value="<?= htmlspecialchars($_POST['amount'] ?? '') ?>"
-                           placeholder="0.00" required autofocus>
-                    <div class="form-text">Max: <?= formatMoney($remaining, $loan['currency']) ?></div>
+                    <div class="input-group">
+                        <span class="input-group-text fw-bold text-success">$</span>
+                        <input type="number" name="amount" class="form-control" step="0.01" min="0.01"
+                               max="<?= $remaining ?>"
+                               value="<?= htmlspecialchars($_POST['amount'] ?? '') ?>"
+                               placeholder="0.00" required autofocus>
+                    </div>
+                    <div class="form-text">Max: $ <?= number_format($remaining, 2) ?></div>
                 </div>
-                <div class="col-5">
+                <div class="col-4 d-flex flex-column justify-content-center">
                     <label class="form-label fw-semibold">Currency</label>
-                    <select name="currency" class="form-select">
-                        <?php foreach (['AFN','USD','PKR'] as $c): ?>
-                        <option value="<?= $c ?>" <?= (($_POST['currency'] ?? $loan['currency']) === $c) ? 'selected' : '' ?>><?= $c ?></option>
-                        <?php endforeach; ?>
-                    </select>
+                    <span class="usd-badge"><i class="bi bi-currency-dollar"></i> USD only</span>
+                </div>
+
+                <!-- Hawala Number -->
+                <div class="col-12">
+                    <label class="form-label fw-semibold">
+                        <i class="bi bi-hash me-1" style="color:#F59E0B;"></i>Hawala Number
+                        <span class="text-muted fw-normal" style="font-size:.75rem;">(optional)</span>
+                    </label>
+                    <div class="input-group">
+                        <span class="input-group-text" style="background:rgba(245,158,11,0.08);border-color:rgba(245,158,11,0.3);color:#D97706;">
+                            <i class="bi bi-hash"></i>
+                        </span>
+                        <input type="text" name="hawala_number" class="form-control"
+                               style="border-color:rgba(245,158,11,0.3);"
+                               value="<?= htmlspecialchars($_POST['hawala_number'] ?? '') ?>"
+                               placeholder="e.g. HW-2024-00123">
+                    </div>
+                    <div class="form-text">Hawala transaction reference number for this payment</div>
                 </div>
 
                 <!-- Date -->
@@ -192,7 +215,6 @@ require_once '../includes/header.php';
                             <div style="font-size:.75rem;color:#888;margin-top:4px;">JPG · PNG · WebP · PDF &nbsp;·&nbsp; Max 8 MB</div>
                         </div>
                     </div>
-                    <!-- Preview area (shown after file selected) -->
                     <div id="bill-preview-wrap">
                         <img id="bill-preview-img" src="" alt="Bill preview" style="display:none;">
                         <div id="bill-preview-pdf" style="display:none;">
@@ -220,27 +242,22 @@ require_once '../includes/header.php';
 
 <script>
 (function () {
-    const zone      = document.getElementById('bill-zone');
-    const input     = document.getElementById('bill-input');
-    const ph        = document.getElementById('bill-placeholder');
-    const prevWrap  = document.getElementById('bill-preview-wrap');
-    const prevImg   = document.getElementById('bill-preview-img');
-    const prevPdf   = document.getElementById('bill-preview-pdf');
-    const pdfName   = document.getElementById('bill-pdf-name');
-    const pdfSize   = document.getElementById('bill-pdf-size');
-    const clearBtn  = document.getElementById('bill-clear');
+    const zone     = document.getElementById('bill-zone');
+    const input    = document.getElementById('bill-input');
+    const ph       = document.getElementById('bill-placeholder');
+    const prevWrap = document.getElementById('bill-preview-wrap');
+    const prevImg  = document.getElementById('bill-preview-img');
+    const prevPdf  = document.getElementById('bill-preview-pdf');
+    const pdfName  = document.getElementById('bill-pdf-name');
+    const pdfSize  = document.getElementById('bill-pdf-size');
+    const clearBtn = document.getElementById('bill-clear');
 
-    function fmtSize(bytes) {
-        return bytes < 1024 * 1024
-            ? (bytes / 1024).toFixed(0) + ' KB'
-            : (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-    }
+    function fmtSize(b) { return b < 1048576 ? (b/1024).toFixed(0)+' KB' : (b/1048576).toFixed(1)+' MB'; }
 
     function showFile(file) {
         ph.style.display       = 'none';
         prevWrap.style.display = 'block';
         clearBtn.style.display = 'inline-block';
-
         if (file.type.startsWith('image/')) {
             prevPdf.style.display = 'none';
             prevImg.style.display = 'block';
@@ -254,36 +271,22 @@ require_once '../includes/header.php';
     }
 
     function clearFile() {
-        input.value            = '';
-        ph.style.display       = '';
-        prevWrap.style.display = 'none';
-        prevImg.style.display  = 'none';
-        prevPdf.style.display  = 'none';
+        input.value = '';
+        ph.style.display = '';
+        prevWrap.style.display = prevImg.style.display = prevPdf.style.display = 'none';
         clearBtn.style.display = 'none';
         if (prevImg.src) URL.revokeObjectURL(prevImg.src);
         prevImg.src = '';
     }
 
-    input.addEventListener('change', () => {
-        if (input.files && input.files[0]) showFile(input.files[0]);
-    });
-
+    input.addEventListener('change', () => { if (input.files[0]) showFile(input.files[0]); });
     clearBtn.addEventListener('click', clearFile);
-
-    // Drag-and-drop
     zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('drag-over'); });
     zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
     zone.addEventListener('drop', e => {
-        e.preventDefault();
-        zone.classList.remove('drag-over');
-        const f = e.dataTransfer.files[0];
-        if (!f) return;
-        // Assign to input via DataTransfer
-        try {
-            const dt = new DataTransfer();
-            dt.items.add(f);
-            input.files = dt.files;
-        } catch (_) {}
+        e.preventDefault(); zone.classList.remove('drag-over');
+        const f = e.dataTransfer.files[0]; if (!f) return;
+        try { const dt = new DataTransfer(); dt.items.add(f); input.files = dt.files; } catch(_) {}
         showFile(f);
     });
 })();

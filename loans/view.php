@@ -14,8 +14,9 @@ $loan = $loan->fetch();
 
 if (!$loan) { header('Location: index.php'); exit; }
 
-// Auto-migrate: add bill_file column if missing
+// Auto-migrate
 try { $pdo->exec("ALTER TABLE loan_payments ADD COLUMN bill_file VARCHAR(255) NULL AFTER notes"); } catch (\PDOException $e) {}
+try { $pdo->exec("ALTER TABLE loan_payments ADD COLUMN hawala_number VARCHAR(100) NULL AFTER bill_file"); } catch (\PDOException $e) {}
 
 $payments = $pdo->prepare("
     SELECT lp.*, u.full_name AS by_name
@@ -65,20 +66,20 @@ require_once '../includes/header.php';
     <div class="col-6 col-md-3">
         <div class="card p-3 text-center">
             <div class="text-muted" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.4px;">Loan Amount</div>
-            <div class="fw-bold mt-1" style="font-size:1.2rem;"><?= formatMoney($loan['amount'], $loan['currency']) ?></div>
+            <div class="fw-bold mt-1" style="font-size:1.2rem;">$ <?= number_format($loan['amount'], 2) ?></div>
         </div>
     </div>
     <div class="col-6 col-md-3">
         <div class="card p-3 text-center">
             <div class="text-muted" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.4px;">Total Paid</div>
-            <div class="fw-bold text-success mt-1" style="font-size:1.2rem;"><?= formatMoney($loan['paid'], $loan['currency']) ?></div>
+            <div class="fw-bold text-success mt-1" style="font-size:1.2rem;">$ <?= number_format($loan['paid'], 2) ?></div>
         </div>
     </div>
     <div class="col-6 col-md-3">
         <div class="card p-3 text-center">
             <div class="text-muted" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.4px;">Remaining</div>
             <div class="fw-bold mt-1 <?= $remaining > 0 ? 'text-danger' : 'text-success' ?>" style="font-size:1.2rem;">
-                <?= $remaining > 0 ? formatMoney($remaining, $loan['currency']) : '✓ Cleared' ?>
+                <?= $remaining > 0 ? '$ ' . number_format($remaining, 2) : '✓ Cleared' ?>
             </div>
         </div>
     </div>
@@ -117,7 +118,8 @@ require_once '../includes/header.php';
             <thead>
                 <tr>
                     <th>#</th>
-                    <th>Amount</th>
+                    <th>Amount (USD)</th>
+                    <th>Hawala #</th>
                     <th class="d-none d-sm-table-cell">Notes</th>
                     <th class="d-none d-md-table-cell">Recorded By</th>
                     <th>Date</th>
@@ -127,7 +129,7 @@ require_once '../includes/header.php';
             </thead>
             <tbody>
                 <?php if (empty($payments)): ?>
-                <tr><td colspan="<?= isAdmin() ? 7 : 6 ?>" class="text-center text-muted py-4">No payments recorded yet</td></tr>
+                <tr><td colspan="<?= isAdmin() ? 8 : 7 ?>" class="text-center text-muted py-4">No payments recorded yet</td></tr>
                 <?php else: foreach ($payments as $pi => $p):
                     $pd      = $p['payment_date'] ?: date('Y-m-d', strtotime($p['created_at']));
                     $hasFile = !empty($p['bill_file']);
@@ -136,7 +138,16 @@ require_once '../includes/header.php';
                 ?>
                 <tr>
                     <td class="text-muted small"><?= $pi + 1 ?></td>
-                    <td class="fw-bold text-success"><?= formatMoney($p['amount'], $p['currency']) ?></td>
+                    <td class="fw-bold text-success">$ <?= number_format($p['amount'], 2) ?></td>
+                    <td>
+                        <?php if (!empty($p['hawala_number'])): ?>
+                        <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:6px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);color:#B45309;font-size:.75rem;font-weight:700;letter-spacing:.3px;">
+                            <i class="bi bi-hash" style="font-size:.7rem;"></i><?= htmlspecialchars($p['hawala_number']) ?>
+                        </span>
+                        <?php else: ?>
+                        <span class="text-muted" style="font-size:.8rem;">—</span>
+                        <?php endif; ?>
+                    </td>
                     <td class="text-muted small d-none d-sm-table-cell"><?= htmlspecialchars($p['notes'] ?: '—') ?></td>
                     <td class="text-muted small d-none d-md-table-cell"><?= htmlspecialchars($p['by_name'] ?? '—') ?></td>
                     <td class="text-muted small"><?= date('d M Y', strtotime($pd)) ?></td>

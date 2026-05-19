@@ -13,7 +13,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $borrower = trim($_POST['borrower'] ?? '');
     $phone    = trim($_POST['phone']    ?? '');
     $amount   = (float)($_POST['amount'] ?? 0);
-    $currency = in_array($_POST['currency'] ?? '', ['AFN','USD','PKR']) ? $_POST['currency'] : 'AFN';
+    $currency = 'USD';
     $desc     = trim($_POST['description'] ?? '');
     $due      = trim($_POST['due_date'] ?? '') ?: null;
 
@@ -60,21 +60,20 @@ require_once '../includes/header.php';
                            value="<?= htmlspecialchars($_POST['phone'] ?? '') ?>"
                            placeholder="Contact number (optional)">
                 </div>
-                <div class="col-7">
+                <div class="col-8">
                     <label class="form-label fw-semibold">Loan Amount <span class="text-danger">*</span></label>
-                    <input type="number" name="amount" class="form-control" step="0.01" min="0.01"
-                           value="<?= htmlspecialchars($_POST['amount'] ?? '') ?>"
-                           placeholder="0.00" required>
+                    <div class="input-group">
+                        <span class="input-group-text fw-bold text-success">$</span>
+                        <input type="number" name="amount" class="form-control" step="0.01" min="0.01"
+                               value="<?= htmlspecialchars($_POST['amount'] ?? '') ?>"
+                               placeholder="0.00" required>
+                    </div>
                 </div>
-                <div class="col-5">
+                <div class="col-4 d-flex flex-column justify-content-center">
                     <label class="form-label fw-semibold">Currency</label>
-                    <select name="currency" class="form-select">
-                        <?php foreach (['AFN','USD','PKR'] as $c): ?>
-                        <option value="<?= $c ?>" <?= (($_POST['currency'] ?? 'AFN') === $c) ? 'selected' : '' ?>>
-                            <?= $c ?>
-                        </option>
-                        <?php endforeach; ?>
-                    </select>
+                    <span style="display:inline-flex;align-items:center;gap:5px;padding:6px 14px;border-radius:8px;background:rgba(16,124,16,0.08);border:1px solid rgba(16,124,16,0.2);color:#107C10;font-weight:700;font-size:.88rem;">
+                        <i class="bi bi-currency-dollar"></i> USD only
+                    </span>
                 </div>
                 <div class="col-12">
                     <label class="form-label fw-semibold">Due Date</label>
