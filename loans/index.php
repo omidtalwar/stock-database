@@ -14,7 +14,7 @@ $pdo->exec("
         borrower    VARCHAR(255) NOT NULL,
         phone       VARCHAR(60),
         amount      DECIMAL(15,2) NOT NULL,
-        currency    VARCHAR(3) NOT NULL DEFAULT 'AFN',
+        currency    VARCHAR(3) NOT NULL DEFAULT 'USD',
         paid        DECIMAL(15,2) NOT NULL DEFAULT 0,
         description TEXT,
         due_date    DATE,
@@ -28,7 +28,7 @@ $pdo->exec("
         id           INT AUTO_INCREMENT PRIMARY KEY,
         loan_id      INT NOT NULL,
         amount       DECIMAL(15,2) NOT NULL,
-        currency     VARCHAR(3) NOT NULL DEFAULT 'AFN',
+        currency     VARCHAR(3) NOT NULL DEFAULT 'USD',
         payment_date DATE,
         notes        TEXT,
         created_by   INT,
@@ -122,7 +122,7 @@ $statusColors = ['active' => '#F59E0B', 'paid' => '#4ADE80', 'overdue' => '#F871
                 <div class="stat-icon" style="background:rgba(248,113,113,0.12);color:#F87171;"><i class="bi bi-hourglass-split"></i></div>
                 <div>
                     <div class="text-muted" style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.4px;">Remaining</div>
-                    <div class="fw-bold text-danger" style="font-size:1.15rem;">؋ <?= number_format((float)$stats['total_remaining'], 0) ?></div>
+                    <div class="fw-bold text-danger" style="font-size:1.15rem;">$ <?= number_format((float)$stats['total_remaining'], 2) ?></div>
                 </div>
             </div>
         </div>
@@ -221,9 +221,9 @@ $statusColors = ['active' => '#F59E0B', 'paid' => '#4ADE80', 'overdue' => '#F871
                             </div>
                         </div>
                     </td>
-                    <td class="fw-semibold"><?= formatMoney($l['amount'], $l['currency']) ?></td>
+                    <td class="fw-semibold">$ <?= number_format($l['amount'], 2) ?></td>
                     <td class="text-success fw-semibold">
-                        <?= formatMoney($l['paid'], $l['currency']) ?>
+                        $ <?= number_format($l['paid'], 2) ?>
                         <?php if ($pct > 0): ?>
                         <div style="height:3px;border-radius:2px;background:#e9ecef;margin-top:4px;width:60px;">
                             <div style="height:3px;border-radius:2px;background:#4ADE80;width:<?= $pct ?>%;"></div>
@@ -231,7 +231,7 @@ $statusColors = ['active' => '#F59E0B', 'paid' => '#4ADE80', 'overdue' => '#F871
                         <?php endif; ?>
                     </td>
                     <td class="fw-bold <?= $remaining > 0 ? 'text-danger' : 'text-success' ?>">
-                        <?= $remaining > 0 ? formatMoney($remaining, $l['currency']) : '—' ?>
+                        <?= $remaining > 0 ? '$ ' . number_format($remaining, 2) : '—' ?>
                     </td>
                     <td class="text-muted small d-none d-md-table-cell">
                         <?= $l['due_date'] ? date('d M Y', strtotime($l['due_date'])) : '—' ?>
