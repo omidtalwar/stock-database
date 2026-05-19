@@ -853,8 +853,8 @@ body.pin-locked .debtor-debt .s { filter: blur(7px); user-select: none; pointer-
                 <div class="cur-empty">No payments yet</div>
                 <?php endif; ?>
                 </div>
-                <?php $totalCollected = ($adminStats['collected'] ?? 0) + ($adminStats['payments'] ?? 0); ?>
-                <div class="stat-foot">≈ <?= formatAFN($totalCollected) ?> total</div>
+                <?php $totalCollectedAfn = array_sum(array_column($paysCurData, 'afn')); ?>
+                <div class="stat-foot">≈ <?= formatAFN($totalCollectedAfn) ?> total</div>
             </div>
 
             <!-- Customers -->
