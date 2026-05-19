@@ -12,6 +12,9 @@ $loan = $loan->fetch();
 
 if (!$loan) { header('Location: index.php'); exit; }
 
+// Auto-migrate: add bill_file column if missing
+try { $pdo->exec("ALTER TABLE loan_payments ADD COLUMN bill_file VARCHAR(255) NULL AFTER notes"); } catch (\PDOException $e) {}
+
 $remaining = (float)$loan['amount'] - (float)$loan['paid'];
 $pageTitle = 'Record Payment';
 $errors    = [];
@@ -21,17 +24,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $currency = in_array($_POST['currency'] ?? '', ['AFN','USD','PKR']) ? $_POST['currency'] : $loan['currency'];
     $notes    = trim($_POST['notes'] ?? '');
     $pdate    = trim($_POST['payment_date'] ?? '') ?: null;
+    $billFile = null;
 
     if ($amount <= 0)         $errors[] = 'Payment amount must be greater than zero.';
     if ($amount > $remaining) $errors[] = 'Payment exceeds remaining balance (' . formatMoney($remaining, $loan['currency']) . ').';
 
+    // Handle file upload
+    if (!empty($_FILES['bill']['name'])) {
+        $file     = $_FILES['bill'];
+        $allowed  = ['image/jpeg','image/png','image/webp','image/gif','application/pdf'];
+        $maxBytes = 8 * 1024 * 1024; // 8 MB
+
+        if ($file['error'] !== UPLOAD_ERR_OK) {
+            $errors[] = 'File upload failed (error code ' . $file['error'] . ').';
+        } elseif (!in_array($file['type'], $allowed)) {
+            $errors[] = 'Only JPG, PNG, WebP, GIF, or PDF files are allowed.';
+        } elseif ($file['size'] > $maxBytes) {
+            $errors[] = 'File is too large. Maximum size is 8 MB.';
+        } else {
+            $ext      = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+            $fname    = 'bill_' . $loan['id'] . '_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+            $dest     = __DIR__ . '/../uploads/loan-bills/' . $fname;
+            if (!move_uploaded_file($file['tmp_name'], $dest)) {
+                $errors[] = 'Could not save the uploaded file. Check folder permissions.';
+            } else {
+                $billFile = $fname;
+            }
+        }
+    }
+
     if (!$errors) {
         $pdo->prepare("
-            INSERT INTO loan_payments (loan_id, amount, currency, payment_date, notes, created_by)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ")->execute([$loan['id'], $amount, $currency, $pdate, $notes, $_SESSION['user_id']]);
+            INSERT INTO loan_payments (loan_id, amount, currency, payment_date, notes, bill_file, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ")->execute([$loan['id'], $amount, $currency, $pdate, $notes, $billFile, $_SESSION['user_id']]);
 
-        $newPaid = (float)$loan['paid'] + $amount;
+        $newPaid   = (float)$loan['paid'] + $amount;
         $newStatus = $newPaid >= (float)$loan['amount'] ? 'paid' : $loan['status'];
         $pdo->prepare("UPDATE loans SET paid = ?, status = ? WHERE id = ?")->execute([$newPaid, $newStatus, $loan['id']]);
 
@@ -44,6 +72,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 require_once '../includes/header.php';
 ?>
 
+<style>
+/* ── Bill drop-zone ── */
+#bill-zone {
+    border: 2px dashed rgba(0,103,192,0.25);
+    border-radius: 12px;
+    padding: 28px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .2s, background .2s;
+    background: rgba(0,103,192,0.02);
+    position: relative;
+}
+#bill-zone:hover, #bill-zone.drag-over {
+    border-color: rgba(0,103,192,0.55);
+    background: rgba(0,103,192,0.05);
+}
+#bill-zone input[type="file"] {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    opacity: 0; cursor: pointer;
+}
+#bill-preview-wrap { display: none; margin-top: 14px; }
+#bill-preview-img  { max-width: 100%; max-height: 220px; border-radius: 8px; object-fit: contain; border: 1px solid rgba(0,0,0,0.08); }
+#bill-preview-pdf  {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px; border-radius: 10px;
+    background: rgba(196,43,28,0.06); border: 1px solid rgba(196,43,28,0.18);
+    font-size: .85rem; font-weight: 600; color: #C42B1C;
+}
+#bill-clear {
+    display: none; margin-top: 10px;
+    font-size: .78rem; color: #888; border: none; background: none;
+    cursor: pointer; text-decoration: underline;
+}
+#bill-clear:hover { color: #C42B1C; }
+</style>
+
 <div class="page-header">
     <a href="view.php?id=<?= $loan['id'] ?>" class="text-muted small"><i class="bi bi-arrow-left me-1"></i>Back to Loan</a>
     <h4 class="mt-1 mb-0"><i class="bi bi-cash-stack me-2 text-success"></i>Record Payment</h4>
@@ -51,7 +115,7 @@ require_once '../includes/header.php';
 </div>
 
 <?php foreach ($errors as $e): ?>
-<div class="alert alert-danger"><?= htmlspecialchars($e) ?></div>
+<div class="alert alert-danger"><i class="bi bi-exclamation-circle me-2"></i><?= htmlspecialchars($e) ?></div>
 <?php endforeach; ?>
 
 <!-- Loan summary -->
@@ -76,10 +140,12 @@ require_once '../includes/header.php';
     </div>
 </div>
 
-<div class="card" style="max-width:520px;">
+<div class="card" style="max-width:580px;">
     <div class="card-body p-4">
-        <form method="POST">
+        <form method="POST" enctype="multipart/form-data">
             <div class="row g-3">
+
+                <!-- Amount + Currency -->
                 <div class="col-7">
                     <label class="form-label fw-semibold">Payment Amount <span class="text-danger">*</span></label>
                     <input type="number" name="amount" class="form-control" step="0.01" min="0.01"
@@ -96,16 +162,51 @@ require_once '../includes/header.php';
                         <?php endforeach; ?>
                     </select>
                 </div>
+
+                <!-- Date -->
                 <div class="col-12">
                     <label class="form-label fw-semibold">Payment Date</label>
                     <input type="date" name="payment_date" class="form-control"
                            value="<?= htmlspecialchars($_POST['payment_date'] ?? date('Y-m-d')) ?>">
                 </div>
+
+                <!-- Notes -->
                 <div class="col-12">
                     <label class="form-label fw-semibold">Notes</label>
                     <textarea name="notes" class="form-control" rows="2"
                               placeholder="Optional payment notes…"><?= htmlspecialchars($_POST['notes'] ?? '') ?></textarea>
                 </div>
+
+                <!-- Bill uploader -->
+                <div class="col-12">
+                    <label class="form-label fw-semibold">
+                        <i class="bi bi-paperclip me-1"></i>Attach Bill / Receipt
+                        <span class="text-muted fw-normal" style="font-size:.75rem;">(optional)</span>
+                    </label>
+                    <div id="bill-zone">
+                        <input type="file" name="bill" id="bill-input"
+                               accept="image/jpeg,image/png,image/webp,image/gif,application/pdf">
+                        <div id="bill-placeholder">
+                            <i class="bi bi-cloud-arrow-up" style="font-size:2rem;color:rgba(0,103,192,0.4);display:block;margin-bottom:8px;"></i>
+                            <div style="font-weight:600;font-size:.88rem;color:#444;">Drop file here or click to browse</div>
+                            <div style="font-size:.75rem;color:#888;margin-top:4px;">JPG · PNG · WebP · PDF &nbsp;·&nbsp; Max 8 MB</div>
+                        </div>
+                    </div>
+                    <!-- Preview area (shown after file selected) -->
+                    <div id="bill-preview-wrap">
+                        <img id="bill-preview-img" src="" alt="Bill preview" style="display:none;">
+                        <div id="bill-preview-pdf" style="display:none;">
+                            <i class="bi bi-file-earmark-pdf-fill" style="font-size:1.6rem;"></i>
+                            <div>
+                                <div id="bill-pdf-name" style="font-weight:700;"></div>
+                                <div id="bill-pdf-size" style="font-size:.72rem;font-weight:400;color:#888;margin-top:2px;"></div>
+                            </div>
+                        </div>
+                        <button type="button" id="bill-clear">&#x2715; Remove file</button>
+                    </div>
+                </div>
+
+                <!-- Submit -->
                 <div class="col-12 d-flex gap-2 pt-2">
                     <button type="submit" class="btn btn-success px-4">
                         <i class="bi bi-check-circle me-2"></i>Save Payment
@@ -116,5 +217,76 @@ require_once '../includes/header.php';
         </form>
     </div>
 </div>
+
+<script>
+(function () {
+    const zone      = document.getElementById('bill-zone');
+    const input     = document.getElementById('bill-input');
+    const ph        = document.getElementById('bill-placeholder');
+    const prevWrap  = document.getElementById('bill-preview-wrap');
+    const prevImg   = document.getElementById('bill-preview-img');
+    const prevPdf   = document.getElementById('bill-preview-pdf');
+    const pdfName   = document.getElementById('bill-pdf-name');
+    const pdfSize   = document.getElementById('bill-pdf-size');
+    const clearBtn  = document.getElementById('bill-clear');
+
+    function fmtSize(bytes) {
+        return bytes < 1024 * 1024
+            ? (bytes / 1024).toFixed(0) + ' KB'
+            : (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+
+    function showFile(file) {
+        ph.style.display       = 'none';
+        prevWrap.style.display = 'block';
+        clearBtn.style.display = 'inline-block';
+
+        if (file.type.startsWith('image/')) {
+            prevPdf.style.display = 'none';
+            prevImg.style.display = 'block';
+            prevImg.src = URL.createObjectURL(file);
+        } else {
+            prevImg.style.display = 'none';
+            prevPdf.style.display = 'flex';
+            pdfName.textContent   = file.name;
+            pdfSize.textContent   = fmtSize(file.size);
+        }
+    }
+
+    function clearFile() {
+        input.value            = '';
+        ph.style.display       = '';
+        prevWrap.style.display = 'none';
+        prevImg.style.display  = 'none';
+        prevPdf.style.display  = 'none';
+        clearBtn.style.display = 'none';
+        if (prevImg.src) URL.revokeObjectURL(prevImg.src);
+        prevImg.src = '';
+    }
+
+    input.addEventListener('change', () => {
+        if (input.files && input.files[0]) showFile(input.files[0]);
+    });
+
+    clearBtn.addEventListener('click', clearFile);
+
+    // Drag-and-drop
+    zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+    zone.addEventListener('drop', e => {
+        e.preventDefault();
+        zone.classList.remove('drag-over');
+        const f = e.dataTransfer.files[0];
+        if (!f) return;
+        // Assign to input via DataTransfer
+        try {
+            const dt = new DataTransfer();
+            dt.items.add(f);
+            input.files = dt.files;
+        } catch (_) {}
+        showFile(f);
+    });
+})();
+</script>
 
 <?php require_once '../includes/footer.php'; ?>

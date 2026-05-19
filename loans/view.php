@@ -14,6 +14,9 @@ $loan = $loan->fetch();
 
 if (!$loan) { header('Location: index.php'); exit; }
 
+// Auto-migrate: add bill_file column if missing
+try { $pdo->exec("ALTER TABLE loan_payments ADD COLUMN bill_file VARCHAR(255) NULL AFTER notes"); } catch (\PDOException $e) {}
+
 $payments = $pdo->prepare("
     SELECT lp.*, u.full_name AS by_name
     FROM loan_payments lp
@@ -118,14 +121,18 @@ require_once '../includes/header.php';
                     <th class="d-none d-sm-table-cell">Notes</th>
                     <th class="d-none d-md-table-cell">Recorded By</th>
                     <th>Date</th>
+                    <th>Bill</th>
                     <?php if (isAdmin()): ?><th></th><?php endif; ?>
                 </tr>
             </thead>
             <tbody>
                 <?php if (empty($payments)): ?>
-                <tr><td colspan="<?= isAdmin() ? 6 : 5 ?>" class="text-center text-muted py-4">No payments recorded yet</td></tr>
+                <tr><td colspan="<?= isAdmin() ? 7 : 6 ?>" class="text-center text-muted py-4">No payments recorded yet</td></tr>
                 <?php else: foreach ($payments as $pi => $p):
-                    $pd = $p['payment_date'] ?: date('Y-m-d', strtotime($p['created_at']));
+                    $pd      = $p['payment_date'] ?: date('Y-m-d', strtotime($p['created_at']));
+                    $hasFile = !empty($p['bill_file']);
+                    $fileUrl = $hasFile ? '/uploads/loan-bills/' . rawurlencode($p['bill_file']) : '';
+                    $isPdf   = $hasFile && strtolower(pathinfo($p['bill_file'], PATHINFO_EXTENSION)) === 'pdf';
                 ?>
                 <tr>
                     <td class="text-muted small"><?= $pi + 1 ?></td>
@@ -133,6 +140,25 @@ require_once '../includes/header.php';
                     <td class="text-muted small d-none d-sm-table-cell"><?= htmlspecialchars($p['notes'] ?: '—') ?></td>
                     <td class="text-muted small d-none d-md-table-cell"><?= htmlspecialchars($p['by_name'] ?? '—') ?></td>
                     <td class="text-muted small"><?= date('d M Y', strtotime($pd)) ?></td>
+                    <td>
+                        <?php if ($hasFile): ?>
+                        <?php if ($isPdf): ?>
+                            <a href="<?= $fileUrl ?>" target="_blank"
+                               class="btn btn-sm btn-outline-danger" title="View PDF">
+                                <i class="bi bi-file-earmark-pdf-fill"></i>
+                            </a>
+                        <?php else: ?>
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-primary bill-thumb-btn"
+                                    data-src="<?= htmlspecialchars($fileUrl) ?>"
+                                    title="View image">
+                                <i class="bi bi-image"></i>
+                            </button>
+                        <?php endif; ?>
+                        <?php else: ?>
+                        <span class="text-muted" style="font-size:.8rem;">—</span>
+                        <?php endif; ?>
+                    </td>
                     <?php if (isAdmin()): ?>
                     <td>
                         <a href="delete_payment.php?id=<?= $p['id'] ?>&loan_id=<?= $loan['id'] ?>"
@@ -148,5 +174,48 @@ require_once '../includes/header.php';
         </table>
     </div>
 </div>
+
+<!-- Bill image lightbox -->
+<div id="bill-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.82);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:20px;">
+    <div style="position:relative;max-width:90vw;max-height:90vh;display:flex;align-items:center;justify-content:center;">
+        <img id="bill-modal-img" src="" alt="Bill"
+             style="max-width:90vw;max-height:85vh;border-radius:10px;box-shadow:0 8px 48px rgba(0,0,0,0.6);object-fit:contain;">
+        <a id="bill-modal-dl" href="" download target="_blank"
+           style="position:absolute;bottom:-44px;left:50%;transform:translateX(-50%);
+                  padding:7px 22px;border-radius:8px;background:#fff;color:#333;font-size:.82rem;
+                  font-weight:600;text-decoration:none;display:flex;align-items:center;gap:6px;">
+            <i class="bi bi-download"></i> Download
+        </a>
+    </div>
+    <button id="bill-modal-close"
+            style="position:fixed;top:18px;right:22px;background:rgba(255,255,255,0.15);
+                   border:none;color:#fff;font-size:1.5rem;border-radius:50%;
+                   width:40px;height:40px;cursor:pointer;display:flex;align-items:center;justify-content:center;">
+        &times;
+    </button>
+</div>
+
+<script>
+(function () {
+    const modal    = document.getElementById('bill-modal');
+    const modalImg = document.getElementById('bill-modal-img');
+    const modalDl  = document.getElementById('bill-modal-dl');
+    const closeBtn = document.getElementById('bill-modal-close');
+
+    document.querySelectorAll('.bill-thumb-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const src = btn.dataset.src;
+            modalImg.src   = src;
+            modalDl.href   = src;
+            modal.style.display = 'flex';
+        });
+    });
+
+    function close() { modal.style.display = 'none'; modalImg.src = ''; }
+    closeBtn.addEventListener('click', close);
+    modal.addEventListener('click', e => { if (e.target === modal) close(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+})();
+</script>
 
 <?php require_once '../includes/footer.php'; ?>
