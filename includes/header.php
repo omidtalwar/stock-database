@@ -469,6 +469,7 @@ if (!empty($_SESSION['error'])) {
         <?= navItem('/sales/index.php',     'receipt',     __('nav_sales'),     $currentDir === 'sales',     '#FB923C') ?>
         <?= navItem('/payments/index.php',  'cash-coin',   __('nav_payments'),  $currentDir === 'payments',  '#4ADE80') ?>
         <?= navItem('/stock/index.php',     'archive',     __('nav_stock'),     $currentDir === 'stock',     '#22D3EE') ?>
+        <?= navItem('/loans/index.php',     'bank',        'Loans',             $currentDir === 'loans',     '#F59E0B') ?>
 
         <?php if (isAdmin()): ?>
         <div class="nav-section"><?= __('nav_admin') ?></div>
