@@ -7,6 +7,23 @@ require_once '../includes/currency.php';
 
 $pageTitle = __('stock_title');
 
+function toShamsi(int $gy, int $gm, int $gd): array {
+    $g_d_no = 365*$gy + (int)(($gy+3)/4) - (int)(($gy+99)/100) + (int)(($gy+399)/400);
+    for ($i=0;$i<$gm-1;$i++) $g_d_no += [0,31,28,31,30,31,30,31,31,30,31,30,31][$i+1];
+    if ($gm>2 && (($gy%4==0&&$gy%100!=0)||$gy%400==0)) $g_d_no++;
+    $j_d_no = $g_d_no - 79;
+    $j_np   = (int)($j_d_no / 12053); $j_d_no %= 12053;
+    $jy     = 979 + 33*$j_np + 4*(int)($j_d_no/1461); $j_d_no %= 1461;
+    if ($j_d_no >= 366) { $jy += (int)(($j_d_no-1)/365); $j_d_no = ($j_d_no-1) % 365; }
+    $jm = 0; $jd = 0;
+    for ($i=0; $i<11; $i++) {
+        $j_mi = $i<6 ? 31 : 30;
+        if ($j_d_no >= $j_mi) { $j_d_no -= $j_mi; $jm++; } else break;
+    }
+    $jd = $j_d_no + 1; $jm++;
+    return [$jy, $jm, $jd];
+}
+
 // Auto-migrate so this page works even if add.php has never been opened
 foreach ([
     "ALTER TABLE stock_logs MODIFY product_id   INT           NULL",
@@ -192,7 +209,11 @@ require_once '../includes/header.php';
                         <?php endif; ?>
                     </td>
 
-                    <td class="text-muted" style="font-size:0.75rem;"><?= date('d M Y', strtotime($s['last_txn'])) ?></td>
+                    <td class="text-muted" style="font-size:0.75rem;">
+                        <?= date('d M Y', strtotime($s['last_txn'])) ?>
+                        <?php [$sy,$sm,$sd] = toShamsi((int)date('Y',strtotime($s['last_txn'])), (int)date('n',strtotime($s['last_txn'])), (int)date('j',strtotime($s['last_txn']))); ?>
+                        <div style="font-size:0.68rem;color:#aaa;"><?= $sy ?>/<?= str_pad($sm,2,'0',STR_PAD_LEFT) ?>/<?= str_pad($sd,2,'0',STR_PAD_LEFT) ?></div>
+                    </td>
                     <td class="text-nowrap">
                         <a href="supplier.php?name=<?= urlencode($s['supplier']) ?>"
                            class="btn btn-sm btn-light me-1"

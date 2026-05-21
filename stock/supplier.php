@@ -8,6 +8,23 @@ require_once '../includes/currency.php';
 $supplierName = trim($_GET['name'] ?? '');
 if ($supplierName === '') { header('Location: index.php'); exit; }
 
+function toShamsi(int $gy, int $gm, int $gd): array {
+    $g_d_no = 365*$gy + (int)(($gy+3)/4) - (int)(($gy+99)/100) + (int)(($gy+399)/400);
+    for ($i=0;$i<$gm-1;$i++) $g_d_no += [0,31,28,31,30,31,30,31,31,30,31,30,31][$i+1];
+    if ($gm>2 && (($gy%4==0&&$gy%100!=0)||$gy%400==0)) $g_d_no++;
+    $j_d_no = $g_d_no - 79;
+    $j_np   = (int)($j_d_no / 12053); $j_d_no %= 12053;
+    $jy     = 979 + 33*$j_np + 4*(int)($j_d_no/1461); $j_d_no %= 1461;
+    if ($j_d_no >= 366) { $jy += (int)(($j_d_no-1)/365); $j_d_no = ($j_d_no-1) % 365; }
+    $jm = 0; $jd = 0;
+    for ($i=0; $i<11; $i++) {
+        $j_mi = $i<6 ? 31 : 30;
+        if ($j_d_no >= $j_mi) { $j_d_no -= $j_mi; $jm++; } else break;
+    }
+    $jd = $j_d_no + 1; $jm++;
+    return [$jy, $jm, $jd];
+}
+
 // Auto-migrate guard
 foreach ([
     "ALTER TABLE stock_logs MODIFY product_id   INT           NULL",
@@ -28,7 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'payme
     $payAmt      = (float)($_POST['payment_amount'] ?? 0);
     $payNotes    = trim($_POST['payment_notes'] ?? '');
     $payBill     = trim($_POST['bill_image'] ?? '');
-    $payCurrency = array_key_exists($_POST['pay_currency'] ?? '', CURRENCIES) ? $_POST['pay_currency'] : 'AFN';
+    $payCurrency = 'USD';
 
     if ($payAmt <= 0) {
         $_SESSION['error'] = 'Payment amount must be greater than 0.';
@@ -183,7 +200,7 @@ require_once '../includes/header.php';
         <?php if ($stats['total_unpaid'] > 0): ?>
         <button class="btn btn-success fw-semibold" data-bs-toggle="modal" data-bs-target="#paymentModal">
             <i class="bi bi-cash-coin me-2"></i>Make Payment
-            <span class="badge bg-white text-success ms-1">؋<?= number_format($stats['total_unpaid'], 0) ?></span>
+            <span class="badge bg-white text-success ms-1">$<?= number_format($stats['total_unpaid'], 2) ?></span>
         </button>
         <?php endif; ?>
         <a href="add.php?supplier=<?= urlencode($supplierName) ?>" class="btn btn-primary">
@@ -202,19 +219,19 @@ require_once '../includes/header.php';
     </div>
     <div class="col-6 col-sm-3">
         <div class="card stat-card" style="background:rgba(80,80,80,0.07);">
-            <div class="stat-val">؋<?= number_format($stats['total_purchased'], 0) ?></div>
+            <div class="stat-val">$<?= number_format($stats['total_purchased'], 2) ?></div>
             <div class="stat-lbl">Total Purchased</div>
         </div>
     </div>
     <div class="col-6 col-sm-3">
         <div class="card stat-card" style="background:rgba(16,124,16,0.07);">
-            <div class="stat-val text-success">؋<?= number_format($stats['total_paid'], 0) ?></div>
+            <div class="stat-val text-success">$<?= number_format($stats['total_paid'], 2) ?></div>
             <div class="stat-lbl" style="color:#107C10;">Total Paid</div>
         </div>
     </div>
     <div class="col-6 col-sm-3">
         <div class="card stat-card" style="background:rgba(196,43,28,0.07);">
-            <div class="stat-val text-danger">؋<?= number_format($stats['total_unpaid'], 0) ?></div>
+            <div class="stat-val text-danger">$<?= number_format($stats['total_unpaid'], 2) ?></div>
             <div class="stat-lbl" style="color:#C42B1C;">Unpaid / Balance</div>
         </div>
     </div>
@@ -236,8 +253,8 @@ $pct = $stats['total_purchased'] > 0
             <div class="progress-bar bg-success" style="width:<?= $pct ?>%;border-radius:6px;"></div>
         </div>
         <div class="d-flex justify-content-between mt-1" style="font-size:0.72rem;color:#888;">
-            <span>Paid ؋<?= number_format($stats['total_paid'], 0) ?></span>
-            <span>Balance ؋<?= number_format($stats['total_unpaid'], 0) ?></span>
+            <span>Paid $<?= number_format($stats['total_paid'], 2) ?></span>
+            <span>Balance $<?= number_format($stats['total_unpaid'], 2) ?></span>
         </div>
     </div>
 </div>
@@ -469,7 +486,11 @@ $rateUSD = $rates['USD']; $ratePKR = $rates['PKR'];
                         <?= htmlspecialchars($log['notes'] ?: '—') ?>
                     </td>
                     <td class="text-muted text-nowrap" style="font-size:0.75rem;"><?= htmlspecialchars($log['created_by_name']) ?></td>
-                    <td class="text-muted text-nowrap" style="font-size:0.75rem;"><?= date('d M Y', strtotime($log['created_at'])) ?></td>
+                    <td class="text-muted text-nowrap" style="font-size:0.75rem;">
+                        <?= date('d M Y', strtotime($log['created_at'])) ?>
+                        <?php [$sy,$sm,$sd] = toShamsi((int)date('Y',strtotime($log['created_at'])), (int)date('n',strtotime($log['created_at'])), (int)date('j',strtotime($log['created_at']))); ?>
+                        <div style="font-size:0.68rem;color:#aaa;"><?= $sy ?>/<?= str_pad($sm,2,'0',STR_PAD_LEFT) ?>/<?= str_pad($sd,2,'0',STR_PAD_LEFT) ?></div>
+                    </td>
                     <?php if (isAdmin()): ?>
                     <td class="text-nowrap">
                         <a href="edit.php?id=<?= $log['id'] ?>" class="btn btn-sm btn-light me-1" title="Edit">
@@ -535,25 +556,24 @@ $rateUSD = $rates['USD']; $ratePKR = $rates['PKR'];
                          style="background:rgba(196,43,28,0.06);border:1px solid rgba(196,43,28,0.15);">
                         <div>
                             <div class="small text-muted mb-1">Current Balance Owed</div>
-                            <div class="fw-bold fs-5 text-danger">؋ <?= number_format(max(0, $stats['total_unpaid']), 0) ?></div>
+                            <div class="fw-bold fs-5 text-danger">$ <?= number_format(max(0, $stats['total_unpaid']), 2) ?></div>
                         </div>
                         <i class="bi bi-exclamation-circle-fill text-danger fs-3 opacity-40"></i>
                     </div>
 
                     <!-- Currency + Amount -->
+                    <input type="hidden" name="pay_currency" value="USD">
                     <div class="row g-2 mb-3">
-                        <div class="col-4">
-                            <label class="form-label fw-semibold"><i class="bi bi-currency-exchange me-1 text-primary"></i>Currency</label>
-                            <select name="pay_currency" id="payCurrencySelect" class="form-select" onchange="onPayCurrencyChange()">
-                                <?php foreach (CURRENCIES as $code => $cur): ?>
-                                <option value="<?= $code ?>"><?= htmlspecialchars($cur['symbol'].' '.$code) ?></option>
-                                <?php endforeach; ?>
-                            </select>
+                        <div class="col-4 d-flex flex-column justify-content-end">
+                            <label class="form-label fw-semibold">Currency</label>
+                            <span style="display:inline-flex;align-items:center;gap:5px;padding:8px 14px;border-radius:8px;background:rgba(0,103,192,0.08);border:1px solid rgba(0,103,192,0.2);color:#0067C0;font-weight:700;font-size:.88rem;">
+                                <i class="bi bi-currency-dollar"></i> USD
+                            </span>
                         </div>
                         <div class="col-8">
                             <label class="form-label fw-semibold">Payment Amount <span class="text-danger">*</span></label>
                             <div class="input-group">
-                                <span class="input-group-text fw-bold"><span class="pay-cur-sym">؋</span></span>
+                                <span class="input-group-text fw-bold text-success">$</span>
                                 <input type="number" name="payment_amount" id="payAmount"
                                        class="form-control form-control-lg fw-bold"
                                        min="0.01" step="0.01" placeholder="0" required>
@@ -562,7 +582,7 @@ $rateUSD = $rates['USD']; $ratePKR = $rates['PKR'];
                     </div>
                     <div class="form-text mb-3" style="margin-top:-8px;">
                         <a href="#" id="payFullLink">
-                            Pay full balance — ؋<?= number_format(max(0, $stats['total_unpaid']), 0) ?>
+                            Pay full balance — $<?= number_format(max(0, $stats['total_unpaid']), 2) ?>
                         </a>
                     </div>
 
@@ -614,14 +634,6 @@ $rateUSD = $rates['USD']; $ratePKR = $rates['PKR'];
 </style>
 
 <script>
-const PAY_CURRENCIES = <?= json_encode(array_map(fn($c) => ['symbol' => $c['symbol'], 'decimals' => $c['decimals']], CURRENCIES)) ?>;
-
-function onPayCurrencyChange() {
-    const sel = document.getElementById('payCurrencySelect');
-    const sym = sel ? (PAY_CURRENCIES[sel.value]?.symbol || '؋') : '؋';
-    document.querySelectorAll('.pay-cur-sym').forEach(el => el.textContent = sym);
-}
-
 // Teleport modal to <body> so it escapes any transformed/stacking-context ancestor
 document.addEventListener('DOMContentLoaded', function () {
     const modal = document.getElementById('paymentModal');
@@ -688,8 +700,6 @@ document.addEventListener('DOMContentLoaded', function () {
         valInput.value = ''; thumb.style.display = 'none'; thumb.src = '';
         status.textContent = ''; drop.classList.remove('has-file');
         document.getElementById('payAmount').value = '';
-        document.getElementById('payCurrencySelect').value = 'AFN';
-        onPayCurrencyChange();
     });
 });
 </script>
