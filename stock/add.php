@@ -21,6 +21,7 @@ foreach ([
     "ALTER TABLE stock_logs ADD COLUMN bill_no        VARCHAR(100)  NULL",
     "ALTER TABLE stock_logs ADD COLUMN currency       VARCHAR(10)   NULL DEFAULT 'AFN'",
     "ALTER TABLE stock_logs MODIFY quantity DECIMAL(10,3) NOT NULL DEFAULT 0",
+    "ALTER TABLE stock_logs ADD COLUMN entry_date     DATE          NULL",
 ] as $_sql) { try { $pdo->exec($_sql); } catch (\PDOException $e) {} }
 
 $products       = $pdo->query("SELECT id, name, size, color, quantity FROM products ORDER BY name ASC")->fetchAll();
@@ -41,6 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $billNo    = trim($_POST['bill_no']    ?? '');
     $notes     = trim($_POST['notes']      ?? '');
     $billImage = trim($_POST['bill_image'] ?? '');
+    $entryDate = trim($_POST['entry_date'] ?? '') ?: null;
     $paidTotal = (float)($_POST['paid_amount'] ?? 0);
 
     $customProds  = $_POST['custom_product'] ?? [];
@@ -108,13 +110,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     INSERT INTO stock_logs
                         (product_id, custom_product, type, quantity, bundle_count, pricing_type,
                          unit_price, total_amount, paid_amount, balance,
-                         supplier, bill_no, notes, bill_image, currency, created_by)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                         supplier, bill_no, notes, bill_image, currency, entry_date, created_by)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ")->execute([
                     $r['pid'] ?: null, $r['customProd'] ?: null, $type, $r['qty'],
                     $r['bundle'] ?: null, $r['pricing'], $r['unitPrice'],
                     $r['rowTotal'], $rowPaid, $rowBalance,
-                    $supplier ?: null, $billNo ?: null, $notes ?: null, $billImage ?: null, $currency, $_SESSION['user_id'],
+                    $supplier ?: null, $billNo ?: null, $notes ?: null, $billImage ?: null, $currency, $entryDate, $_SESSION['user_id'],
                 ]);
             }
             $pdo->commit();
@@ -187,6 +189,13 @@ require_once '../includes/header.php';
                     <input type="text" name="bill_no" class="form-control"
                            placeholder="e.g. INV-2024-001"
                            value="<?= htmlspecialchars($_POST['bill_no'] ?? '') ?>">
+                </div>
+                <div class="col-sm-3">
+                    <label class="form-label fw-semibold mb-1"><i class="bi bi-calendar3 me-1 text-primary"></i>Date</label>
+                    <input type="date" name="entry_date" id="entryDate" class="form-control"
+                           value="<?= htmlspecialchars($_POST['entry_date'] ?? date('Y-m-d')) ?>"
+                           oninput="updateAddShamsi()">
+                    <div id="addShamsiDisplay" class="form-text" style="color:#B45309;font-weight:600;"></div>
                 </div>
                 <div class="col-sm-2">
                     <label class="form-label fw-semibold mb-1"><i class="bi bi-currency-exchange me-1 text-primary"></i>Currency</label>
@@ -336,6 +345,28 @@ require_once '../includes/header.php';
 </form>
 
 <script>
+function toShamsiJS(y, m, d) {
+    let g = 365*y + Math.floor((y+3)/4) - Math.floor((y+99)/100) + Math.floor((y+399)/400);
+    const mo = [0,31,28,31,30,31,30,31,31,30,31,30,31];
+    for (let i=0;i<m-1;i++) g += mo[i+1];
+    if (m>2 && ((y%4===0&&y%100!==0)||y%400===0)) g++;
+    let j = g - 79;
+    const np = Math.floor(j/12053); j %= 12053;
+    let jy = 979 + 33*np + 4*Math.floor(j/1461); j %= 1461;
+    if (j >= 366) { jy += Math.floor((j-1)/365); j = (j-1)%365; }
+    let jm = 0;
+    for (let i=0;i<11;i++) { const s=i<6?31:30; if(j>=s){j-=s;jm++;}else break; }
+    return [jy, jm+1, j+1];
+}
+function updateAddShamsi() {
+    const v = document.getElementById('entryDate').value;
+    const el = document.getElementById('addShamsiDisplay');
+    if (!v) { el.textContent = ''; return; }
+    const [y,m,d] = v.split('-').map(Number);
+    const [jy,jm,jd] = toShamsiJS(y,m,d);
+    el.textContent = '🗓 ' + jy + '/' + String(jm).padStart(2,'0') + '/' + String(jd).padStart(2,'0');
+}
+
 const PRODS    = <?= json_encode($prodJs) ?>;
 const PROD_MAP = {};
 PRODS.forEach(p => { PROD_MAP[p.label] = p; });
@@ -505,6 +536,7 @@ function uploadBill(file) {
 }
 
 // Init
+updateAddShamsi();
 onTypeChange();
 addRow();
 
