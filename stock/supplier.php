@@ -38,6 +38,7 @@ foreach ([
     "ALTER TABLE stock_logs ADD COLUMN balance        DECIMAL(10,2) NULL DEFAULT 0",
     "ALTER TABLE stock_logs ADD COLUMN bill_image     TEXT          NULL",
     "ALTER TABLE stock_logs ADD COLUMN currency       VARCHAR(10)   NULL DEFAULT 'AFN'",
+    "ALTER TABLE stock_logs ADD COLUMN entry_date     DATE          NULL",
 ] as $_sql) { try { $pdo->exec($_sql); } catch (\PDOException $e) {} }
 
 // Handle "Make Payment" POST
@@ -45,6 +46,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'payme
     $payAmt      = (float)($_POST['payment_amount'] ?? 0);
     $payNotes    = trim($_POST['payment_notes'] ?? '');
     $payBill     = trim($_POST['bill_image'] ?? '');
+    $payDate     = trim($_POST['payment_date'] ?? '') ?: null;
+    if ($payDate && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $payDate)) $payDate = null;
     $payCurrency = 'USD';
 
     if ($payAmt <= 0) {
@@ -56,9 +59,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'payme
             INSERT INTO stock_logs
                 (product_id, custom_product, type, quantity, bundle_count, pricing_type,
                  unit_price, total_amount, paid_amount, balance,
-                 supplier, notes, bill_image, currency, created_by)
-            VALUES (NULL, '_payment_', 'in', 0, NULL, 'per_pcs', 0, 0, ?, ?, ?, ?, ?, ?, ?)
-        ")->execute([$payAmt, -$payAmt, $supplierName, $payNotes ?: null, $payBill ?: null, $payCurrency, $_SESSION['user_id']]);
+                 supplier, notes, bill_image, currency, entry_date, created_by)
+            VALUES (NULL, '_payment_', 'in', 0, NULL, 'per_pcs', 0, 0, ?, ?, ?, ?, ?, ?, ?, ?)
+        ")->execute([$payAmt, -$payAmt, $supplierName, $payNotes ?: null, $payBill ?: null, $payCurrency, $payDate, $_SESSION['user_id']]);
 
         $curSym = CURRENCIES[$payCurrency]['symbol'] ?? $payCurrency;
         $_SESSION['success'] = 'Payment of '.$curSym.number_format($payAmt, 0).' recorded.';
@@ -169,7 +172,10 @@ $logs = $pdo->prepare("
 $logs->execute([$supplierName]);
 $logs = $logs->fetchAll();
 
-$pageTitle = htmlspecialchars($supplierName) . ' — Supplier';
+$pageTitle   = htmlspecialchars($supplierName) . ' — Supplier';
+$todayShamsi = toShamsi((int)date('Y'), (int)date('n'), (int)date('j'));
+$jMonths     = ['۱ حمل','۲ ثور','۳ جوزا','۴ سرطان','۵ اسد','۶ سنبله',
+                '۷ میزان','۸ عقرب','۹ قوس','۱۰ جدی','۱۱ دلو','۱۲ حوت'];
 
 require_once '../includes/header.php';
 ?>
@@ -381,10 +387,13 @@ $pct = $stats['total_purchased'] > 0
                         <?= htmlspecialchars($log['notes'] ?: '—') ?>
                     </td>
                     <td class="text-muted text-nowrap" style="font-size:0.75rem;"><?= htmlspecialchars($log['created_by_name']) ?></td>
+                    <?php
+                        $dispDate = !empty($log['entry_date']) ? $log['entry_date'] : $log['created_at'];
+                        $sh = toShamsi((int)date('Y',strtotime($dispDate)), (int)date('n',strtotime($dispDate)), (int)date('j',strtotime($dispDate)));
+                    ?>
                     <td class="text-muted text-nowrap" style="font-size:0.75rem;">
-                        <?= date('d M Y', strtotime($log['created_at'])) ?>
-                        <?php [$sy,$sm,$sd] = toShamsi((int)date('Y',strtotime($log['created_at'])), (int)date('n',strtotime($log['created_at'])), (int)date('j',strtotime($log['created_at']))); ?>
-                        <div style="font-size:0.68rem;color:#aaa;"><?= $sy ?>/<?= str_pad($sm,2,'0',STR_PAD_LEFT) ?>/<?= str_pad($sd,2,'0',STR_PAD_LEFT) ?></div>
+                        <div><?= $sh['y'] ?>/<?= str_pad($sh['m'],2,'0',STR_PAD_LEFT) ?>/<?= str_pad($sh['d'],2,'0',STR_PAD_LEFT) ?></div>
+                        <div style="font-size:0.68rem;color:#bbb;"><?= date('d M Y', strtotime($dispDate)) ?></div>
                     </td>
                     <?php if (isAdmin()): ?>
                     <td class="text-nowrap">
@@ -481,6 +490,31 @@ $pct = $stats['total_purchased'] > 0
                         </a>
                     </div>
 
+                    <!-- Date — Solar Hijri -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold d-flex align-items-center gap-2">
+                            Date
+                            <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size:0.62rem;">Solar Hijri</span>
+                        </label>
+                        <div class="d-flex align-items-center gap-1">
+                            <input type="number" id="payJYear" class="form-control form-control-sm text-center fw-semibold"
+                                   value="<?= $todayShamsi['y'] ?>" min="1300" max="1600"
+                                   style="width:74px;" oninput="syncPayShamsi()">
+                            <span class="text-muted">/</span>
+                            <select id="payJMonth" class="form-select form-select-sm" style="width:132px;" onchange="syncPayShamsi()">
+                                <?php foreach ($jMonths as $i => $nm): ?>
+                                <option value="<?= $i+1 ?>" <?= $todayShamsi['m'] === $i+1 ? 'selected' : '' ?>><?= $nm ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <span class="text-muted">/</span>
+                            <input type="number" id="payJDay" class="form-control form-control-sm text-center fw-semibold"
+                                   value="<?= $todayShamsi['d'] ?>" min="1" max="31"
+                                   style="width:60px;" oninput="syncPayShamsi()">
+                        </div>
+                        <input type="hidden" name="payment_date" id="payDateHidden" value="<?= date('Y-m-d') ?>">
+                        <div id="payGregorianBadge" class="mt-1 text-muted" style="font-size:0.71rem;"></div>
+                    </div>
+
                     <!-- Notes -->
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Notes <span class="text-muted fw-normal small">(optional)</span></label>
@@ -529,8 +563,46 @@ $pct = $stats['total_purchased'] > 0
 </style>
 
 <script>
+function shamsiToGregorian(jy, jm, jd) {
+    var breaks = [-61,9,38,199,426,686,756,818,1111,1181,1210,1635,2060,2097,2192,2262,2324,2394,2456,3178];
+    var gy = jy + 621, leapJ = -14, jp = breaks[0], jm2, jump, n, i;
+    for (i = 1; i < 20; i++) {
+        jm2 = breaks[i]; jump = jm2 - jp;
+        if (jy < jm2) break;
+        leapJ += Math.floor(jump / 33) * 8 + Math.floor((jump % 33) / 4);
+        jp = jm2;
+    }
+    n = jy - jp;
+    leapJ += Math.floor(n / 33) * 8 + Math.floor((n % 33 + 3) / 4);
+    if ((jump % 33) === 4 && (jump - n) === 4) leapJ++;
+    var leapG = Math.floor(gy / 4) - Math.floor((Math.floor(gy / 100) + 1) * 3 / 4) - 150;
+    var march = 20 + leapJ - leapG;
+    var dayOfYear = jm <= 6 ? (jm - 1) * 31 + jd : 186 + (jm - 7) * 30 + jd;
+    var gDay = march + dayOfYear - 1, gMon = 3, gYr = gy;
+    function dim(m, y) {
+        if (m === 2) return ((y%4===0&&y%100!==0)||y%400===0) ? 29 : 28;
+        return [0,31,28,31,30,31,30,31,31,30,31,30,31][m];
+    }
+    while (gDay > dim(gMon, gYr)) { gDay -= dim(gMon, gYr); if (++gMon > 12) { gMon = 1; gYr++; } }
+    return {y: gYr, m: gMon, d: gDay};
+}
+
+function syncPayShamsi() {
+    var jy = parseInt(document.getElementById('payJYear').value)  || 0;
+    var jm = parseInt(document.getElementById('payJMonth').value) || 0;
+    var jd = parseInt(document.getElementById('payJDay').value)   || 0;
+    if (jy < 1300 || jy > 1600 || jm < 1 || jm > 12 || jd < 1 || jd > 31) return;
+    var g = shamsiToGregorian(jy, jm, jd);
+    if (!g) return;
+    var gStr = g.y + '-' + String(g.m).padStart(2,'0') + '-' + String(g.d).padStart(2,'0');
+    document.getElementById('payDateHidden').value = gStr;
+    document.getElementById('payGregorianBadge').textContent =
+        '≡ ' + g.y + '/' + String(g.m).padStart(2,'0') + '/' + String(g.d).padStart(2,'0') + ' (Gregorian)';
+}
+
 // Teleport modal to <body> so it escapes any transformed/stacking-context ancestor
 document.addEventListener('DOMContentLoaded', function () {
+    syncPayShamsi();
     const modal = document.getElementById('paymentModal');
     if (modal && modal.parentElement !== document.body) {
         document.body.appendChild(modal);
@@ -595,6 +667,10 @@ document.addEventListener('DOMContentLoaded', function () {
         valInput.value = ''; thumb.style.display = 'none'; thumb.src = '';
         status.textContent = ''; drop.classList.remove('has-file');
         document.getElementById('payAmount').value = '';
+        document.getElementById('payJYear').value  = '<?= $todayShamsi['y'] ?>';
+        document.getElementById('payJMonth').value = '<?= $todayShamsi['m'] ?>';
+        document.getElementById('payJDay').value   = '<?= $todayShamsi['d'] ?>';
+        syncPayShamsi();
     });
 });
 </script>

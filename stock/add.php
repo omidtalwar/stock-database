@@ -21,6 +21,7 @@ foreach ([
     "ALTER TABLE stock_logs ADD COLUMN bill_no        VARCHAR(100)  NULL",
     "ALTER TABLE stock_logs ADD COLUMN currency       VARCHAR(10)   NULL DEFAULT 'AFN'",
     "ALTER TABLE stock_logs MODIFY quantity DECIMAL(10,3) NOT NULL DEFAULT 0",
+    "ALTER TABLE stock_logs ADD COLUMN entry_date     DATE          NULL",
 ] as $_sql) { try { $pdo->exec($_sql); } catch (\PDOException $e) {} }
 
 $products       = $pdo->query("SELECT id, name, size, color, quantity FROM products ORDER BY name ASC")->fetchAll();
@@ -41,6 +42,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $billNo    = trim($_POST['bill_no']    ?? '');
     $notes     = trim($_POST['notes']      ?? '');
     $billImage = trim($_POST['bill_image'] ?? '');
+    $entryDate = trim($_POST['entry_date'] ?? '') ?: null;
+    if ($entryDate && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $entryDate)) $entryDate = null;
     $paidTotal = (float)($_POST['paid_amount'] ?? 0);
 
     $customProds  = $_POST['custom_product'] ?? [];
@@ -108,13 +111,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     INSERT INTO stock_logs
                         (product_id, custom_product, type, quantity, bundle_count, pricing_type,
                          unit_price, total_amount, paid_amount, balance,
-                         supplier, bill_no, notes, bill_image, currency, created_by)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                         supplier, bill_no, notes, bill_image, currency, entry_date, created_by)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ")->execute([
                     $r['pid'] ?: null, $r['customProd'] ?: null, $type, $r['qty'],
                     $r['bundle'] ?: null, $r['pricing'], $r['unitPrice'],
                     $r['rowTotal'], $rowPaid, $rowBalance,
-                    $supplier ?: null, $billNo ?: null, $notes ?: null, $billImage ?: null, $currency, $_SESSION['user_id'],
+                    $supplier ?: null, $billNo ?: null, $notes ?: null, $billImage ?: null, $currency, $entryDate, $_SESSION['user_id'],
                 ]);
             }
             $pdo->commit();
@@ -136,6 +139,27 @@ $prodJs = array_map(fn($p) => [
 ], $products);
 
 $formToken = generateFormToken('stock_add');
+
+function toShamsi(int $gy, int $gm, int $gd): array {
+    $g_d_m = [0,31,59,90,120,151,181,212,243,273,304,334];
+    if ($gy > 1600) { $jy = 979; $gy -= 1600; } else { $jy = 0; $gy -= 621; }
+    $gy2  = $gm > 2 ? $gy + 1 : $gy;
+    $days = 365*$gy + intdiv($gy2+3,4) - intdiv($gy2+99,100) + intdiv($gy2+399,400)
+            - 80 + $gd + $g_d_m[$gm - 1];
+    $jy  += 33 * intdiv($days, 12053); $days %= 12053;
+    $jy  +=  4 * intdiv($days,  1461); $days %= 1461;
+    if ($days > 365) { $jy += intdiv($days-1, 365); $days = ($days-1) % 365; }
+    $jm = $days < 186 ? 1 + intdiv($days, 31) : 7 + intdiv($days - 186, 30);
+    $jd = 1 + ($days < 186 ? $days % 31 : ($days - 186) % 30);
+    return ['y' => $jy, 'm' => $jm, 'd' => $jd];
+}
+$todayShamsi = toShamsi((int)date('Y'), (int)date('n'), (int)date('j'));
+$jMonths     = ['۱ حمل','۲ ثور','۳ جوزا','۴ سرطان','۵ اسد','۶ سنبله',
+                '۷ میزان','۸ عقرب','۹ قوس','۱۰ جدی','۱۱ دلو','۱۲ حوت'];
+$defJy = (int)($_POST['shamsi_y'] ?? $todayShamsi['y']);
+$defJm = (int)($_POST['shamsi_m'] ?? $todayShamsi['m']);
+$defJd = (int)($_POST['shamsi_d'] ?? $todayShamsi['d']);
+
 require_once '../includes/header.php';
 ?>
 
@@ -187,6 +211,33 @@ require_once '../includes/header.php';
                     <input type="text" name="bill_no" class="form-control"
                            placeholder="e.g. INV-2024-001"
                            value="<?= htmlspecialchars($_POST['bill_no'] ?? '') ?>">
+                </div>
+                <div class="col-sm-4">
+                    <label class="form-label fw-semibold mb-1 d-flex align-items-center gap-2">
+                        <i class="bi bi-calendar3 me-1 text-primary"></i>Date
+                        <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size:0.62rem;">Solar Hijri</span>
+                    </label>
+                    <div class="d-flex align-items-center gap-1">
+                        <input type="number" id="addJYear" name="shamsi_y"
+                               class="form-control form-control-sm text-center fw-semibold"
+                               value="<?= $defJy ?>" min="1300" max="1600"
+                               style="width:74px;" oninput="syncAddShamsi()">
+                        <span class="text-muted">/</span>
+                        <select id="addJMonth" name="shamsi_m"
+                                class="form-select form-select-sm" style="width:132px;"
+                                onchange="syncAddShamsi()">
+                            <?php foreach ($jMonths as $i => $nm): ?>
+                            <option value="<?= $i+1 ?>" <?= $defJm === $i+1 ? 'selected' : '' ?>><?= $nm ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <span class="text-muted">/</span>
+                        <input type="number" id="addJDay" name="shamsi_d"
+                               class="form-control form-control-sm text-center fw-semibold"
+                               value="<?= $defJd ?>" min="1" max="31"
+                               style="width:60px;" oninput="syncAddShamsi()">
+                    </div>
+                    <input type="hidden" name="entry_date" id="entryDateHidden" value="<?= htmlspecialchars($_POST['entry_date'] ?? date('Y-m-d')) ?>">
+                    <div id="addGregorianBadge" class="mt-1 text-muted" style="font-size:0.71rem;"></div>
                 </div>
                 <div class="col-sm-2">
                     <label class="form-label fw-semibold mb-1"><i class="bi bi-currency-exchange me-1 text-primary"></i>Currency</label>
@@ -336,6 +387,42 @@ require_once '../includes/header.php';
 </form>
 
 <script>
+function shamsiToGregorian(jy, jm, jd) {
+    var breaks = [-61,9,38,199,426,686,756,818,1111,1181,1210,1635,2060,2097,2192,2262,2324,2394,2456,3178];
+    var gy = jy + 621, leapJ = -14, jp = breaks[0], jm2, jump, n, i;
+    for (i = 1; i < 20; i++) {
+        jm2 = breaks[i]; jump = jm2 - jp;
+        if (jy < jm2) break;
+        leapJ += Math.floor(jump / 33) * 8 + Math.floor((jump % 33) / 4);
+        jp = jm2;
+    }
+    n = jy - jp;
+    leapJ += Math.floor(n / 33) * 8 + Math.floor((n % 33 + 3) / 4);
+    if ((jump % 33) === 4 && (jump - n) === 4) leapJ++;
+    var leapG = Math.floor(gy / 4) - Math.floor((Math.floor(gy / 100) + 1) * 3 / 4) - 150;
+    var march = 20 + leapJ - leapG;
+    var dayOfYear = jm <= 6 ? (jm - 1) * 31 + jd : 186 + (jm - 7) * 30 + jd;
+    var gDay = march + dayOfYear - 1, gMon = 3, gYr = gy;
+    function dim(m, y) {
+        if (m === 2) return ((y%4===0&&y%100!==0)||y%400===0) ? 29 : 28;
+        return [0,31,28,31,30,31,30,31,31,30,31,30,31][m];
+    }
+    while (gDay > dim(gMon, gYr)) { gDay -= dim(gMon, gYr); if (++gMon > 12) { gMon = 1; gYr++; } }
+    return {y: gYr, m: gMon, d: gDay};
+}
+function syncAddShamsi() {
+    var jy = parseInt(document.getElementById('addJYear').value)  || 0;
+    var jm = parseInt(document.getElementById('addJMonth').value) || 0;
+    var jd = parseInt(document.getElementById('addJDay').value)   || 0;
+    if (jy < 1300 || jy > 1600 || jm < 1 || jm > 12 || jd < 1 || jd > 31) return;
+    var g = shamsiToGregorian(jy, jm, jd);
+    if (!g) return;
+    var gStr = g.y + '-' + String(g.m).padStart(2,'0') + '-' + String(g.d).padStart(2,'0');
+    document.getElementById('entryDateHidden').value = gStr;
+    document.getElementById('addGregorianBadge').textContent =
+        '≡ ' + g.y + '/' + String(g.m).padStart(2,'0') + '/' + String(g.d).padStart(2,'0') + ' (Gregorian)';
+}
+
 const PRODS    = <?= json_encode($prodJs) ?>;
 const PROD_MAP = {};
 PRODS.forEach(p => { PROD_MAP[p.label] = p; });
@@ -505,6 +592,7 @@ function uploadBill(file) {
 }
 
 // Init
+syncAddShamsi();
 onTypeChange();
 addRow();
 
