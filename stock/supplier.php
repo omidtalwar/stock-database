@@ -38,7 +38,6 @@ foreach ([
     "ALTER TABLE stock_logs ADD COLUMN balance        DECIMAL(10,2) NULL DEFAULT 0",
     "ALTER TABLE stock_logs ADD COLUMN bill_image     TEXT          NULL",
     "ALTER TABLE stock_logs ADD COLUMN currency       VARCHAR(10)   NULL DEFAULT 'AFN'",
-    "ALTER TABLE stock_logs ADD COLUMN entry_date     DATE          NULL",
 ] as $_sql) { try { $pdo->exec($_sql); } catch (\PDOException $e) {} }
 
 // Handle "Make Payment" POST
@@ -46,7 +45,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'payme
     $payAmt      = (float)($_POST['payment_amount'] ?? 0);
     $payNotes    = trim($_POST['payment_notes'] ?? '');
     $payBill     = trim($_POST['bill_image'] ?? '');
-    $payDate     = trim($_POST['payment_date'] ?? '') ?: null;
     $payCurrency = 'USD';
 
     if ($payAmt <= 0) {
@@ -58,9 +56,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'payme
             INSERT INTO stock_logs
                 (product_id, custom_product, type, quantity, bundle_count, pricing_type,
                  unit_price, total_amount, paid_amount, balance,
-                 supplier, notes, bill_image, currency, entry_date, created_by)
-            VALUES (NULL, '_payment_', 'in', 0, NULL, 'per_pcs', 0, 0, ?, ?, ?, ?, ?, ?, ?, ?)
-        ")->execute([$payAmt, -$payAmt, $supplierName, $payNotes ?: null, $payBill ?: null, $payCurrency, $payDate, $_SESSION['user_id']]);
+                 supplier, notes, bill_image, currency, created_by)
+            VALUES (NULL, '_payment_', 'in', 0, NULL, 'per_pcs', 0, 0, ?, ?, ?, ?, ?, ?, ?)
+        ")->execute([$payAmt, -$payAmt, $supplierName, $payNotes ?: null, $payBill ?: null, $payCurrency, $_SESSION['user_id']]);
 
         $curSym = CURRENCIES[$payCurrency]['symbol'] ?? $payCurrency;
         $_SESSION['success'] = 'Payment of '.$curSym.number_format($payAmt, 0).' recorded.';
@@ -383,12 +381,9 @@ $pct = $stats['total_purchased'] > 0
                         <?= htmlspecialchars($log['notes'] ?: '—') ?>
                     </td>
                     <td class="text-muted text-nowrap" style="font-size:0.75rem;"><?= htmlspecialchars($log['created_by_name']) ?></td>
-                    <?php
-                        $dispDate = $log['entry_date'] ?? $log['created_at'];
-                        [$sy,$sm,$sd] = toShamsi((int)date('Y',strtotime($dispDate)), (int)date('n',strtotime($dispDate)), (int)date('j',strtotime($dispDate)));
-                    ?>
                     <td class="text-muted text-nowrap" style="font-size:0.75rem;">
-                        <?= date('d M Y', strtotime($dispDate)) ?>
+                        <?= date('d M Y', strtotime($log['created_at'])) ?>
+                        <?php [$sy,$sm,$sd] = toShamsi((int)date('Y',strtotime($log['created_at'])), (int)date('n',strtotime($log['created_at'])), (int)date('j',strtotime($log['created_at']))); ?>
                         <div style="font-size:0.68rem;color:#aaa;"><?= $sy ?>/<?= str_pad($sm,2,'0',STR_PAD_LEFT) ?>/<?= str_pad($sd,2,'0',STR_PAD_LEFT) ?></div>
                     </td>
                     <?php if (isAdmin()): ?>
@@ -486,14 +481,6 @@ $pct = $stats['total_purchased'] > 0
                         </a>
                     </div>
 
-                    <!-- Date -->
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Payment Date</label>
-                        <input type="date" name="payment_date" id="payDate" class="form-control"
-                               value="<?= date('Y-m-d') ?>" oninput="updatePayShamsi()">
-                        <div id="payShamsiDisplay" class="form-text" style="color:#B45309;font-weight:600;"></div>
-                    </div>
-
                     <!-- Notes -->
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Notes <span class="text-muted fw-normal small">(optional)</span></label>
@@ -542,31 +529,8 @@ $pct = $stats['total_purchased'] > 0
 </style>
 
 <script>
-function toShamsiJS(y, m, d) {
-    let g = 365*y + Math.floor((y+3)/4) - Math.floor((y+99)/100) + Math.floor((y+399)/400);
-    const mo = [0,31,28,31,30,31,30,31,31,30,31,30,31];
-    for (let i=0;i<m-1;i++) g += mo[i+1];
-    if (m>2 && ((y%4===0&&y%100!==0)||y%400===0)) g++;
-    let j = g - 79;
-    const np = Math.floor(j/12053); j %= 12053;
-    let jy = 979 + 33*np + 4*Math.floor(j/1461); j %= 1461;
-    if (j >= 366) { jy += Math.floor((j-1)/365); j = (j-1)%365; }
-    let jm = 0;
-    for (let i=0;i<11;i++) { const s=i<6?31:30; if(j>=s){j-=s;jm++;}else break; }
-    return [jy, jm+1, j+1];
-}
-function updatePayShamsi() {
-    const v = document.getElementById('payDate').value;
-    const el = document.getElementById('payShamsiDisplay');
-    if (!v) { el.textContent = ''; return; }
-    const [y,m,d] = v.split('-').map(Number);
-    const [jy,jm,jd] = toShamsiJS(y,m,d);
-    el.textContent = '🗓 ' + jy + '/' + String(jm).padStart(2,'0') + '/' + String(jd).padStart(2,'0');
-}
-
 // Teleport modal to <body> so it escapes any transformed/stacking-context ancestor
 document.addEventListener('DOMContentLoaded', function () {
-    updatePayShamsi();
     const modal = document.getElementById('paymentModal');
     if (modal && modal.parentElement !== document.body) {
         document.body.appendChild(modal);
@@ -631,8 +595,6 @@ document.addEventListener('DOMContentLoaded', function () {
         valInput.value = ''; thumb.style.display = 'none'; thumb.src = '';
         status.textContent = ''; drop.classList.remove('has-file');
         document.getElementById('payAmount').value = '';
-        document.getElementById('payDate').value = '<?= date('Y-m-d') ?>';
-        updatePayShamsi();
     });
 });
 </script>
