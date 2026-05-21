@@ -361,10 +361,9 @@ $pct = $stats['total_purchased'] > 0
                     </td>
                     <?php $ending = $runningMap[(int)$log['id']] ?? 0; ?>
                     <td class="text-end fw-bold text-nowrap <?= $ending > 0.01 ? 'text-danger' : 'text-success' ?>"
-                        title="Cumulative unpaid balance (in AFN) up to this transaction">
+                        title="Cumulative unpaid balance up to this transaction">
                         <?php if ($ending > 0.01): ?>
-                            <div><?= formatAFN($ending) ?></div>
-                            <div class="text-muted fw-normal" style="font-size:0.7rem;">≈ <?= formatMoney(fromAFN($ending, $rateUSD), 'USD') ?></div>
+                            <div>$ <?= number_format(fromAFN($ending, $rateUSD), 2) ?></div>
                         <?php else: ?>
                             <span class="text-success">Settled</span>
                         <?php endif; ?>
