@@ -12,6 +12,7 @@ $rates = getAllRates($pdo);
 // Auto-migrate columns that the queries below rely on
 foreach ([
     "ALTER TABLE sales ADD COLUMN bill_no   VARCHAR(100) NULL AFTER id",
+    "ALTER TABLE sales ADD COLUMN sale_date DATE         NULL AFTER bill_no",
     "ALTER TABLE sales ADD COLUMN currency  VARCHAR(10)  NULL DEFAULT 'AFN'",
     "ALTER TABLE sale_items ADD COLUMN custom_name VARCHAR(255) NULL",
     "ALTER TABLE sale_items MODIFY product_id INT NULL",
@@ -22,9 +23,9 @@ $period = in_array($_GET['period'] ?? '', ['today','week','month','all'])
     ? $_GET['period'] : 'all';
 
 $periodWhere = match($period) {
-    'today' => "AND DATE(s.created_at) = CURDATE()",
-    'week'  => "AND YEARWEEK(s.created_at, 1) = YEARWEEK(CURDATE(), 1)",
-    'month' => "AND DATE_FORMAT(s.created_at, '%Y-%m') = DATE_FORMAT(CURDATE(), '%Y-%m')",
+    'today' => "AND COALESCE(s.sale_date, DATE(s.created_at)) = CURDATE()",
+    'week'  => "AND YEARWEEK(COALESCE(s.sale_date, DATE(s.created_at)), 1) = YEARWEEK(CURDATE(), 1)",
+    'month' => "AND DATE_FORMAT(COALESCE(s.sale_date, DATE(s.created_at)), '%Y-%m') = DATE_FORMAT(CURDATE(), '%Y-%m')",
     default => "",
 };
 
@@ -52,7 +53,7 @@ $page       = min($page, $totalPages);
 $offset     = ($page - 1) * $perPage;
 
 $sales = $pdo->prepare("
-    SELECT s.id, s.bill_no, s.total_amount, s.paid_amount, s.balance, s.created_at, s.notes,
+    SELECT s.id, s.bill_no, s.total_amount, s.paid_amount, s.balance, s.created_at, s.sale_date, s.notes,
            s.currency,
            c.name AS customer_name, c.shop_name,
            u.full_name AS created_by
@@ -60,7 +61,7 @@ $sales = $pdo->prepare("
     JOIN customers c ON c.id = s.customer_id
     JOIN users u ON u.id = s.created_by
     WHERE 1=1 $periodWhere $searchWhere
-    ORDER BY s.created_at DESC
+    ORDER BY COALESCE(s.sale_date, DATE(s.created_at)) DESC, s.created_at DESC
     LIMIT $perPage OFFSET $offset
 ");
 $sales->execute($params);
@@ -221,7 +222,7 @@ $salePeriodLabels = [
                         <?php endif; ?>
                     </td>
                     <td class="text-muted small d-none d-md-table-cell"><?= htmlspecialchars($s['created_by']) ?></td>
-                    <td class="text-muted small d-none d-md-table-cell"><?= date('d M Y', strtotime($s['created_at'])) ?></td>
+                    <td class="text-muted small d-none d-md-table-cell"><?= date('d M Y', strtotime($s['sale_date'] ?: $s['created_at'])) ?></td>
                     <td onclick="event.stopPropagation()">
                         <a href="view.php?id=<?= $s['id'] ?>" class="btn btn-sm btn-light me-1" title="<?= __('btn_view') ?>">
                             <i class="bi bi-eye"></i>
