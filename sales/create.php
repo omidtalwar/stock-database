@@ -402,9 +402,15 @@ require_once '../includes/header.php';
                     <i class="bi bi-box-seam" style="color:#0067C0;"></i>
                     <?= __('sale_products') ?>
                 </span>
-                <button type="button" class="btn btn-sm btn-primary" id="addRow">
-                    <i class="bi bi-plus-circle me-1"></i><?= __('sale_add_product') ?>
-                </button>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-sm btn-primary" id="addRow">
+                        <i class="bi bi-plus-circle me-1"></i><?= __('sale_add_product') ?>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-warning" id="addExtRow"
+                            style="color:#fff;">
+                        <i class="bi bi-person-gear me-1"></i>Add External
+                    </button>
+                </div>
             </div>
             <div class="table-responsive">
                 <table class="table align-middle mb-0" id="itemsTable">
@@ -641,6 +647,59 @@ function addRow() {
     row.querySelector('.prod-name-input').focus();
 }
 
+function addExternalRow() {
+    document.getElementById('emptyRow')?.remove();
+    rowCount++;
+    const idx = rowCount;
+    const sym = saleSym();
+    const row = document.createElement('tr');
+    row.id = `row_${idx}`;
+    row.style.background = 'rgba(245,158,11,0.05)';
+    row.innerHTML = `
+        <td style="min-width:200px;">
+            <div class="d-flex align-items-center gap-2">
+                <span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:6px;
+                             background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);
+                             color:#B45309;font-size:.72rem;font-weight:700;white-space:nowrap;flex-shrink:0;">
+                    <i class="bi bi-person-gear"></i> External
+                </span>
+                <input type="text" name="items[${idx}][product_name]"
+                       class="form-control form-control-sm"
+                       placeholder="e.g. Wage of worker, Transport fee…"
+                       autocomplete="off">
+            </div>
+            <input type="hidden" name="items[${idx}][product_id]" class="prod-id-hidden" value="">
+        </td>
+        <td>
+            <input type="number" name="items[${idx}][quantity]"
+                   class="form-control form-control-sm qty-input"
+                   value="1" readonly tabindex="-1"
+                   style="background:rgba(0,0,0,0.03);color:#999;text-align:center;border-color:transparent;">
+        </td>
+        <td>
+            <div class="input-group input-group-sm">
+                <span class="input-group-text sale-cur-sym"
+                      style="font-size:.8rem;background:rgba(245,158,11,0.08);border-color:rgba(245,158,11,0.3);color:#B45309;">${sym}</span>
+                <input type="number" name="items[${idx}][unit_price]"
+                       class="form-control form-control-sm price-input"
+                       style="border-color:rgba(245,158,11,0.3);"
+                       value="" min="0" step="any"
+                       oninput="updateRow(${idx})" placeholder="Total amount">
+            </div>
+        </td>
+        <td>
+            <input type="text" class="form-control form-control-sm subtotal-display fw-semibold"
+                   readonly value="${sym} 0" tabindex="-1"
+                   style="background:rgba(245,158,11,0.06);border-color:rgba(245,158,11,0.2);">
+        </td>
+        <td>
+            <button type="button" class="btn btn-sm btn-light text-danger"
+                    onclick="removeRow(${idx})"><i class="bi bi-x-lg"></i></button>
+        </td>`;
+    document.getElementById('itemsBody').appendChild(row);
+    row.querySelector('input[name$="[product_name]"]').focus();
+}
+
 function matchProduct(idx, input) {
     const row       = document.getElementById(`row_${idx}`);
     const val       = input.value.trim();
@@ -753,6 +812,7 @@ function updateSummary() {
 }
 
 document.getElementById('addRow').addEventListener('click', addRow);
+document.getElementById('addExtRow').addEventListener('click', addExternalRow);
 updateSummary();
 
 /* ── Customer picker ── */
