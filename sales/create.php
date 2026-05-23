@@ -585,6 +585,7 @@ function onSaleCurrencyChange() {
     // Re-calc all rows (product prices stay as AFN, convert for display)
     document.querySelectorAll('#itemsBody tr[id^="row_"]').forEach(row => {
         const idx = row.id.replace('row_', '');
+        if (row.dataset.external) { updateExtRow(idx); return; }
         const pid = row.querySelector('.prod-id-hidden').value;
         if (pid) {
             const prod = PRODUCTS.find(p => p.id == pid);
@@ -654,6 +655,7 @@ function addExternalRow() {
     const sym = saleSym();
     const row = document.createElement('tr');
     row.id = `row_${idx}`;
+    row.dataset.external = '1';
     row.style.background = 'rgba(245,158,11,0.05)';
     row.innerHTML = `
         <td style="min-width:200px;">
@@ -669,28 +671,20 @@ function addExternalRow() {
                        autocomplete="off">
             </div>
             <input type="hidden" name="items[${idx}][product_id]" class="prod-id-hidden" value="">
+            <input type="hidden" name="items[${idx}][quantity]" class="qty-input" value="1">
+            <input type="hidden" name="items[${idx}][unit_price]" class="price-input" value="0">
         </td>
-        <td>
-            <input type="number" name="items[${idx}][quantity]"
-                   class="form-control form-control-sm qty-input"
-                   value="1" readonly tabindex="-1"
-                   style="background:rgba(0,0,0,0.03);color:#999;text-align:center;border-color:transparent;">
-        </td>
+        <td class="text-center text-muted">—</td>
+        <td class="text-center text-muted">—</td>
         <td>
             <div class="input-group input-group-sm">
                 <span class="input-group-text sale-cur-sym"
                       style="font-size:.8rem;background:rgba(245,158,11,0.08);border-color:rgba(245,158,11,0.3);color:#B45309;">${sym}</span>
-                <input type="number" name="items[${idx}][unit_price]"
-                       class="form-control form-control-sm price-input"
-                       style="border-color:rgba(245,158,11,0.3);"
+                <input type="number" class="form-control form-control-sm ext-total-input"
+                       style="border-color:rgba(245,158,11,0.3);font-weight:600;"
                        value="" min="0" step="any"
-                       oninput="updateRow(${idx})" placeholder="Total amount">
+                       oninput="updateExtRow(${idx})" placeholder="0">
             </div>
-        </td>
-        <td>
-            <input type="text" class="form-control form-control-sm subtotal-display fw-semibold"
-                   readonly value="${sym} 0" tabindex="-1"
-                   style="background:rgba(245,158,11,0.06);border-color:rgba(245,158,11,0.2);">
         </td>
         <td>
             <button type="button" class="btn btn-sm btn-light text-danger"
@@ -698,6 +692,14 @@ function addExternalRow() {
         </td>`;
     document.getElementById('itemsBody').appendChild(row);
     row.querySelector('input[name$="[product_name]"]').focus();
+}
+
+function updateExtRow(idx) {
+    const row   = document.getElementById(`row_${idx}`);
+    const total = parseFloat(row.querySelector('.ext-total-input').value) || 0;
+    row.querySelector('.price-input').value = total;
+    row.dataset.subAfn = (total * saleRate()).toFixed(2);
+    updateSummary();
 }
 
 function matchProduct(idx, input) {
@@ -740,7 +742,8 @@ function updateRow(idx) {
     const sub = price * finalQty;
     // Store AFN subtotal in data attr for summary calc
     row.dataset.subAfn = (sub * saleRate()).toFixed(2);
-    row.querySelector('.subtotal-display').value = fmtSale(sub);
+    const disp = row.querySelector('.subtotal-display');
+    if (disp) disp.value = fmtSale(sub);
     updateSummary();
 }
 
