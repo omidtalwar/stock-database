@@ -170,11 +170,6 @@ body.pin-locked .sup-fin { filter: blur(7px); user-select: none; pointer-events:
             style="display:flex;align-items:center;gap:5px;padding:6px 13px;border-radius:7px;border:1px solid rgba(196,43,28,0.35);background:rgba(196,43,28,0.06);color:#C42B1C;font-size:0.82rem;font-weight:600;cursor:pointer;">
             <i class="bi bi-lock-fill"></i> Lock
         </button>
-        <?php elseif ($pinEnabled && !$pinVerified): ?>
-        <button id="pinUnlockBtn" title="Unlock financial data"
-            style="display:flex;align-items:center;gap:5px;padding:6px 13px;border-radius:7px;border:1px solid rgba(0,103,192,0.35);background:rgba(0,103,192,0.07);color:#0067C0;font-size:0.82rem;font-weight:600;cursor:pointer;">
-            <i class="bi bi-lock"></i> Unlock
-        </button>
         <?php endif; ?>
         <a href="add.php" class="btn btn-primary"><i class="bi bi-plus-square me-2"></i><?= __('stock_in_btn') ?></a>
     </div>
@@ -336,13 +331,17 @@ body.pin-locked .sup-fin { filter: blur(7px); user-select: none; pointer-events:
 <?php if ($pinEnabled): ?>
 <script>
 (function () {
-    const card     = document.getElementById('pinCard');
-    const dots     = document.querySelectorAll('#pinDots .pin-dot');
-    const pad      = document.getElementById('pinPad');
-    const errEl    = document.getElementById('pinError');
-    const lockBtn  = document.getElementById('pinLockBtn');
-    const unlockBtn= document.getElementById('pinUnlockBtn');
+    const card    = document.getElementById('pinCard');
+    const dots    = document.querySelectorAll('#pinDots .pin-dot');
+    const pad     = document.getElementById('pinPad');
+    const errEl   = document.getElementById('pinError');
+    const lockBtn = document.getElementById('pinLockBtn');
     let pin = '';
+
+    // Guarantee card is visible when body is locked (safety net for any CSS edge case)
+    if (card && document.body.classList.contains('pin-locked')) {
+        card.classList.add('show');
+    }
 
     if (pad) {
         [1,2,3,4,5,6,7,8,9,'',0,'⌫'].forEach(k => {
@@ -386,7 +385,6 @@ body.pin-locked .sup-fin { filter: blur(7px); user-select: none; pointer-events:
     }
 
     lockBtn?.addEventListener('click', () => { window.location.href = 'index.php?lock=1'; });
-    unlockBtn?.addEventListener('click', () => { if (card) card.classList.add('show'); });
 
     document.addEventListener('keydown', e => {
         if (!card?.classList.contains('show')) return;
