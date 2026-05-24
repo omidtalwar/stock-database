@@ -589,30 +589,53 @@ body { font-family: 'Segoe UI Variable', 'Noto Naskh Arabic', 'Segoe UI', system
 body.pin-locked .stat-value,
 body.pin-locked .stat-sec,
 body.pin-locked .stat-foot,
+body.pin-locked .cur-row-amt,
+body.pin-locked .cur-row-equiv,
+body.pin-locked .cur-row-cnt,
 body.pin-locked .admin-bar .val,
 body.pin-locked .admin-bar .sec,
 body.pin-locked .amt-main,
 body.pin-locked .amt-sec,
 body.pin-locked .status-owed,
 body.pin-locked .debtor-debt .v,
-body.pin-locked .debtor-debt .s { filter: blur(7px); user-select: none; pointer-events: none; }
+body.pin-locked .debtor-debt .s { filter: blur(7px); user-select: none; pointer-events: none; transition: filter .4s ease; }
 
-/* ── PIN overlay — sits over the content area only, sidebar stays visible ── */
-#pinOverlay {
-    display: none; position: fixed;
-    top: 0; bottom: 0; right: 0;
-    <?= isRTL() ? 'right: var(--w11-sidebar); left: 0;' : 'left: var(--w11-sidebar);' ?>
-    z-index: 150; /* below sidebar z-index (200) so sidebar stays clickable */
-    background: rgba(0,0,0,0.60); backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    align-items: center; justify-content: center;
+/* ── Compact PIN card ── */
+#pinCard {
+    display: none;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 400;
+    background: #fff;
+    border-radius: 22px;
+    padding: 28px 22px 22px;
+    width: 254px;
+    box-shadow: 0 20px 70px rgba(0,0,0,0.18), 0 4px 18px rgba(0,0,0,0.09);
+    text-align: center;
+    border: 1px solid rgba(0,0,0,0.06);
 }
-#pinOverlay.show { display: flex; }
-/* On mobile the sidebar is hidden, overlay covers full width */
-@media (max-width: 768px) { #pinOverlay { left: 0; right: 0; } }
-.pin-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid #0067C0; background: transparent; display: inline-block; transition: background .15s; }
+#pinCard.show { display: block; animation: pinCardIn .3s cubic-bezier(0.34,1.56,0.64,1); }
+@keyframes pinCardIn {
+    from { opacity:0; transform:translate(-50%, calc(-50% + 18px)) scale(0.95); }
+    to   { opacity:1; transform:translate(-50%, -50%) scale(1); }
+}
+@keyframes pinCardOut {
+    from { opacity:1; transform:translate(-50%, -50%) scale(1); }
+    to   { opacity:0; transform:translate(-50%, calc(-50% - 14px)) scale(0.95); }
+}
+@keyframes shake {
+    0%,100% { transform:translate(-50%,-50%); }
+    20%      { transform:translate(calc(-50% - 6px),-50%); }
+    40%      { transform:translate(calc(-50% + 6px),-50%); }
+    60%      { transform:translate(calc(-50% - 4px),-50%); }
+    80%      { transform:translate(calc(-50% + 4px),-50%); }
+}
+@media (max-width:768px) { #pinCard { width:88vw; } }
+.pin-dot { width: 13px; height: 13px; border-radius: 50%; border: 2px solid #0067C0; background: transparent; display: inline-block; transition: background .15s; }
 .pin-dot.filled { background: #0067C0; }
-.pin-key { padding: 14px; border-radius: 10px; border: 1px solid rgba(0,0,0,0.1); background: #f8f9fa; font-size: 1.1rem; font-weight: 600; cursor: pointer; transition: background .12s; color: #1C1C1C; }
+.pin-key { padding: 13px; border-radius: 9px; border: 1px solid rgba(0,0,0,0.09); background: #f8f9fa; font-size: 1rem; font-weight: 600; cursor: pointer; transition: background .12s; color: #1C1C1C; width: 100%; }
 .pin-key:hover { background: #e9ecef; }
 .pin-key:active { background: #dee2e6; }
 </style>
@@ -642,21 +665,21 @@ body.pin-locked .debtor-debt .s { filter: blur(7px); user-select: none; pointer-
 <?= flash() ?>
 
 <?php if ($pinEnabled && !$pinVerified): ?>
-<!-- PIN overlay -->
-<div id="pinOverlay">
-    <div style="background:#fff;border-radius:18px;padding:32px 24px;width:300px;max-width:92vw;box-shadow:0 8px 40px rgba(0,0,0,0.25);text-align:center;">
-        <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#0067C0,#003E92);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:0.95rem;letter-spacing:1px;margin:0 auto 14px;">FZL</div>
-        <div style="font-weight:700;font-size:1rem;margin-bottom:4px;">Dashboard PIN</div>
-        <div style="font-size:0.8rem;color:#666;margin-bottom:20px;">Enter your PIN to view financial data</div>
-        <div id="pinDots" style="display:flex;justify-content:center;gap:14px;margin-bottom:22px;">
-            <span class="pin-dot"></span>
-            <span class="pin-dot"></span>
-            <span class="pin-dot"></span>
-            <span class="pin-dot"></span>
-        </div>
-        <div id="pinPad" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:220px;margin:0 auto;"></div>
-        <div id="pinError" style="display:none;margin-top:14px;color:#C42B1C;font-size:0.82rem;font-weight:600;">Wrong PIN. Try again.</div>
+<!-- Compact PIN card -->
+<div id="pinCard" class="show">
+    <div style="width:44px;height:44px;border-radius:11px;background:linear-gradient(135deg,#0067C0,#003E92);display:flex;align-items:center;justify-content:center;color:#fff;font-size:1.15rem;margin:0 auto 12px;">
+        <i class="bi bi-lock-fill"></i>
     </div>
+    <div style="font-weight:700;font-size:0.95rem;margin-bottom:3px;">Dashboard PIN</div>
+    <div style="font-size:0.75rem;color:#888;margin-bottom:18px;">Enter your PIN to view data</div>
+    <div id="pinDots" style="display:flex;justify-content:center;gap:12px;margin-bottom:18px;">
+        <span class="pin-dot"></span>
+        <span class="pin-dot"></span>
+        <span class="pin-dot"></span>
+        <span class="pin-dot"></span>
+    </div>
+    <div id="pinPad" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:4px;"></div>
+    <div id="pinError" style="display:none;margin-top:10px;color:#C42B1C;font-size:0.78rem;font-weight:600;">Wrong PIN. Try again.</div>
 </div>
 <?php endif; ?>
 
@@ -1097,10 +1120,10 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').cat
 
 // ── Dashboard PIN ──
 (function () {
-    const overlay = document.getElementById('pinOverlay');
-    if (!overlay) return;
+    const card  = document.getElementById('pinCard');
+    if (!card) return;
 
-    const dots  = document.querySelectorAll('.pin-dot');
+    const dots  = document.querySelectorAll('#pinDots .pin-dot');
     const pad   = document.getElementById('pinPad');
     const errEl = document.getElementById('pinError');
     let pin = '';
@@ -1131,13 +1154,15 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').cat
             const res  = await fetch('/ajax/pin-verify.php', { method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: 'pin=' + encodeURIComponent(pin) });
             const data = await res.json();
             if (data.ok) {
-                // Reload so the server renders real data now that the session is set
-                location.reload();
-                return;
+                // Animate card out, unblur content, then reload
+                card.style.animation = 'pinCardOut .3s ease forwards';
+                document.body.classList.remove('pin-locked');
+                setTimeout(() => location.reload(), 350);
             } else {
                 errEl.style.display = 'block';
                 pin = ''; updateDots();
-                setTimeout(() => { errEl.style.display = 'none'; }, 2000);
+                card.style.animation = 'shake .35s ease';
+                setTimeout(() => { errEl.style.display = 'none'; card.style.animation = ''; }, 2000);
             }
         } catch (e) {
             errEl.textContent = 'Connection error. Try again.';
@@ -1148,19 +1173,11 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').cat
     }
 
     const lockBtn = document.getElementById('lockDashBtn');
-
-    function lock() {
-        // Clear server-side session, then reload so real data is no longer in the HTML
-        window.location.href = '/dashboard.php?lock=1';
-    }
-
-    overlay.classList.add('show');
-
-    lockBtn?.addEventListener('click', lock);
+    lockBtn?.addEventListener('click', () => { window.location.href = '/dashboard.php?lock=1'; });
 
     // Physical keyboard support
     document.addEventListener('keydown', e => {
-        if (!overlay.classList.contains('show')) return;
+        if (!card.classList.contains('show')) return;
         if (/^[0-9]$/.test(e.key)) handleKey(e.key);
         else if (e.key === 'Backspace') handleKey('⌫');
     });

@@ -42,6 +42,24 @@ foreach ([
 
 $rates = getAllRates($pdo);
 
+// ── PIN guard (same session as dashboard) ──────────────────────────────────
+if (isset($_GET['lock'])) {
+    unset($_SESSION['pin_verified'], $_SESSION['pin_verified_at']);
+    header('Location: index.php');
+    exit;
+}
+$_iSettings = getSettings($pdo);
+$pinEnabled  = !empty(trim($_iSettings['dashboard_pin'] ?? ''));
+if ($pinEnabled) {
+    $lastSeen = $_SESSION['pin_verified_at'] ?? 0;
+    if (!empty($_SESSION['pin_verified']) && (time() - $lastSeen) > 120) {
+        unset($_SESSION['pin_verified'], $_SESSION['pin_verified_at']);
+    }
+    if (!empty($_SESSION['pin_verified'])) $_SESSION['pin_verified_at'] = time();
+}
+$pinVerified = !$pinEnabled || !empty($_SESSION['pin_verified']);
+$bodyClass   = ($pinEnabled && !$pinVerified) ? 'pin-locked' : '';
+
 // Dashboard aggregate stats
 $stats = $pdo->query("
     SELECT
@@ -75,9 +93,70 @@ require_once '../includes/header.php';
 
 <style>
 .stat-card { border-radius: 12px; padding: 18px 20px; border: none; }
-.stat-card .stat-val { font-size: 1.55rem; font-weight: 700; line-height: 1.15; letter-spacing: -.5px; }
+.stat-card .stat-val { font-size: 1.55rem; font-weight: 700; line-height: 1.15; letter-spacing: -.5px; transition: filter .4s ease; }
 .stat-card .stat-lbl { font-size: 0.68rem; text-transform: uppercase; letter-spacing: .7px; font-weight: 700; opacity: .65; margin-top: 5px; }
+
+/* ── PIN blur ── */
+body.pin-locked .stat-val,
+body.pin-locked .sup-fin { filter: blur(7px); user-select: none; pointer-events: none; transition: filter .4s ease; }
+
+/* ── Compact PIN card ── */
+#pinCard {
+    display: none;
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1060;
+    background: #fff;
+    border-radius: 22px;
+    padding: 28px 22px 22px;
+    width: 254px;
+    box-shadow: 0 20px 70px rgba(0,0,0,0.18), 0 4px 18px rgba(0,0,0,0.09);
+    text-align: center;
+    border: 1px solid rgba(0,0,0,0.06);
+}
+#pinCard.show { display: block; animation: pinCardIn .3s cubic-bezier(0.34,1.56,0.64,1); }
+@keyframes pinCardIn {
+    from { opacity:0; transform:translate(-50%, calc(-50% + 18px)) scale(0.95); }
+    to   { opacity:1; transform:translate(-50%, -50%) scale(1); }
+}
+@keyframes pinCardOut {
+    from { opacity:1; transform:translate(-50%, -50%) scale(1); }
+    to   { opacity:0; transform:translate(-50%, calc(-50% - 14px)) scale(0.95); }
+}
+@keyframes shake {
+    0%,100% { transform:translate(-50%,-50%); }
+    20% { transform:translate(calc(-50% - 6px),-50%); }
+    40% { transform:translate(calc(-50% + 6px),-50%); }
+    60% { transform:translate(calc(-50% - 4px),-50%); }
+    80% { transform:translate(calc(-50% + 4px),-50%); }
+}
+@media (max-width:768px) { #pinCard { width:88vw; } }
+.pin-dot { width:13px; height:13px; border-radius:50%; border:2px solid #0067C0; background:transparent; display:inline-block; transition:background .15s; }
+.pin-dot.filled { background:#0067C0; }
+.pin-key { padding:13px; border-radius:9px; border:1px solid rgba(0,0,0,0.09); background:#f8f9fa; font-size:1rem; font-weight:600; cursor:pointer; transition:background .12s; color:#1C1C1C; width:100%; }
+.pin-key:hover { background:#e9ecef; }
+.pin-key:active { background:#dee2e6; }
 </style>
+
+<?php if ($pinEnabled): ?>
+<!-- Compact PIN card -->
+<div id="pinCard"<?= !$pinVerified ? ' class="show"' : '' ?>>
+    <div style="width:44px;height:44px;border-radius:11px;background:linear-gradient(135deg,#0067C0,#003E92);display:flex;align-items:center;justify-content:center;color:#fff;font-size:1.15rem;margin:0 auto 12px;">
+        <i class="bi bi-lock-fill"></i>
+    </div>
+    <div style="font-weight:700;font-size:0.95rem;margin-bottom:3px;">Stock PIN</div>
+    <div style="font-size:0.75rem;color:#888;margin-bottom:18px;">Enter your PIN to view financial data</div>
+    <div id="pinDots" style="display:flex;justify-content:center;gap:12px;margin-bottom:18px;">
+        <span class="pin-dot"></span>
+        <span class="pin-dot"></span>
+        <span class="pin-dot"></span>
+        <span class="pin-dot"></span>
+    </div>
+    <div id="pinPad" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:4px;"></div>
+    <div id="pinError" style="display:none;margin-top:10px;color:#C42B1C;font-size:0.78rem;font-weight:600;">Wrong PIN. Try again.</div>
+</div>
+<?php endif; ?>
 
 <!-- Page header -->
 <div class="page-header d-flex align-items-center justify-content-between">
@@ -85,7 +164,20 @@ require_once '../includes/header.php';
         <h4 class="mb-1"><?= __('stock_title') ?></h4>
         <p class="text-muted small mb-0"><?= __('stock_sub') ?></p>
     </div>
-    <a href="add.php" class="btn btn-primary"><i class="bi bi-plus-square me-2"></i><?= __('stock_in_btn') ?></a>
+    <div class="d-flex align-items-center gap-2">
+        <?php if ($pinEnabled && $pinVerified): ?>
+        <button id="pinLockBtn" title="Lock financial data"
+            style="display:flex;align-items:center;gap:5px;padding:6px 13px;border-radius:7px;border:1px solid rgba(196,43,28,0.35);background:rgba(196,43,28,0.06);color:#C42B1C;font-size:0.82rem;font-weight:600;cursor:pointer;">
+            <i class="bi bi-lock-fill"></i> Lock
+        </button>
+        <?php elseif ($pinEnabled && !$pinVerified): ?>
+        <button id="pinUnlockBtn" title="Unlock financial data"
+            style="display:flex;align-items:center;gap:5px;padding:6px 13px;border-radius:7px;border:1px solid rgba(0,103,192,0.35);background:rgba(0,103,192,0.07);color:#0067C0;font-size:0.82rem;font-weight:600;cursor:pointer;">
+            <i class="bi bi-lock"></i> Unlock
+        </button>
+        <?php endif; ?>
+        <a href="add.php" class="btn btn-primary"><i class="bi bi-plus-square me-2"></i><?= __('stock_in_btn') ?></a>
+    </div>
 </div>
 
 <!-- Dashboard stats -->
@@ -110,14 +202,14 @@ require_once '../includes/header.php';
     <div class="col-6 col-sm-3">
         <div class="card stat-card" style="background:rgba(16,124,16,0.07);">
             <div class="stat-val text-success">$ <?= number_format($stats['total_paid'], 2) ?></div>
-            <div class="text-muted" style="font-size:0.72rem;margin-top:2px;">≈ <?= formatAFN(toAFN($stats['total_paid'], 'USD', $rates['USD'])) ?></div>
+            <div class="text-muted sup-fin" style="font-size:0.72rem;margin-top:2px;">≈ <?= formatAFN(toAFN($stats['total_paid'], 'USD', $rates['USD'])) ?></div>
             <div class="stat-lbl" style="color:#107C10;"><?= __('stock_total_paid_stat') ?></div>
         </div>
     </div>
     <div class="col-6 col-sm-3">
         <div class="card stat-card" style="background:rgba(157,93,0,0.08);">
             <div class="stat-val" style="color:#9D5D00;">$ <?= number_format($stats['total_unpaid'], 2) ?></div>
-            <div class="text-muted" style="font-size:0.72rem;margin-top:2px;">≈ <?= formatAFN(toAFN($stats['total_unpaid'], 'USD', $rates['USD'])) ?></div>
+            <div class="text-muted sup-fin" style="font-size:0.72rem;margin-top:2px;">≈ <?= formatAFN(toAFN($stats['total_unpaid'], 'USD', $rates['USD'])) ?></div>
             <div class="stat-lbl" style="color:#9D5D00;"><?= __('stock_unpaid_balance') ?></div>
         </div>
     </div>
@@ -128,8 +220,8 @@ require_once '../includes/header.php';
     <div class="card-body py-2 px-3 d-flex align-items-center justify-content-between flex-wrap gap-1">
         <span class="small fw-semibold text-muted"><?= __('stock_wholesalers_total') ?></span>
         <div class="text-end">
-            <span class="fw-bold fs-6">$ <?= number_format($stats['total_purchased'], 2) ?></span>
-            <div class="text-muted" style="font-size:0.72rem;">≈ <?= formatAFN(toAFN($stats['total_purchased'], 'USD', $rates['USD'])) ?></div>
+            <span class="fw-bold fs-6 sup-fin">$ <?= number_format($stats['total_purchased'], 2) ?></span>
+            <div class="text-muted sup-fin" style="font-size:0.72rem;">≈ <?= formatAFN(toAFN($stats['total_purchased'], 'USD', $rates['USD'])) ?></div>
         </div>
     </div>
 </div>
@@ -188,21 +280,21 @@ require_once '../includes/header.php';
                     <td class="text-end text-muted"><?= number_format($s['txn_count']) ?></td>
                     <td class="text-end text-muted"><?= number_format($s['total_qty']) ?> <?= __('unit_pcs') ?></td>
 
-                    <td class="text-end fw-semibold">
+                    <td class="text-end fw-semibold sup-fin">
                         <?php if (!$purchased): ?>—<?php else: ?>
                             $ <?= number_format($purchased, 2) ?>
                             <div class="text-muted fw-normal" style="font-size:0.72rem;">≈ <?= formatAFN(toAFN($purchased, 'USD', $usdRate)) ?></div>
                         <?php endif; ?>
                     </td>
 
-                    <td class="text-end text-success fw-semibold">
+                    <td class="text-end text-success fw-semibold sup-fin">
                         <?php if (!$paid): ?>—<?php else: ?>
                             $ <?= number_format($paid, 2) ?>
                             <div class="text-muted fw-normal" style="font-size:0.72rem;">≈ <?= formatAFN(toAFN($paid, 'USD', $usdRate)) ?></div>
                         <?php endif; ?>
                     </td>
 
-                    <td class="text-end fw-bold <?= $unpaid > 0 ? 'text-danger' : 'text-muted' ?>">
+                    <td class="text-end fw-bold sup-fin <?= $unpaid > 0 ? 'text-danger' : 'text-muted' ?>">
                         <?php if ($unpaid <= 0): ?>—<?php else: ?>
                             $ <?= number_format($unpaid, 2) ?>
                             <div class="text-muted fw-normal" style="font-size:0.72rem;">≈ <?= formatAFN(toAFN($unpaid, 'USD', $usdRate)) ?></div>
@@ -239,6 +331,70 @@ require_once '../includes/header.php';
         </table>
     </div>
 </div>
+<?php endif; ?>
+
+<?php if ($pinEnabled): ?>
+<script>
+(function () {
+    const card     = document.getElementById('pinCard');
+    const dots     = document.querySelectorAll('#pinDots .pin-dot');
+    const pad      = document.getElementById('pinPad');
+    const errEl    = document.getElementById('pinError');
+    const lockBtn  = document.getElementById('pinLockBtn');
+    const unlockBtn= document.getElementById('pinUnlockBtn');
+    let pin = '';
+
+    if (pad) {
+        [1,2,3,4,5,6,7,8,9,'',0,'⌫'].forEach(k => {
+            if (k === '') { pad.appendChild(document.createElement('span')); return; }
+            const btn = document.createElement('button');
+            btn.className = 'pin-key';
+            btn.textContent = k;
+            btn.addEventListener('click', () => handleKey(String(k)));
+            pad.appendChild(btn);
+        });
+    }
+
+    function updateDots() { dots.forEach((d,i) => d.classList.toggle('filled', i < pin.length)); }
+
+    async function handleKey(k) {
+        if (k === '⌫') { pin = pin.slice(0,-1); updateDots(); return; }
+        if (pin.length >= 4) return;
+        pin += k; updateDots();
+        if (pin.length === 4) await verifyPin();
+    }
+
+    async function verifyPin() {
+        try {
+            const res  = await fetch('/ajax/pin-verify.php', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:'pin='+encodeURIComponent(pin)});
+            const data = await res.json();
+            if (data.ok) {
+                if (card) { card.style.animation = 'pinCardOut .3s ease forwards'; }
+                document.body.classList.remove('pin-locked');
+                setTimeout(() => location.reload(), 350);
+            } else {
+                if (errEl) errEl.style.display = 'block';
+                pin = ''; updateDots();
+                if (card) { card.style.animation = 'shake .35s ease'; }
+                setTimeout(() => { if (errEl) errEl.style.display = 'none'; if (card) card.style.animation = ''; }, 2000);
+            }
+        } catch (e) {
+            if (errEl) { errEl.textContent = 'Connection error.'; errEl.style.display = 'block'; }
+            pin = ''; updateDots();
+            setTimeout(() => { if (errEl) { errEl.style.display = 'none'; errEl.textContent = 'Wrong PIN. Try again.'; } }, 2500);
+        }
+    }
+
+    lockBtn?.addEventListener('click', () => { window.location.href = 'index.php?lock=1'; });
+    unlockBtn?.addEventListener('click', () => { if (card) card.classList.add('show'); });
+
+    document.addEventListener('keydown', e => {
+        if (!card?.classList.contains('show')) return;
+        if (/^[0-9]$/.test(e.key)) handleKey(e.key);
+        else if (e.key === 'Backspace') handleKey('⌫');
+    });
+})();
+</script>
 <?php endif; ?>
 
 <script>
