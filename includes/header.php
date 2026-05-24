@@ -430,7 +430,7 @@ a:hover { color: var(--w11-blue-hover); }
 <?php endif; ?>
 </style>
 </head>
-<body>
+<body<?= isset($bodyClass) && $bodyClass ? ' class="'.htmlspecialchars($bodyClass).'"' : '' ?>>
 
 <div id="fzl-bar"></div>
 

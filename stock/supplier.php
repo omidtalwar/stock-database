@@ -8,6 +8,28 @@ require_once '../includes/currency.php';
 $supplierName = trim($_GET['name'] ?? '');
 if ($supplierName === '') { header('Location: index.php'); exit; }
 
+// ── Lock action ───────────────────────────────────────────────────────────
+if (isset($_GET['lock'])) {
+    unset($_SESSION['pin_verified'], $_SESSION['pin_verified_at']);
+    header('Location: supplier.php?name=' . urlencode(trim($_GET['name'] ?? '')));
+    exit;
+}
+
+// ── PIN guard (same TTL as dashboard) ─────────────────────────────────────
+$_sSettings  = getSettings($pdo);
+$pinEnabled  = !empty(trim($_sSettings['dashboard_pin'] ?? ''));
+if ($pinEnabled) {
+    $lastSeen = $_SESSION['pin_verified_at'] ?? 0;
+    if (!empty($_SESSION['pin_verified']) && (time() - $lastSeen) > 120) {
+        unset($_SESSION['pin_verified'], $_SESSION['pin_verified_at']);
+    }
+    if (!empty($_SESSION['pin_verified'])) {
+        $_SESSION['pin_verified_at'] = time();
+    }
+}
+$pinVerified = !$pinEnabled || !empty($_SESSION['pin_verified']);
+$bodyClass   = ($pinEnabled && !$pinVerified) ? 'pin-locked' : '';
+
 function toShamsi(int $gy, int $gm, int $gd): array {
     $g_d_no = 365*$gy + (int)(($gy+3)/4) - (int)(($gy+99)/100) + (int)(($gy+399)/400);
     for ($i=0;$i<$gm-1;$i++) $g_d_no += [0,31,28,31,30,31,30,31,31,30,31,30,31][$i+1];
@@ -185,6 +207,24 @@ require_once '../includes/header.php';
 .stat-card .stat-val { font-size: 1.45rem; font-weight: 700; line-height: 1.15; letter-spacing: -.5px; }
 .stat-card .stat-lbl { font-size: 0.68rem; text-transform: uppercase; letter-spacing: .7px; font-weight: 700; opacity: .65; margin-top: 5px; }
 .bill-preview-sm { width: 28px; height: 28px; object-fit: cover; border-radius: 4px; border: 1px solid #ddd; }
+
+/* ── PIN blur ── */
+body.pin-locked .stat-val,
+body.pin-locked .sup-fin { filter: blur(7px); user-select: none; pointer-events: none; }
+
+/* ── PIN overlay ── */
+#supPinOverlay {
+    display: none; position: fixed; inset: 0; z-index: 1055;
+    background: rgba(0,0,0,0.55); backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    align-items: center; justify-content: center;
+}
+#supPinOverlay.show { display: flex; }
+.pin-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid #0067C0; background: transparent; display: inline-block; transition: background .15s; }
+.pin-dot.filled { background: #0067C0; }
+.pin-key { padding: 14px; border-radius: 10px; border: 1px solid rgba(0,0,0,0.1); background: #f8f9fa; font-size: 1.1rem; font-weight: 600; cursor: pointer; transition: background .12s; color: #1C1C1C; }
+.pin-key:hover { background: #e9ecef; }
+.pin-key:active { background: #dee2e6; }
 </style>
 
 <!-- Page header -->
@@ -202,11 +242,22 @@ require_once '../includes/header.php';
             &mdash; since <?= date('d M Y', strtotime($stats['first_txn'])) ?>
         </p>
     </div>
-    <div class="d-flex gap-2 flex-wrap">
+    <div class="d-flex gap-2 flex-wrap align-items-center">
+        <?php if ($pinEnabled && $pinVerified): ?>
+        <button id="supLockBtn" title="Lock financial data"
+            style="display:flex;align-items:center;gap:5px;padding:6px 13px;border-radius:7px;border:1px solid rgba(196,43,28,0.35);background:rgba(196,43,28,0.06);color:#C42B1C;font-size:0.82rem;font-weight:600;cursor:pointer;">
+            <i class="bi bi-lock-fill"></i> Lock
+        </button>
+        <?php elseif ($pinEnabled && !$pinVerified): ?>
+        <button id="supUnlockBtn" title="Unlock financial data"
+            style="display:flex;align-items:center;gap:5px;padding:6px 13px;border-radius:7px;border:1px solid rgba(0,103,192,0.35);background:rgba(0,103,192,0.07);color:#0067C0;font-size:0.82rem;font-weight:600;cursor:pointer;">
+            <i class="bi bi-lock"></i> Unlock
+        </button>
+        <?php endif; ?>
         <?php if ($stats['total_unpaid'] > 0): ?>
         <button class="btn btn-success fw-semibold" data-bs-toggle="modal" data-bs-target="#paymentModal">
             <i class="bi bi-cash-coin me-2"></i>Make Payment
-            <span class="badge bg-white text-success ms-1">$<?= number_format($stats['total_unpaid'], 2) ?></span>
+            <span class="badge bg-white text-success ms-1 sup-fin">$<?= number_format($stats['total_unpaid'], 2) ?></span>
         </button>
         <?php endif; ?>
         <a href="add.php?supplier=<?= urlencode($supplierName) ?>" class="btn btn-primary">
@@ -214,6 +265,25 @@ require_once '../includes/header.php';
         </a>
     </div>
 </div>
+
+<?php if ($pinEnabled): ?>
+<!-- PIN overlay -->
+<div id="supPinOverlay"<?= !$pinVerified ? ' class="show"' : '' ?>>
+    <div style="background:#fff;border-radius:18px;padding:32px 24px;width:300px;max-width:92vw;box-shadow:0 8px 40px rgba(0,0,0,0.25);text-align:center;">
+        <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#0067C0,#003E92);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:0.95rem;letter-spacing:1px;margin:0 auto 14px;">FZL</div>
+        <div style="font-weight:700;font-size:1rem;margin-bottom:4px;">Stock PIN</div>
+        <div style="font-size:0.8rem;color:#666;margin-bottom:20px;">Enter your PIN to view financial data</div>
+        <div id="supPinDots" style="display:flex;justify-content:center;gap:14px;margin-bottom:22px;">
+            <span class="pin-dot"></span>
+            <span class="pin-dot"></span>
+            <span class="pin-dot"></span>
+            <span class="pin-dot"></span>
+        </div>
+        <div id="supPinPad" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:220px;margin:0 auto;"></div>
+        <div id="supPinError" style="display:none;margin-top:14px;color:#C42B1C;font-size:0.82rem;font-weight:600;">Wrong PIN. Try again.</div>
+    </div>
+</div>
+<?php endif; ?>
 
 <!-- Stats -->
 <div class="row g-3 mb-3">
@@ -259,8 +329,8 @@ $pct = $stats['total_purchased'] > 0
             <div class="progress-bar bg-success" style="width:<?= $pct ?>%;border-radius:6px;"></div>
         </div>
         <div class="d-flex justify-content-between mt-1" style="font-size:0.72rem;color:#888;">
-            <span>Paid $<?= number_format($stats['total_paid'], 2) ?></span>
-            <span>Balance $<?= number_format($stats['total_unpaid'], 2) ?></span>
+            <span>Paid <span class="sup-fin">$<?= number_format($stats['total_paid'], 2) ?></span></span>
+            <span>Balance <span class="sup-fin">$<?= number_format($stats['total_unpaid'], 2) ?></span></span>
         </div>
     </div>
 </div>
@@ -335,32 +405,32 @@ $pct = $stats['total_purchased'] > 0
                     </td>
                     <td class="fw-semibold text-end text-nowrap"><?= !$isPayment ? number_format($log['quantity']).' pcs' : '—' ?></td>
                     <td class="text-end text-muted"><?= (!$isPayment && $log['bundle_count']) ? number_format($log['bundle_count']) : '—' ?></td>
-                    <td class="text-end text-muted">
+                    <td class="text-end text-muted sup-fin">
                         <?php if (!$isPayment && $log['unit_price']): ?>
                             <div><?= formatMoney((float)$log['unit_price'], $lCur) ?></div>
                             <?php if ($lCur !== 'AFN'): ?><div class="text-muted" style="font-size:0.7rem;">≈ <?= formatAFN((float)$log['unit_price'] * $lRate) ?></div><?php endif; ?>
                         <?php else: ?>—<?php endif; ?>
                     </td>
-                    <td class="text-end text-nowrap">
+                    <td class="text-end text-nowrap sup-fin">
                         <?php if (!$isPayment && $log['total_amount']): ?>
                             <div class="fw-semibold"><?= formatMoney((float)$log['total_amount'], $lCur) ?></div>
                             <?php if ($lCur !== 'AFN'): ?><div class="text-muted" style="font-size:0.7rem;">≈ <?= formatAFN((float)$log['total_amount'] * $lRate) ?></div><?php endif; ?>
                         <?php else: ?>—<?php endif; ?>
                     </td>
-                    <td class="text-end text-success fw-semibold text-nowrap">
+                    <td class="text-end text-success fw-semibold text-nowrap sup-fin">
                         <?php if ($log['paid_amount'] > 0): ?>
                             <div><?= formatMoney((float)$log['paid_amount'], $lCur) ?></div>
                             <?php if ($lCur !== 'AFN'): ?><div class="text-muted fw-normal" style="font-size:0.7rem;">≈ <?= formatAFN((float)$log['paid_amount'] * $lRate) ?></div><?php endif; ?>
                         <?php else: ?>—<?php endif; ?>
                     </td>
-                    <td class="text-end fw-semibold text-nowrap <?= $log['balance'] > 0 ? 'text-danger' : ($log['balance'] < 0 ? 'text-success' : 'text-muted') ?>">
+                    <td class="text-end fw-semibold text-nowrap sup-fin <?= $log['balance'] > 0 ? 'text-danger' : ($log['balance'] < 0 ? 'text-success' : 'text-muted') ?>">
                         <?php if ($log['balance'] != 0): ?>
                             <div><?= formatMoney(abs((float)$log['balance']), $lCur) ?><?= $log['balance'] < 0 ? ' <small>cr</small>' : '' ?></div>
                             <?php if ($lCur !== 'AFN'): ?><div class="text-muted fw-normal" style="font-size:0.7rem;">≈ <?= formatAFN(abs((float)$log['balance']) * $lRate) ?></div><?php endif; ?>
                         <?php else: ?>—<?php endif; ?>
                     </td>
                     <?php $ending = $runningMap[(int)$log['id']] ?? 0; ?>
-                    <td class="text-end fw-bold text-nowrap <?= $ending > 0.01 ? 'text-danger' : 'text-success' ?>"
+                    <td class="text-end fw-bold text-nowrap sup-fin <?= $ending > 0.01 ? 'text-danger' : 'text-success' ?>"
                         title="Cumulative unpaid balance up to this transaction">
                         <?php if ($ending > 0.01): ?>
                             <div>$ <?= number_format(fromAFN($ending, $rateUSD), 2) ?></div>
@@ -673,5 +743,87 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 });
 </script>
+
+<?php if ($pinEnabled): ?>
+<script>
+(function () {
+    const overlay  = document.getElementById('supPinOverlay');
+    const dots     = document.querySelectorAll('#supPinDots .pin-dot');
+    const pad      = document.getElementById('supPinPad');
+    const errEl    = document.getElementById('supPinError');
+    const lockBtn  = document.getElementById('supLockBtn');
+    const unlockBtn= document.getElementById('supUnlockBtn');
+    let pin = '';
+
+    // Build numpad
+    if (pad) {
+        [1,2,3,4,5,6,7,8,9,'',0,'⌫'].forEach(k => {
+            if (k === '') { pad.appendChild(document.createElement('span')); return; }
+            const btn = document.createElement('button');
+            btn.className = 'pin-key';
+            btn.textContent = k;
+            btn.addEventListener('click', () => handleKey(String(k)));
+            pad.appendChild(btn);
+        });
+    }
+
+    function updateDots() {
+        dots.forEach((d, i) => d.classList.toggle('filled', i < pin.length));
+    }
+
+    async function handleKey(k) {
+        if (k === '⌫') { pin = pin.slice(0, -1); updateDots(); return; }
+        if (pin.length >= 4) return;
+        pin += k; updateDots();
+        if (pin.length === 4) await verifyPin();
+    }
+
+    async function verifyPin() {
+        try {
+            const res  = await fetch('/ajax/pin-verify.php', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: 'pin=' + encodeURIComponent(pin)
+            });
+            const data = await res.json();
+            if (data.ok) {
+                // Animate reveal then reload
+                if (overlay) {
+                    overlay.style.transition = 'opacity 0.4s ease';
+                    overlay.style.opacity = '0';
+                }
+                document.body.classList.remove('pin-locked');
+                setTimeout(() => location.reload(), 420);
+            } else {
+                if (errEl) errEl.style.display = 'block';
+                pin = ''; updateDots();
+                setTimeout(() => { if (errEl) errEl.style.display = 'none'; }, 2000);
+            }
+        } catch (e) {
+            if (errEl) { errEl.textContent = 'Connection error. Try again.'; errEl.style.display = 'block'; }
+            pin = ''; updateDots();
+            setTimeout(() => { if (errEl) { errEl.style.display = 'none'; errEl.textContent = 'Wrong PIN. Try again.'; } }, 2500);
+        }
+    }
+
+    // Lock button → redirect to lock URL
+    lockBtn?.addEventListener('click', () => {
+        window.location.href = 'supplier.php?lock=1&name=<?= urlencode($supplierName) ?>';
+    });
+
+    // Unlock button → show overlay
+    unlockBtn?.addEventListener('click', () => {
+        if (overlay) overlay.classList.add('show');
+    });
+
+    // Keyboard support
+    document.addEventListener('keydown', e => {
+        if (!overlay?.classList.contains('show')) return;
+        if (/^[0-9]$/.test(e.key)) handleKey(e.key);
+        else if (e.key === 'Backspace') handleKey('⌫');
+    });
+})();
+</script>
+<?php endif; ?>
 
 <?php require_once '../includes/footer.php'; ?>
