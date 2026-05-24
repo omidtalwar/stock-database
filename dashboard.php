@@ -1120,6 +1120,11 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').cat
 
 // ── Dashboard PIN ──
 (function () {
+    // Lock button must be wired regardless of whether the PIN card is in the DOM
+    document.getElementById('lockDashBtn')?.addEventListener('click', () => {
+        window.location.href = '/dashboard.php?lock=1';
+    });
+
     const card  = document.getElementById('pinCard');
     if (!card) return;
 
@@ -1171,9 +1176,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').cat
             setTimeout(() => { errEl.style.display = 'none'; errEl.textContent = 'Wrong PIN. Try again.'; }, 2500);
         }
     }
-
-    const lockBtn = document.getElementById('lockDashBtn');
-    lockBtn?.addEventListener('click', () => { window.location.href = '/dashboard.php?lock=1'; });
 
     // Physical keyboard support
     document.addEventListener('keydown', e => {
