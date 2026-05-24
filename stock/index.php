@@ -280,21 +280,21 @@ body.pin-locked .sup-fin { filter: blur(7px); user-select: none; pointer-events:
                     <td class="text-end text-muted"><?= number_format($s['txn_count']) ?></td>
                     <td class="text-end text-muted"><?= number_format($s['total_qty']) ?> <?= __('unit_pcs') ?></td>
 
-                    <td class="text-end fw-semibold sup-fin">
+                    <td class="text-end fw-semibold">
                         <?php if (!$purchased): ?>—<?php else: ?>
                             $ <?= number_format($purchased, 2) ?>
                             <div class="text-muted fw-normal" style="font-size:0.72rem;">≈ <?= formatAFN(toAFN($purchased, 'USD', $usdRate)) ?></div>
                         <?php endif; ?>
                     </td>
 
-                    <td class="text-end text-success fw-semibold sup-fin">
+                    <td class="text-end text-success fw-semibold">
                         <?php if (!$paid): ?>—<?php else: ?>
                             $ <?= number_format($paid, 2) ?>
                             <div class="text-muted fw-normal" style="font-size:0.72rem;">≈ <?= formatAFN(toAFN($paid, 'USD', $usdRate)) ?></div>
                         <?php endif; ?>
                     </td>
 
-                    <td class="text-end fw-bold sup-fin <?= $unpaid > 0 ? 'text-danger' : 'text-muted' ?>">
+                    <td class="text-end fw-bold <?= $unpaid > 0 ? 'text-danger' : 'text-muted' ?>">
                         <?php if ($unpaid <= 0): ?>—<?php else: ?>
                             $ <?= number_format($unpaid, 2) ?>
                             <div class="text-muted fw-normal" style="font-size:0.72rem;">≈ <?= formatAFN(toAFN($unpaid, 'USD', $usdRate)) ?></div>
