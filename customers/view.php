@@ -1,5 +1,30 @@
 ﻿<?php
 require_once '../includes/session.php';
+
+// Not logged in + has an ID → auto-generate token and redirect to public share view
+if (!isset($_SESSION['user_id'])) {
+    $guestId = (int)($_GET['id'] ?? 0);
+    if ($guestId > 0) {
+        require_once '../config/db.php';
+        require_once '../includes/currency.php';
+        try { $pdo->exec("ALTER TABLE customers ADD COLUMN share_token VARCHAR(64) NULL"); } catch (\PDOException $e) {}
+        $gRow = $pdo->prepare("SELECT id, share_token FROM customers WHERE id = ?");
+        $gRow->execute([$guestId]);
+        $gRow = $gRow->fetch();
+        if ($gRow) {
+            $tok = $gRow['share_token'];
+            if (empty($tok)) {
+                $tok = bin2hex(random_bytes(24));
+                $pdo->prepare("UPDATE customers SET share_token=? WHERE id=?")->execute([$tok, $guestId]);
+            }
+            header('Location: /customers/share.php?token=' . $tok);
+            exit;
+        }
+    }
+    header('Location: /auth/login.php');
+    exit;
+}
+
 requireLogin();
 require_once '../includes/lang.php';
 require_once '../config/db.php';
