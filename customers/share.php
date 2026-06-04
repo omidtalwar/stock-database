@@ -236,11 +236,12 @@ body {
                                 <th>Total</th>
                                 <th>Balance</th>
                                 <th>Date</th>
+                                <th></th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php if (empty($sales)): ?>
-                            <tr><td colspan="4" class="text-center text-muted py-4">No invoices yet.</td></tr>
+                            <tr><td colspan="5" class="text-center text-muted py-4">No invoices yet.</td></tr>
                             <?php else: ?>
                             <?php foreach ($sales as $s):
                                 $sCur     = $s['currency'] ?? 'AFN';
@@ -278,6 +279,7 @@ body {
                                     <?php endif; ?>
                                 </td>
                                 <td class="text-muted small"><?= date('d M Y', strtotime($dispDate)) ?></td>
+                                <td><a href="/sales/share.php?id=<?= $s['id'] ?>" class="btn btn-sm btn-light"><i class="bi bi-eye"></i></a></td>
                             </tr>
                             <?php endforeach; ?>
                             <?php endif; ?>
