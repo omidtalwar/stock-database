@@ -252,7 +252,7 @@ body {
                             ?>
                             <tr>
                                 <td>
-                                    <span class="badge bg-light text-dark">#<?= str_pad($s['id'], 4, '0', STR_PAD_LEFT) ?></span>
+                                    <a href="/sales/share.php?id=<?= $s['id'] ?>" class="badge bg-light text-dark text-decoration-none" style="font-family:monospace;">#<?= str_pad($s['id'], 4, '0', STR_PAD_LEFT) ?></a>
                                     <?php if ($sCur !== 'AFN'): ?>
                                     <span style="background:<?= $sCur==='USD'?'rgba(0,103,192,0.1)':'rgba(119,25,170,0.1)' ?>;color:<?= $curColors[$sCur]??'#666' ?>;font-size:0.62rem;font-weight:700;padding:1px 5px;border-radius:3px;margin-left:2px;"><?= $sCur ?></span>
                                     <?php endif; ?>
@@ -318,7 +318,7 @@ body {
                                 </td>
                                 <td>
                                     <?php if (!empty($p['inv_id'])): ?>
-                                    <span class="fw-semibold" style="font-size:0.82rem;">#<?= str_pad($p['inv_id'], 4, '0', STR_PAD_LEFT) ?></span>
+                                    <a href="/sales/share.php?id=<?= $p['inv_id'] ?>" class="fw-semibold text-decoration-none" style="font-size:0.82rem;">#<?= str_pad($p['inv_id'], 4, '0', STR_PAD_LEFT) ?></a>
                                     <?php if ($p['inv_bill_no']): ?>
                                     <div class="text-muted" style="font-size:0.68rem;"><?= htmlspecialchars($p['inv_bill_no']) ?></div>
                                     <?php endif; ?>

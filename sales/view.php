@@ -1,5 +1,13 @@
 ﻿<?php
 require_once '../includes/session.php';
+
+// Not logged in → redirect to public invoice view
+if (!isset($_SESSION['user_id'])) {
+    $gid = (int)($_GET['id'] ?? 0);
+    if ($gid > 0) { header('Location: /sales/share.php?id=' . $gid); exit; }
+    header('Location: /auth/login.php'); exit;
+}
+
 requireLogin();
 require_once '../includes/lang.php';
 require_once '../config/db.php';
