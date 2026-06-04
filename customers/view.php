@@ -14,18 +14,22 @@ $stmt->execute([$id]);
 $customer = $stmt->fetch();
 if (!$customer) { $_SESSION['error'] = 'Customer not found.'; header('Location: index.php'); exit; }
 
-// Generate or revoke share token
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_share_action'])) {
-    if ($_POST['_share_action'] === 'generate' && empty($customer['share_token'])) {
-        $token = bin2hex(random_bytes(24));
-        $pdo->prepare("UPDATE customers SET share_token=? WHERE id=?")->execute([$token, $id]);
-        $customer['share_token'] = $token;
-    } elseif ($_POST['_share_action'] === 'revoke') {
-        $pdo->prepare("UPDATE customers SET share_token=NULL WHERE id=?")->execute([$id]);
-        $customer['share_token'] = null;
+// AJAX: get-or-create token (returns JSON, one-step share)
+if (($_POST['_share_action'] ?? '') === 'get_link') {
+    header('Content-Type: application/json');
+    $tok = $customer['share_token'];
+    if (empty($tok)) {
+        $tok = bin2hex(random_bytes(24));
+        $pdo->prepare("UPDATE customers SET share_token=? WHERE id=?")->execute([$tok, $id]);
     }
-    header("Location: view.php?id=$id");
+    $base = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'];
+    echo json_encode(['url' => $base . '/customers/share.php?token=' . $tok]);
     exit;
+}
+// Revoke
+if (($_POST['_share_action'] ?? '') === 'revoke') {
+    $pdo->prepare("UPDATE customers SET share_token=NULL WHERE id=?")->execute([$id]);
+    header("Location: view.php?id=$id"); exit;
 }
 
 $pageTitle = htmlspecialchars($customer['name']);
@@ -100,23 +104,16 @@ require_once '../includes/header.php';
         <span class="text-muted small"><?= htmlspecialchars($customer['shop_name']) ?></span>
     </div>
     <div class="d-flex gap-2 flex-wrap align-items-center">
-        <?php if (!empty($customer['share_token'])): ?>
-        <button type="button" id="copyShareBtn"
-            data-url="<?= htmlspecialchars('https://'.$_SERVER['HTTP_HOST'].'/customers/share.php?token='.$customer['share_token']) ?>"
-            class="btn btn-sm btn-outline-success">
-            <i class="bi bi-link-45deg me-1"></i>Copy Share Link
+        <button type="button" id="shareBtn" data-id="<?= $id ?>"
+            class="btn btn-sm btn-outline-info">
+            <i class="bi bi-share me-1"></i>Share
         </button>
-        <form method="POST" style="display:inline;" onsubmit="return confirm('Revoke this link? The customer will no longer be able to access it.')">
+        <?php if (!empty($customer['share_token'])): ?>
+        <form method="POST" style="display:inline;"
+              onsubmit="return confirm('Revoke this link? The customer will no longer be able to open it.')">
             <input type="hidden" name="_share_action" value="revoke">
             <button type="submit" class="btn btn-sm btn-outline-danger" title="Revoke share link">
                 <i class="bi bi-x-circle"></i>
-            </button>
-        </form>
-        <?php else: ?>
-        <form method="POST" style="display:inline;">
-            <input type="hidden" name="_share_action" value="generate">
-            <button type="submit" class="btn btn-sm btn-outline-info">
-                <i class="bi bi-share me-1"></i>Share with Customer
             </button>
         </form>
         <?php endif; ?>
@@ -127,14 +124,24 @@ require_once '../includes/header.php';
 </div>
 
 <script>
-document.getElementById('copyShareBtn')?.addEventListener('click', function () {
-    const url = this.dataset.url;
-    navigator.clipboard.writeText(url).then(() => {
-        const orig = this.innerHTML;
-        this.innerHTML = '<i class="bi bi-check2 me-1"></i>Copied!';
-        this.classList.replace('btn-outline-success', 'btn-success');
-        setTimeout(() => { this.innerHTML = orig; this.classList.replace('btn-success', 'btn-outline-success'); }, 2000);
-    }).catch(() => { prompt('Copy this link:', url); });
+document.getElementById('shareBtn').addEventListener('click', async function () {
+    const btn = this;
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Getting link…';
+    try {
+        const res  = await fetch('', { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:'_share_action=get_link' });
+        const data = await res.json();
+        await navigator.clipboard.writeText(data.url);
+        btn.innerHTML = '<i class="bi bi-check2 me-1"></i>Link Copied!';
+        btn.classList.replace('btn-outline-info','btn-success');
+        // Reload after short delay so revoke button appears if it wasn't there before
+        setTimeout(() => location.reload(), 1800);
+    } catch (e) {
+        btn.innerHTML = orig; btn.disabled = false;
+        const data = await fetch('', { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:'_share_action=get_link' }).then(r=>r.json()).catch(()=>null);
+        if (data?.url) prompt('Copy this link:', data.url);
+    }
 });
 </script>
 
