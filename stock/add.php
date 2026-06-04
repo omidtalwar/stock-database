@@ -273,9 +273,14 @@ require_once '../includes/header.php';
     <div class="card mb-3">
         <div class="card-header fw-semibold d-flex align-items-center justify-content-between py-2">
             <span><i class="bi bi-list-ul me-2" style="color:#0067C0;"></i>Products</span>
-            <button type="button" class="btn btn-sm btn-outline-primary" onclick="addRow()">
-                <i class="bi bi-plus-lg me-1"></i>Add Product
-            </button>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="addRow()">
+                    <i class="bi bi-plus-lg me-1"></i>Add Product
+                </button>
+                <button type="button" class="btn btn-sm btn-warning" onclick="addExternalRow()" style="color:#fff;">
+                    <i class="bi bi-person-gear me-1"></i>Add External
+                </button>
+            </div>
         </div>
         <div class="table-responsive">
             <table class="table table-sm align-middle mb-0" style="font-size:0.82rem;min-width:700px;">
@@ -476,6 +481,40 @@ function rowHTML(idx) {
 function addRow() {
     rowIdx++;
     document.getElementById('prodRows').insertAdjacentHTML('beforeend', '<tr>' + rowHTML(rowIdx) + '</tr>');
+}
+
+function addExternalRow() {
+    rowIdx++;
+    const sym = curSym();
+    const tr = document.createElement('tr');
+    tr.dataset.external = '1';
+    tr.style.background = 'rgba(245,158,11,0.05)';
+    tr.innerHTML =
+        '<td style="min-width:200px;" colspan="5">'
+        + '<div class="d-flex align-items-center gap-2">'
+        + '<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:5px;background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.3);color:#92400e;font-size:0.7rem;font-weight:700;white-space:nowrap;">'
+        + '<i class="bi bi-person-gear"></i> External</span>'
+        + '<input type="text" name="custom_product[]" class="form-control form-control-sm"'
+        + ' placeholder="e.g. Transport fee, Labour…" style="border-color:rgba(245,158,11,0.3);">'
+        + '</div>'
+        + '<input type="hidden" name="product_id[]" value="">'
+        + '<input type="hidden" name="quantity[]" value="0">'
+        + '<input type="hidden" name="bundle_count[]" value="">'
+        + '<input type="hidden" name="pricing_type[]" value="per_pcs">'
+        + '<input type="hidden" name="unit_price[]" value="0">'
+        + '</td>'
+        + '<td style="min-width:120px;">'
+        + '<div class="input-group input-group-sm">'
+        + '<span class="input-group-text" style="background:rgba(245,158,11,0.1);border-color:rgba(245,158,11,0.3);color:#92400e;font-weight:700;">' + sym + '</span>'
+        + '<input type="number" name="total_amount[]" class="form-control row-total ext-total"'
+        + ' min="0" step="any" placeholder="Total"'
+        + ' style="border-color:rgba(245,158,11,0.3);font-weight:600;"'
+        + ' oninput="calcGrandTotal()">'
+        + '</div>'
+        + '</td>'
+        + '<td><button type="button" class="btn btn-sm btn-light text-danger px-2" onclick="removeRow(this)" title="Remove"><i class="bi bi-x-lg"></i></button></td>';
+    document.getElementById('prodRows').appendChild(tr);
+    tr.querySelector('input[name="custom_product[]"]').focus();
 }
 
 function removeRow(btn) {
