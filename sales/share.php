@@ -14,16 +14,29 @@ $sale = $stmt->fetch();
 if (!$sale) { http_response_code(404); exit('Invoice not found.'); }
 
 $stmt2 = $pdo->prepare("
-    SELECT si.*, p.name AS product_name, p.size, p.color
-    FROM sale_items si JOIN products p ON p.id = si.product_id
+    SELECT si.*, COALESCE(p.name, si.custom_name, 'Item') AS product_name, p.size, p.color
+    FROM sale_items si LEFT JOIN products p ON p.id = si.product_id
     WHERE si.sale_id = ?
 ");
 $stmt2->execute([$id]);
 $items = $stmt2->fetchAll();
 
-$settings = getSettings($pdo);
-$rate     = (float)($settings['exchange_rate'] ?? 90);
-$secCur   = $settings['secondary_currency'] ?? 'USD';
+$allRates   = getAllRates($pdo);
+$saleCur    = $sale['currency'] ?? 'AFN';
+$saleCurRate = $allRates[$saleCur] ?? 1.0;
+
+// Format an AFN-stored amount in the sale's original currency
+function fmtSale(float $afn): string {
+    global $saleCur, $saleCurRate;
+    if ($saleCur === 'AFN') return formatAFN($afn);
+    return formatMoney(fromAFN($afn, $saleCurRate), $saleCur);
+}
+// Secondary line (AFN equivalent) — only shown when sale is NOT in AFN
+function fmtSaleSub(float $afn): string {
+    global $saleCur;
+    if ($saleCur === 'AFN') return '';
+    return '≈ ' . formatAFN($afn);
+}
 
 $invoiceNo  = $sale['bill_no'] ?: ('INV-' . str_pad($id, 4, '0', STR_PAD_LEFT));
 $saleImages = !empty($sale['images']) ? json_decode($sale['images'], true) : [];
@@ -447,9 +460,15 @@ td.mono { font-variant-numeric: tabular-nums; }
                     <td class="product-name"><?= htmlspecialchars($item['product_name']) ?></td>
                     <td><?= htmlspecialchars($item['size'] ?: '—') ?></td>
                     <td><?= htmlspecialchars($item['color'] ?: '—') ?></td>
-                    <td class="right"><?= number_format($item['quantity']) ?></td>
-                    <td class="right mono"><?= formatAFN($item['unit_price']) ?></td>
-                    <td class="right mono" style="font-weight:600;"><?= formatAFN($item['subtotal']) ?></td>
+                    <td class="right"><?php $q=(float)$item['quantity']; echo ($q==floor($q))?number_format($q,0):rtrim(rtrim(number_format($q,3,'.',''),'0'),'.'); ?></td>
+                    <td class="right mono">
+                        <?= fmtSale((float)$item['unit_price']) ?>
+                        <?php $sub1=fmtSaleSub((float)$item['unit_price']); if($sub1): ?><div class="sub-val"><?= $sub1 ?></div><?php endif; ?>
+                    </td>
+                    <td class="right mono" style="font-weight:600;">
+                        <?= fmtSale((float)$item['subtotal']) ?>
+                        <?php $sub2=fmtSaleSub((float)$item['subtotal']); if($sub2): ?><div class="sub-val"><?= $sub2 ?></div><?php endif; ?>
+                    </td>
                 </tr>
                 <?php endforeach; ?>
             </tbody>
@@ -462,26 +481,24 @@ td.mono { font-variant-numeric: tabular-nums; }
             <div class="totals-row">
                 <span class="lbl">Subtotal</span>
                 <div>
-                    <div class="val"><?= formatAFN($sale['total_amount']) ?></div>
-                    <div class="sub-val">≈ <?= formatMoney(fromAFN($sale['total_amount'], $rate), $secCur) ?></div>
+                    <div class="val"><?= fmtSale((float)$sale['total_amount']) ?></div>
+                    <?php $s1=fmtSaleSub((float)$sale['total_amount']); if($s1): ?><div class="sub-val"><?= $s1 ?></div><?php endif; ?>
                 </div>
             </div>
             <div class="totals-row">
                 <span class="lbl">Paid</span>
                 <div>
-                    <div class="val paid"><?= formatAFN($sale['paid_amount']) ?></div>
-                    <div class="sub-val">≈ <?= formatMoney(fromAFN($sale['paid_amount'], $rate), $secCur) ?></div>
+                    <div class="val paid"><?= fmtSale((float)$sale['paid_amount']) ?></div>
+                    <?php $s2=fmtSaleSub((float)$sale['paid_amount']); if($s2): ?><div class="sub-val"><?= $s2 ?></div><?php endif; ?>
                 </div>
             </div>
             <div class="totals-row grand">
                 <span>Balance Due</span>
                 <div>
                     <div class="val <?= $isFullyPaid ? 'zero' : 'balance' ?>">
-                        <?= formatAFN($sale['balance']) ?>
+                        <?= fmtSale(max(0, (float)$sale['balance'])) ?>
                     </div>
-                    <?php if (!$isFullyPaid): ?>
-                    <div class="sub-val">≈ <?= formatMoney(fromAFN($sale['balance'], $rate), $secCur) ?></div>
-                    <?php endif; ?>
+                    <?php if (!$isFullyPaid): $s3=fmtSaleSub((float)$sale['balance']); if($s3): ?><div class="sub-val"><?= $s3 ?></div><?php endif; endif; ?>
                 </div>
             </div>
         </div>
