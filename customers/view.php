@@ -5,11 +5,28 @@ require_once '../includes/lang.php';
 require_once '../config/db.php';
 require_once '../includes/currency.php';
 
+// Auto-migrate: add share_token column
+try { $pdo->exec("ALTER TABLE customers ADD COLUMN share_token VARCHAR(64) NULL"); } catch (\PDOException $e) {}
+
 $id = (int)($_GET['id'] ?? 0);
 $stmt = $pdo->prepare("SELECT * FROM customers WHERE id = ?");
 $stmt->execute([$id]);
 $customer = $stmt->fetch();
 if (!$customer) { $_SESSION['error'] = 'Customer not found.'; header('Location: index.php'); exit; }
+
+// Generate or revoke share token
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_share_action'])) {
+    if ($_POST['_share_action'] === 'generate' && empty($customer['share_token'])) {
+        $token = bin2hex(random_bytes(24));
+        $pdo->prepare("UPDATE customers SET share_token=? WHERE id=?")->execute([$token, $id]);
+        $customer['share_token'] = $token;
+    } elseif ($_POST['_share_action'] === 'revoke') {
+        $pdo->prepare("UPDATE customers SET share_token=NULL WHERE id=?")->execute([$id]);
+        $customer['share_token'] = null;
+    }
+    header("Location: view.php?id=$id");
+    exit;
+}
 
 $pageTitle = htmlspecialchars($customer['name']);
 
@@ -82,12 +99,44 @@ require_once '../includes/header.php';
         <h4 class="mt-1 mb-0"><?= htmlspecialchars($customer['name']) ?></h4>
         <span class="text-muted small"><?= htmlspecialchars($customer['shop_name']) ?></span>
     </div>
-    <div class="d-flex gap-2 flex-wrap">
+    <div class="d-flex gap-2 flex-wrap align-items-center">
+        <?php if (!empty($customer['share_token'])): ?>
+        <button type="button" id="copyShareBtn"
+            data-url="<?= htmlspecialchars('https://'.$_SERVER['HTTP_HOST'].'/customers/share.php?token='.$customer['share_token']) ?>"
+            class="btn btn-sm btn-outline-success">
+            <i class="bi bi-link-45deg me-1"></i>Copy Share Link
+        </button>
+        <form method="POST" style="display:inline;" onsubmit="return confirm('Revoke this link? The customer will no longer be able to access it.')">
+            <input type="hidden" name="_share_action" value="revoke">
+            <button type="submit" class="btn btn-sm btn-outline-danger" title="Revoke share link">
+                <i class="bi bi-x-circle"></i>
+            </button>
+        </form>
+        <?php else: ?>
+        <form method="POST" style="display:inline;">
+            <input type="hidden" name="_share_action" value="generate">
+            <button type="submit" class="btn btn-sm btn-outline-info">
+                <i class="bi bi-share me-1"></i>Share with Customer
+            </button>
+        </form>
+        <?php endif; ?>
         <a href="edit.php?id=<?= $id ?>" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil me-1"></i><?= __('btn_edit') ?></a>
         <a href="/payments/add.php?customer_id=<?= $id ?>" class="btn btn-sm btn-success"><i class="bi bi-cash me-1"></i><?= __('pay_add') ?></a>
         <a href="/sales/create.php?customer_id=<?= $id ?>" class="btn btn-sm btn-primary"><i class="bi bi-receipt me-1"></i><?= __('sale_add') ?></a>
     </div>
 </div>
+
+<script>
+document.getElementById('copyShareBtn')?.addEventListener('click', function () {
+    const url = this.dataset.url;
+    navigator.clipboard.writeText(url).then(() => {
+        const orig = this.innerHTML;
+        this.innerHTML = '<i class="bi bi-check2 me-1"></i>Copied!';
+        this.classList.replace('btn-outline-success', 'btn-success');
+        setTimeout(() => { this.innerHTML = orig; this.classList.replace('btn-success', 'btn-outline-success'); }, 2000);
+    }).catch(() => { prompt('Copy this link:', url); });
+});
+</script>
 
 <?php
 $cvCurMeta = [
