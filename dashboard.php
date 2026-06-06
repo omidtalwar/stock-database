@@ -85,7 +85,7 @@ foreach ($salesByCur as $_r) {
 }
 $grandAfn = array_sum(array_column($curBreakdown,'afn'));
 
-// Receivable by currency (all-time — matches $totalDebt from customers)
+// Receivable by currency — invoice-level, then subtract general payments so total matches customers.total_debt
 $debtByCur = $pdo->query("
     SELECT COALESCE(currency,'AFN') AS currency,
            COALESCE(SUM(total_amount - paid_amount),0) AS bal, COUNT(*) AS cnt
@@ -96,6 +96,19 @@ foreach ($debtByCur as $_r) {
     $_c = $_r['currency'] ?: 'AFN'; if (!array_key_exists($_c, $debtCurData)) continue;
     $_a = (float)$_r['bal']; $_rt = $rates[$_c] ?? 1.0;
     $debtCurData[$_c] = ['afn'=>$_a, 'orig'=>$_c==='AFN'?$_a:fromAFN($_a,$_rt), 'cnt'=>(int)$_r['cnt']];
+}
+// Subtract general (unlinked) payments proportionally across currency buckets
+$_genAfn = (float)$pdo->query("SELECT COALESCE(SUM(amount_afn),0) FROM payments WHERE sale_id IS NULL")->fetchColumn();
+if ($_genAfn > 0.01) {
+    $_invTotalAfn = array_sum(array_column($debtCurData, 'afn'));
+    foreach (['AFN','USD','PKR'] as $_c) {
+        if ($_invTotalAfn <= 0 || $debtCurData[$_c]['afn'] <= 0) continue;
+        $_deduct = $_genAfn * ($debtCurData[$_c]['afn'] / $_invTotalAfn);
+        $debtCurData[$_c]['afn']  = max(0, $debtCurData[$_c]['afn'] - $_deduct);
+        $_rt = $rates[$_c] ?? 1.0;
+        $debtCurData[$_c]['orig'] = $_c === 'AFN' ? $debtCurData[$_c]['afn'] : fromAFN($debtCurData[$_c]['afn'], $_rt);
+        if ($debtCurData[$_c]['afn'] < 0.01) $debtCurData[$_c]['cnt'] = 0;
+    }
 }
 
 // Collected at-invoice by currency (period-filtered)

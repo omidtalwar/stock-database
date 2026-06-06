@@ -39,27 +39,8 @@ $customers = $pdo->prepare("
 $customers->execute($params);
 $customers = $customers->fetchAll();
 
-// Per-currency debt breakdown for customers on this page
-$debtMap = [];
-if (!empty($customers)) {
-    $ids = implode(',', array_map(fn($c) => (int)$c['id'], $customers));
-    $debtRows = $pdo->query("
-        SELECT s.customer_id, COALESCE(s.currency,'AFN') AS currency,
-               SUM(s.total_amount - s.paid_amount) AS bal_afn,
-               COUNT(*) AS cnt
-        FROM sales s
-        WHERE s.customer_id IN ($ids) AND s.total_amount > s.paid_amount + 0.01
-        GROUP BY s.customer_id, COALESCE(s.currency,'AFN')
-    ")->fetchAll(PDO::FETCH_ASSOC);
-    foreach ($debtRows as $dr) {
-        $cid  = (int)$dr['customer_id'];
-        $cur  = $dr['currency'];
-        $afn  = (float)$dr['bal_afn'];
-        $rate = $rates[$cur] ?? 1.0;
-        $orig = $cur === 'AFN' ? $afn : fromAFN($afn, $rate);
-        $debtMap[$cid][$cur] = ['afn' => $afn, 'orig' => $orig, 'cnt' => (int)$dr['cnt']];
-    }
-}
+// General payments (sale_id IS NULL) reduce customers.total_debt but not invoice paid_amount.
+// So c.total_debt is the authoritative balance — use it directly for display.
 
 require_once '../includes/header.php';
 ?>
@@ -201,27 +182,12 @@ require_once '../includes/header.php';
                     <td class="d-none d-sm-table-cell"><?= htmlspecialchars($c['phone']) ?></td>
                     <td class="d-none d-sm-table-cell"><span class="badge bg-light text-dark"><?= $c['sale_count'] ?></span></td>
                     <td>
-                        <?php
-                        $cDebt = $debtMap[$c['id']] ?? [];
-                        $curMeta = [
-                            'AFN' => ['flag'=>'🇦🇫','col'=>'#C42B1C'],
-                            'USD' => ['flag'=>'🇺🇸','col'=>'#C42B1C'],
-                            'PKR' => ['flag'=>'🇵🇰','col'=>'#C42B1C'],
-                        ];
-                        if (!empty($cDebt)):
-                            foreach (['AFN','USD','PKR'] as $dcur):
-                                if (!isset($cDebt[$dcur])) continue;
-                                $dd = $cDebt[$dcur];
-                        ?>
-                        <div class="d-flex align-items-center gap-1" style="line-height:1.3;">
-                            <span style="font-size:0.72rem;"><?= $curMeta[$dcur]['flag'] ?></span>
-                            <span class="fw-bold text-danger" style="font-size:0.85rem;"><?= formatMoney($dd['orig'], $dcur) ?></span>
-                            <?php if ($dcur !== 'AFN'): ?>
-                            <span class="text-muted" style="font-size:0.65rem;">≈ <?= formatAFN($dd['afn']) ?></span>
-                            <?php endif; ?>
-                        </div>
-                        <?php endforeach; else: ?>
-                            <span class="text-success fw-semibold"><?= __('cust_cleared') ?></span>
+                        <?php $cDebtAfn = (float)$c['total_debt']; ?>
+                        <?php if ($cDebtAfn > 0.01): ?>
+                        <div class="fw-bold text-danger" style="font-size:0.85rem;"><?= formatAFN($cDebtAfn) ?></div>
+                        <div class="text-muted" style="font-size:0.65rem;">≈ <?= formatMoney(fromAFN($cDebtAfn, $rateUSD), 'USD') ?></div>
+                        <?php else: ?>
+                        <span class="text-success fw-semibold"><?= __('cust_cleared') ?></span>
                         <?php endif; ?>
                     </td>
                     <td>
