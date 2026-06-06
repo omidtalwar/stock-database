@@ -97,18 +97,20 @@ foreach ($debtByCur as $_r) {
     $_a = (float)$_r['bal']; $_rt = $rates[$_c] ?? 1.0;
     $debtCurData[$_c] = ['afn'=>$_a, 'orig'=>$_c==='AFN'?$_a:fromAFN($_a,$_rt), 'cnt'=>(int)$_r['cnt']];
 }
-// Subtract general (unlinked) payments proportionally across currency buckets
-$_genAfn = (float)$pdo->query("SELECT COALESCE(SUM(amount_afn),0) FROM payments WHERE sale_id IS NULL")->fetchColumn();
-if ($_genAfn > 0.01) {
-    $_invTotalAfn = array_sum(array_column($debtCurData, 'afn'));
-    foreach (['AFN','USD','PKR'] as $_c) {
-        if ($_invTotalAfn <= 0 || $debtCurData[$_c]['afn'] <= 0) continue;
-        $_deduct = $_genAfn * ($debtCurData[$_c]['afn'] / $_invTotalAfn);
-        $debtCurData[$_c]['afn']  = max(0, $debtCurData[$_c]['afn'] - $_deduct);
-        $_rt = $rates[$_c] ?? 1.0;
-        $debtCurData[$_c]['orig'] = $_c === 'AFN' ? $debtCurData[$_c]['afn'] : fromAFN($debtCurData[$_c]['afn'], $_rt);
-        if ($debtCurData[$_c]['afn'] < 0.01) $debtCurData[$_c]['cnt'] = 0;
-    }
+// Subtract general (unlinked) payments from their matching currency bucket only
+$_genPays = $pdo->query("
+    SELECT COALESCE(currency,'AFN') AS currency,
+           SUM(amount) AS orig,
+           SUM(COALESCE(NULLIF(amount_afn,0), amount)) AS afn
+    FROM payments WHERE sale_id IS NULL
+    GROUP BY COALESCE(currency,'AFN')
+")->fetchAll(PDO::FETCH_ASSOC);
+foreach ($_genPays as $_gp) {
+    $_c = $_gp['currency'];
+    if (!array_key_exists($_c, $debtCurData)) continue;
+    $debtCurData[$_c]['orig'] = max(0, $debtCurData[$_c]['orig'] - (float)$_gp['orig']);
+    $debtCurData[$_c]['afn']  = max(0, $debtCurData[$_c]['afn']  - (float)$_gp['afn']);
+    if ($debtCurData[$_c]['orig'] < 0.01) $debtCurData[$_c]['cnt'] = 0;
 }
 
 // Collected at-invoice by currency (period-filtered)
