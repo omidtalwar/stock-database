@@ -97,15 +97,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $error = 'Payment ' . formatAFN($amountAfn) . ' exceeds invoice balance ' . formatAFN($invBal) . '.';
             }
         }
-    } else {
-        // General payment: validate against total customer debt
-        $debt = (float)$pdo->prepare("SELECT total_debt FROM customers WHERE id = ?")->execute([$customer_id]) && true
-            ? (float)$pdo->query("SELECT total_debt FROM customers WHERE id = $customer_id")->fetchColumn()
-            : 0;
-        if ($amountAfn > $debt + 0.01) {
-            $error = __('pay_exceeds');
-        }
     }
+    // General payment (no invoice): no over-payment check — admin may record advance payments
 
     if ($error) {
         $_SESSION['error'] = $error;
@@ -221,13 +214,33 @@ require_once '../includes/header.php';
                         </div>
                     </div>
 
+                    <!-- Payment mode toggle -->
+                    <div id="payModeSection" style="display:none;" class="mb-3">
+                        <label class="form-label fw-semibold mb-2">Payment Type</label>
+                        <div class="d-flex gap-2">
+                            <button type="button" id="btnModeInvoice" onclick="setPayMode('invoice')"
+                                class="btn btn-sm btn-primary flex-fill">
+                                <i class="bi bi-receipt me-1"></i>Link to Invoice
+                            </button>
+                            <button type="button" id="btnModeGeneral" onclick="setPayMode('general')"
+                                class="btn btn-sm btn-outline-secondary flex-fill">
+                                <i class="bi bi-wallet2 me-1"></i>General Payment
+                            </button>
+                        </div>
+                        <div id="generalPayNote" style="display:none;" class="mt-2 px-3 py-2 rounded small text-muted"
+                             style="background:rgba(0,0,0,0.03);border:1px solid rgba(0,0,0,0.08);">
+                            <i class="bi bi-info-circle me-1"></i>
+                            This payment will reduce the customer's total balance but will <strong>not</strong> be applied to any specific invoice.
+                        </div>
+                    </div>
+
                     <!-- Invoice picker -->
                     <div id="invoiceSection" style="display:none;" class="mb-3">
                         <div class="d-flex align-items-center justify-content-between mb-2">
                             <label class="form-label fw-semibold mb-0 d-flex align-items-center gap-2">
                                 <i class="bi bi-receipt text-primary"></i>
                                 Select Invoice
-                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle" style="font-size:0.62rem;">Required</span>
+                                <span class="badge bg-secondary-subtle text-secondary border" style="font-size:0.62rem;">Optional</span>
                             </label>
                             <input type="text" id="invSearch" class="form-control form-control-sm"
                                    placeholder="Search…" oninput="filterInvoices()"
@@ -348,12 +361,36 @@ function fmtCur(v, cur) {
 
 // ── Invoice picker ────────────────────────────────────────────────────────────
 let selectedInv = null;
+let payMode = 'invoice'; // 'invoice' | 'general'
+
+function setPayMode(mode) {
+    payMode = mode;
+    const modeInv = document.getElementById('btnModeInvoice');
+    const modeGen = document.getElementById('btnModeGeneral');
+    const note    = document.getElementById('generalPayNote');
+    if (mode === 'invoice') {
+        modeInv.className = 'btn btn-sm btn-primary flex-fill';
+        modeGen.className = 'btn btn-sm btn-outline-secondary flex-fill';
+        note.style.display = 'none';
+        renderInvoices();
+    } else {
+        modeInv.className = 'btn btn-sm btn-outline-secondary flex-fill';
+        modeGen.className = 'btn btn-sm btn-success flex-fill';
+        note.style.display = '';
+        clearInvoice();
+        document.getElementById('invoiceSection').style.display = 'none';
+        document.getElementById('selectedInvBadge').style.display = 'none';
+    }
+}
 
 function onCustomerChange() {
     clearInvoice();
     const s = document.getElementById('invSearch');
     if (s) s.value = '';
-    renderInvoices();
+    // Show mode toggle whenever a customer is chosen
+    const cid = parseInt(document.getElementById('customerSelect').value) || 0;
+    document.getElementById('payModeSection').style.display = cid ? '' : 'none';
+    if (cid) setPayMode(payMode); // re-apply current mode
     updateConvert();
 }
 
@@ -375,7 +412,7 @@ function renderInvoices() {
     const list = document.getElementById('invoiceList');
     const none = document.getElementById('noInvoices');
 
-    if (!cid) { sec.style.display = 'none'; return; }
+    if (!cid || payMode !== 'invoice') { sec.style.display = 'none'; return; }
 
     const invs = INVOICES[cid] || [];
     sec.style.display = '';
