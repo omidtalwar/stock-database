@@ -37,21 +37,24 @@ $salesByCur = ['AFN'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0],'USD'=>['orig'=>0.0,'afn
 $paysByCur  = ['AFN'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0],'USD'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0],'PKR'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0]];
 $debtByCur  = ['AFN'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0],'USD'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0],'PKR'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0]];
 
+$invoiceBalAfn   = 0.0; // sum of (total - paid) per invoice — reflects invoice-linked payments
+$generalPaysAfn  = 0.0; // sum of unlinked general payments (sale_id IS NULL)
+
 foreach ($sales as $s) {
     $cur = $s['currency'] ?? 'AFN'; $afn = (float)$s['total_amount']; $rate = $rates[$cur] ?? 1.0;
     $orig = $cur === 'AFN' ? $afn : fromAFN($afn, $rate);
     if (isset($salesByCur[$cur])) { $salesByCur[$cur]['orig'] += $orig; $salesByCur[$cur]['afn'] += $afn; $salesByCur[$cur]['cnt']++; }
-    $bal = max(0.0, $afn - (float)$s['paid_amount']);
-    if ($bal > 0.01 && isset($debtByCur[$cur])) { $debtByCur[$cur]['orig'] += $cur==='AFN'?$bal:fromAFN($bal,$rate); $debtByCur[$cur]['afn'] += $bal; $debtByCur[$cur]['cnt']++; }
+    $invoiceBalAfn += max(0.0, $afn - (float)$s['paid_amount']);
 }
 foreach ($payments as $p) {
     $cur = $p['currency'] ?? 'AFN'; $afn = (float)$p['amount_afn'] ?: (float)$p['amount'];
     if (isset($paysByCur[$cur])) { $paysByCur[$cur]['orig'] += (float)$p['amount']; $paysByCur[$cur]['afn'] += $afn; $paysByCur[$cur]['cnt']++; }
+    // General payment = not linked to any invoice
+    if (empty($p['inv_id'])) { $generalPaysAfn += $afn; }
 }
 
-// Use customers.total_debt as the authoritative balance — it correctly reflects
-// general payments (which reduce total_debt but don't touch invoice paid_amount).
-$totalDebtAfn = (float)$customer['total_debt'];
+// True balance = invoice-level shortfall minus any general (unlinked) payments
+$totalDebtAfn = max(0.0, $invoiceBalAfn - $generalPaysAfn);
 $anyDebt      = $totalDebtAfn > 0.01;
 $curMeta = ['AFN'=>['flag'=>'🇦🇫','col'=>'#16a34a'],'USD'=>['flag'=>'🇺🇸','col'=>'#1d4ed8'],'PKR'=>['flag'=>'🇵🇰','col'=>'#7c3aed']];
 ?>
