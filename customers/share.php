@@ -258,10 +258,7 @@ body {
         <div class="summary-cell">
             <div class="s-lbl">Total Invoiced</div>
             <?php $any=false; foreach($curMeta as $cur=>$m): $d=$salesByCur[$cur]; if(!$d['cnt']) continue; $any=true; ?>
-            <div class="cur-line">
-                <span class="cur-flag"><?= $m['flag'] ?></span>
-                <span class="s-val" style="color:<?= $m['col'] ?>;"><?= formatMoney($d['orig'],$cur) ?></span>
-            </div>
+            <div class="s-val" style="color:<?= $m['col'] ?>;"><?= formatMoney($d['orig'],$cur) ?></div>
             <?php if($cur!=='AFN'): ?><div class="s-sub">≈ <?= formatAFN($d['afn']) ?></div><?php endif; ?>
             <?php endforeach; if(!$any): ?><div class="s-val" style="color:#9ca3af;">—</div><?php endif; ?>
             <div class="s-count"><?= count($sales) ?> invoice<?= count($sales)!==1?'s':'' ?></div>
@@ -270,26 +267,17 @@ body {
         <div class="summary-cell">
             <div class="s-lbl">Total Paid</div>
             <?php $any=false; foreach($curMeta as $cur=>$m): $d=$paysByCur[$cur]; if(!$d['cnt']) continue; $any=true; ?>
-            <div class="cur-line">
-                <span class="cur-flag"><?= $m['flag'] ?></span>
-                <span class="s-val" style="color:#15803d;"><?= formatMoney($d['orig'],$cur) ?></span>
-            </div>
+            <div class="s-val" style="color:#15803d;"><?= formatMoney($d['orig'],$cur) ?></div>
             <?php if($cur!=='AFN'): ?><div class="s-sub">≈ <?= formatAFN($d['afn']) ?></div><?php endif; ?>
-            <?php endforeach; if(!$any): ?><div class="s-val" style="color:#9ca3af;">No payments</div><?php endif; ?>
+            <?php endforeach; if(!$any): ?><div class="s-val" style="color:#9ca3af;">No payments yet</div><?php endif; ?>
             <div class="s-count"><?= count($payments) ?> payment<?= count($payments)!==1?'s':'' ?></div>
         </div>
 
         <div class="summary-cell">
             <div class="s-lbl">Balance Due</div>
             <?php if ($anyDebt): ?>
-            <div class="cur-line">
-                <span class="cur-flag">🇦🇫</span>
-                <span class="s-val" style="color:#b91c1c;"><?= formatAFN($totalDebtAfn) ?></span>
-            </div>
-            <?php
-            // Also show USD equivalent if the customer has USD invoices
-            $hasUSD = $salesByCur['USD']['cnt'] > 0;
-            if ($hasUSD): ?>
+            <div class="s-val" style="color:#b91c1c;"><?= formatAFN($totalDebtAfn) ?></div>
+            <?php if($salesByCur['USD']['cnt'] > 0): ?>
             <div class="s-sub">≈ <?= formatMoney(fromAFN($totalDebtAfn, $rates['USD']), 'USD') ?></div>
             <?php endif; ?>
             <?php else: ?>
