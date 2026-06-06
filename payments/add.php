@@ -219,15 +219,15 @@ require_once '../includes/header.php';
                         <label class="form-label fw-semibold mb-2">Payment Type</label>
                         <div class="d-flex gap-2">
                             <button type="button" id="btnModeInvoice" onclick="setPayMode('invoice')"
-                                class="btn btn-sm btn-primary flex-fill">
+                                class="btn btn-sm btn-outline-secondary flex-fill">
                                 <i class="bi bi-receipt me-1"></i>Link to Invoice
                             </button>
                             <button type="button" id="btnModeGeneral" onclick="setPayMode('general')"
-                                class="btn btn-sm btn-outline-secondary flex-fill">
+                                class="btn btn-sm btn-success flex-fill">
                                 <i class="bi bi-wallet2 me-1"></i>General Payment
                             </button>
                         </div>
-                        <div id="generalPayNote" style="display:none;" class="mt-2 px-3 py-2 rounded small text-muted"
+                        <div id="generalPayNote" style="display:;" class="mt-2 px-3 py-2 rounded small text-muted"
                              style="background:rgba(0,0,0,0.03);border:1px solid rgba(0,0,0,0.08);">
                             <i class="bi bi-info-circle me-1"></i>
                             This payment will reduce the customer's total balance but will <strong>not</strong> be applied to any specific invoice.
@@ -361,7 +361,7 @@ function fmtCur(v, cur) {
 
 // ── Invoice picker ────────────────────────────────────────────────────────────
 let selectedInv = null;
-let payMode = 'invoice'; // 'invoice' | 'general'
+let payMode = 'general'; // 'invoice' | 'general'
 
 function setPayMode(mode) {
     payMode = mode;
