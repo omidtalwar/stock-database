@@ -37,25 +37,28 @@ $salesByCur = ['AFN'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0],'USD'=>['orig'=>0.0,'afn
 $paysByCur  = ['AFN'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0],'USD'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0],'PKR'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0]];
 $debtByCur  = ['AFN'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0],'USD'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0],'PKR'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0]];
 
-$invoiceBalAfn   = 0.0; // sum of (total - paid) per invoice — reflects invoice-linked payments
-$generalPaysAfn  = 0.0; // sum of unlinked general payments (sale_id IS NULL)
-
+// Build invoice-level debt first, then subtract general payments per currency
 foreach ($sales as $s) {
     $cur = $s['currency'] ?? 'AFN'; $afn = (float)$s['total_amount']; $rate = $rates[$cur] ?? 1.0;
     $orig = $cur === 'AFN' ? $afn : fromAFN($afn, $rate);
     if (isset($salesByCur[$cur])) { $salesByCur[$cur]['orig'] += $orig; $salesByCur[$cur]['afn'] += $afn; $salesByCur[$cur]['cnt']++; }
-    $invoiceBalAfn += max(0.0, $afn - (float)$s['paid_amount']);
+    $bal = max(0.0, $afn - (float)$s['paid_amount']);
+    if ($bal > 0.01 && isset($debtByCur[$cur])) {
+        $debtByCur[$cur]['orig'] += $cur==='AFN'?$bal:fromAFN($bal,$rate);
+        $debtByCur[$cur]['afn']  += $bal;
+        $debtByCur[$cur]['cnt']++;
+    }
 }
 foreach ($payments as $p) {
     $cur = $p['currency'] ?? 'AFN'; $afn = (float)$p['amount_afn'] ?: (float)$p['amount'];
     if (isset($paysByCur[$cur])) { $paysByCur[$cur]['orig'] += (float)$p['amount']; $paysByCur[$cur]['afn'] += $afn; $paysByCur[$cur]['cnt']++; }
-    // General payment = not linked to any invoice
-    if (empty($p['inv_id'])) { $generalPaysAfn += $afn; }
+    if (empty($p['inv_id']) && isset($debtByCur[$cur])) {
+        $debtByCur[$cur]['orig'] = max(0, $debtByCur[$cur]['orig'] - (float)$p['amount']);
+        $debtByCur[$cur]['afn']  = max(0, $debtByCur[$cur]['afn']  - $afn);
+        if ($debtByCur[$cur]['orig'] < 0.01) $debtByCur[$cur]['cnt'] = 0;
+    }
 }
-
-// True balance = invoice-level shortfall minus any general (unlinked) payments
-$totalDebtAfn = max(0.0, $invoiceBalAfn - $generalPaysAfn);
-$anyDebt      = $totalDebtAfn > 0.01;
+$anyDebt = array_sum(array_column($debtByCur,'orig')) > 0.01;
 $curMeta = ['AFN'=>['flag'=>'🇦🇫','col'=>'#16a34a'],'USD'=>['flag'=>'🇺🇸','col'=>'#1d4ed8'],'PKR'=>['flag'=>'🇵🇰','col'=>'#7c3aed']];
 ?>
 <!DOCTYPE html>
@@ -275,12 +278,10 @@ body {
 
         <div class="summary-cell">
             <div class="s-lbl">Balance Due</div>
-            <?php if ($anyDebt): ?>
-            <div class="s-val" style="color:#b91c1c;"><?= formatAFN($totalDebtAfn) ?></div>
-            <?php if($salesByCur['USD']['cnt'] > 0): ?>
-            <div class="s-sub">≈ <?= formatMoney(fromAFN($totalDebtAfn, $rates['USD']), 'USD') ?></div>
-            <?php endif; ?>
-            <?php else: ?>
+            <?php $anyD=false; foreach($curMeta as $cur=>$m): $d=$debtByCur[$cur]; if($d['orig']<0.01) continue; $anyD=true; ?>
+            <div class="s-val" style="color:#b91c1c;"><?= formatMoney($d['orig'],$cur) ?></div>
+            <?php if($cur!=='AFN'): ?><div class="s-sub">≈ <?= formatAFN($d['afn']) ?></div><?php endif; ?>
+            <?php endforeach; if(!$anyD): ?>
             <div class="s-val" style="color:#15803d;">Nil</div>
             <div class="s-sub" style="color:#15803d;">Fully settled</div>
             <?php endif; ?>

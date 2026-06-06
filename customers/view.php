@@ -82,25 +82,13 @@ $payments = $pdo->prepare("
 $payments->execute([$id]);
 $payments = $payments->fetchAll();
 
-$totalSales    = array_sum(array_column($sales, 'total_amount'));
+$totalSales = array_sum(array_column($sales, 'total_amount'));
 $totalPayments = 0;
-$generalPaysAfn = 0.0; // unlinked (general) payments — not reflected in invoice paid_amount
 $paysByCur  = ['AFN'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0],'USD'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0],'PKR'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0]];
 $salesByCur = ['AFN'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0],'USD'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0],'PKR'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0]];
 $debtByCur  = ['AFN'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0],'USD'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0],'PKR'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0]];
 
-foreach ($payments as $p) {
-    $afn = (float)$p['amount_afn'] ?: (float)$p['amount'];
-    $totalPayments += $afn;
-    $cur = $p['currency'] ?? 'AFN';
-    if (isset($paysByCur[$cur])) {
-        $paysByCur[$cur]['orig'] += (float)$p['amount'];
-        $paysByCur[$cur]['afn']  += $afn;
-        $paysByCur[$cur]['cnt']  ++;
-    }
-    if (empty($p['inv_id'])) $generalPaysAfn += $afn; // general payment not tied to any invoice
-}
-
+// Build sales totals and invoice-level debt first
 foreach ($sales as $s) {
     $sCur  = $s['currency'] ?? 'AFN';
     $sAfn  = (float)$s['total_amount'];
@@ -119,9 +107,22 @@ foreach ($sales as $s) {
     }
 }
 
-// Net debt = invoice-level balances minus unlinked general payments
-$invoiceDebtAfn = array_sum(array_column($debtByCur, 'afn'));
-$netDebtAfn     = max(0.0, $invoiceDebtAfn - $generalPaysAfn);
+// Then process payments — general payments subtract from their currency's debt bucket
+foreach ($payments as $p) {
+    $afn = (float)$p['amount_afn'] ?: (float)$p['amount'];
+    $totalPayments += $afn;
+    $cur = $p['currency'] ?? 'AFN';
+    if (isset($paysByCur[$cur])) {
+        $paysByCur[$cur]['orig'] += (float)$p['amount'];
+        $paysByCur[$cur]['afn']  += $afn;
+        $paysByCur[$cur]['cnt']  ++;
+    }
+    if (empty($p['inv_id']) && isset($debtByCur[$cur])) {
+        $debtByCur[$cur]['orig'] = max(0, $debtByCur[$cur]['orig'] - (float)$p['amount']);
+        $debtByCur[$cur]['afn']  = max(0, $debtByCur[$cur]['afn']  - $afn);
+        if ($debtByCur[$cur]['orig'] < 0.01) $debtByCur[$cur]['cnt'] = 0;
+    }
+}
 
 require_once '../includes/header.php';
 ?>
@@ -237,18 +238,18 @@ $cvCurMeta = [
         <div class="card h-100">
             <div class="card-body py-3">
                 <div class="text-muted small mb-2 fw-semibold"><?= __('cust_current_debt') ?></div>
-                <?php if ($netDebtAfn > 0.01): ?>
+                <?php $anyDebt = false; foreach ($cvCurMeta as $cur => $m): $d = $debtByCur[$cur]; if ($d['orig'] < 0.01) continue; $anyDebt = true; ?>
                 <div class="cv-cur-row">
-                    <span class="cv-cur-lbl">🇦🇫 <span style="color:#C42B1C;">AFN</span></span>
+                    <span class="cv-cur-lbl"><?= $m['flag'] ?> <span style="color:#C42B1C;"><?= $cur ?></span></span>
                     <div>
-                        <div class="cv-cur-amt" style="color:#C42B1C;"><?= formatAFN($netDebtAfn) ?></div>
-                        <?php if ($rateUSD > 0): ?><div class="cv-cur-eq">≈ <?= formatMoney(fromAFN($netDebtAfn, $rateUSD), 'USD') ?></div><?php endif; ?>
+                        <div class="cv-cur-amt" style="color:#C42B1C;"><?= formatMoney($d['orig'], $cur) ?></div>
+                        <?php if ($cur !== 'AFN'): ?><div class="cv-cur-eq">≈ <?= formatAFN($d['afn']) ?></div><?php endif; ?>
                     </div>
                 </div>
-                <?php else: ?>
+                <?php endforeach; if (!$anyDebt): ?>
                 <div class="cv-empty text-success fw-semibold">✓ Fully paid</div>
                 <?php endif; ?>
-                <div class="text-muted mt-2" style="font-size:0.68rem;"><?= $netDebtAfn > 0.01 ? array_sum(array_column($debtByCur,'cnt')).' open invoices' : 'All settled' ?></div>
+                <div class="text-muted mt-2" style="font-size:0.68rem;"><?= $anyDebt ? array_sum(array_column($debtByCur,'cnt')).' open invoices' : 'All settled' ?></div>
             </div>
         </div>
     </div>
