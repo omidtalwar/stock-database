@@ -29,13 +29,14 @@ $openInvoices = $pdo->query("
 ")->fetchAll(PDO::FETCH_ASSOC);
 
 $invoicesByCustomer = [];
+$debtByCustCur = []; // per-customer per-currency net debt for badge display
 foreach ($openInvoices as $inv) {
     $cid  = (int)$inv['customer_id'];
     $cur  = $inv['currency'];
     $rate = $allRates[$cur] ?? 1.0;
-    $balAfn = max(0.0, (float)$inv['total_amount'] - (float)$inv['paid_amount']); // always AFN
+    $balAfn = max(0.0, (float)$inv['total_amount'] - (float)$inv['paid_amount']);
     if ($balAfn < 0.01) continue;
-    $balOrig = $cur === 'AFN' ? $balAfn : fromAFN($balAfn, $rate); // in invoice currency
+    $balOrig = $cur === 'AFN' ? $balAfn : fromAFN($balAfn, $rate);
     $invoicesByCustomer[$cid][] = [
         'id'       => (int)$inv['id'],
         'num'      => '#' . str_pad($inv['id'], 4, '0', STR_PAD_LEFT),
@@ -43,10 +44,27 @@ foreach ($openInvoices as $inv) {
         'cur'      => $cur,
         'total'    => (float)$inv['total_amount'],
         'paid'     => (float)$inv['paid_amount'],
-        'bal'      => $balAfn,      // AFN — for server-side validation
-        'bal_orig' => $balOrig,     // in invoice currency — for display & pre-fill
+        'bal'      => $balAfn,
+        'bal_orig' => $balOrig,
         'date'     => date('d M Y', strtotime($inv['created_at'])),
     ];
+    // Accumulate per-currency debt for badge
+    $debtByCustCur[$cid][$cur] = ($debtByCustCur[$cid][$cur] ?? 0.0) + $balOrig;
+}
+
+// Subtract general payments per customer per currency from the badge totals
+$genPays = $pdo->query("
+    SELECT customer_id, COALESCE(currency,'AFN') AS currency, SUM(amount) AS orig
+    FROM payments WHERE sale_id IS NULL
+    GROUP BY customer_id, COALESCE(currency,'AFN')
+")->fetchAll(PDO::FETCH_ASSOC);
+foreach ($genPays as $gp) {
+    $cid = (int)$gp['customer_id'];
+    $cur = $gp['currency'];
+    if (isset($debtByCustCur[$cid][$cur])) {
+        $debtByCustCur[$cid][$cur] = max(0, $debtByCustCur[$cid][$cur] - (float)$gp['orig']);
+        if ($debtByCustCur[$cid][$cur] < 0.01) unset($debtByCustCur[$cid][$cur]);
+    }
 }
 
 function toShamsi(int $gy, int $gm, int $gd): array {
@@ -183,6 +201,7 @@ require_once '../includes/header.php';
                                      data-name="<?= htmlspecialchars($c['name']) ?>"
                                      data-shop="<?= htmlspecialchars($c['shop_name']) ?>"
                                      data-debt="<?= $c['total_debt'] ?>"
+                                     data-debt-cur="<?= htmlspecialchars(json_encode($debtByCustCur[$c['id']] ?? [])) ?>"
                                      data-q="<?= strtolower(htmlspecialchars($c['name'].' '.$c['shop_name'])) ?>"
                                      style="padding:9px 14px;cursor:pointer;border-bottom:1px solid rgba(0,0,0,0.05);transition:background .1s;">
                                     <div class="d-flex align-items-center justify-content-between gap-2">
@@ -192,10 +211,14 @@ require_once '../includes/header.php';
                                             <div class="text-muted" style="font-size:.72rem;"><?= htmlspecialchars($c['shop_name']) ?></div>
                                             <?php endif; ?>
                                         </div>
-                                        <?php if ($c['total_debt'] > 0): ?>
-                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle" style="font-size:.65rem;white-space:nowrap;">
-                                            🇦🇫 ؋ <?= number_format($c['total_debt'], 0) ?> due
-                                        </span>
+                                        <?php if (!empty($debtByCustCur[$c['id']])): ?>
+                                        <div style="text-align:right;">
+                                        <?php foreach ($debtByCustCur[$c['id']] as $dcur => $damt):
+                                            $dFmt = $dcur==='AFN' ? '🇦🇫 ؋ '.number_format($damt,0) : ($dcur==='USD' ? '🇺🇸 $ '.number_format($damt,2) : '🇵🇰 ₨ '.number_format($damt,0));
+                                        ?>
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle" style="font-size:.65rem;white-space:nowrap;display:block;"><?= $dFmt ?> due</span>
+                                        <?php endforeach; ?>
+                                        </div>
                                         <?php endif; ?>
                                     </div>
                                 </div>
@@ -549,13 +572,23 @@ document.getElementById('payForm').addEventListener('submit', function() {
         openDrop();
     }
 
+    const CUR_FMT = {
+        AFN: v => '🇦🇫 ؋ ' + Math.round(v).toLocaleString('en-US'),
+        USD: v => '🇺🇸 $ ' + parseFloat(v).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}),
+        PKR: v => '🇵🇰 ₨ ' + Math.round(v).toLocaleString('en-US'),
+    };
+
     function pick(el) {
         hidden.value = el.dataset.id;
         inp.value    = el.dataset.name + (el.dataset.shop ? ' — ' + el.dataset.shop : '');
         chosenName.textContent = el.dataset.name + (el.dataset.shop ? ' — ' + el.dataset.shop : '');
-        const debt = parseFloat(el.dataset.debt) || 0;
-        chosenDebt.textContent = debt > 0 ? '🇦🇫 ؋ ' + Math.round(debt).toLocaleString() + ' due' : '';
-        chosenDebt.style.color = debt > 0 ? '#C42B1C' : '';
+        // Show per-currency debt
+        const debtCur = JSON.parse(el.dataset.debtCur || '{}');
+        const parts = Object.entries(debtCur)
+            .filter(([, v]) => v > 0.01)
+            .map(([cur, v]) => (CUR_FMT[cur] ? CUR_FMT[cur](v) : cur + ' ' + v));
+        chosenDebt.textContent = parts.length ? parts.join(' · ') + ' due' : '';
+        chosenDebt.style.color = parts.length ? '#C42B1C' : '';
         chosen.style.display = '';
         inp.closest('.position-relative').style.display = 'none';
         closeDrop();
