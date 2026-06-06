@@ -49,7 +49,10 @@ foreach ($payments as $p) {
     if (isset($paysByCur[$cur])) { $paysByCur[$cur]['orig'] += (float)$p['amount']; $paysByCur[$cur]['afn'] += $afn; $paysByCur[$cur]['cnt']++; }
 }
 
-$anyDebt = array_sum(array_column($debtByCur,'cnt')) > 0;
+// Use customers.total_debt as the authoritative balance — it correctly reflects
+// general payments (which reduce total_debt but don't touch invoice paid_amount).
+$totalDebtAfn = (float)$customer['total_debt'];
+$anyDebt      = $totalDebtAfn > 0.01;
 $curMeta = ['AFN'=>['flag'=>'🇦🇫','col'=>'#16a34a'],'USD'=>['flag'=>'🇺🇸','col'=>'#1d4ed8'],'PKR'=>['flag'=>'🇵🇰','col'=>'#7c3aed']];
 ?>
 <!DOCTYPE html>
@@ -275,17 +278,21 @@ body {
 
         <div class="summary-cell">
             <div class="s-lbl">Balance Due</div>
-            <?php $anyD=false; foreach($curMeta as $cur=>$m): $d=$debtByCur[$cur]; if(!$d['cnt']) continue; $anyD=true; ?>
+            <?php if ($anyDebt): ?>
             <div class="cur-line">
-                <span class="cur-flag"><?= $m['flag'] ?></span>
-                <span class="s-val" style="color:#b91c1c;"><?= formatMoney($d['orig'],$cur) ?></span>
+                <span class="cur-flag">🇦🇫</span>
+                <span class="s-val" style="color:#b91c1c;"><?= formatAFN($totalDebtAfn) ?></span>
             </div>
-            <?php if($cur!=='AFN'): ?><div class="s-sub">≈ <?= formatAFN($d['afn']) ?></div><?php endif; ?>
-            <?php endforeach; if(!$anyD): ?>
+            <?php
+            // Also show USD equivalent if the customer has USD invoices
+            $hasUSD = $salesByCur['USD']['cnt'] > 0;
+            if ($hasUSD): ?>
+            <div class="s-sub">≈ <?= formatMoney(fromAFN($totalDebtAfn, $rates['USD']), 'USD') ?></div>
+            <?php endif; ?>
+            <?php else: ?>
             <div class="s-val" style="color:#15803d;">Nil</div>
             <div class="s-sub" style="color:#15803d;">Fully settled</div>
             <?php endif; ?>
-            <?php if($anyDebt): ?><div class="s-count"><?= array_sum(array_column($debtByCur,'cnt')) ?> open invoice<?= array_sum(array_column($debtByCur,'cnt'))!==1?'s':'' ?></div><?php endif; ?>
         </div>
 
     </div>
