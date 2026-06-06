@@ -112,6 +112,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             $pdo->prepare("UPDATE customers SET total_debt = total_debt + ? WHERE id = ?")->execute([$balance, $customer_id]);
+
+            // Record initial payment in payments table so it appears in payment history
+            if ($paid_amount > 0) {
+                $pdo->prepare("
+                    INSERT INTO payments (customer_id, sale_id, amount, currency, exchange_rate, amount_afn, notes, payment_date, created_by)
+                    VALUES (?,?,?,?,?,?,?,?,?)
+                ")->execute([
+                    $customer_id,
+                    $saleId,
+                    $paid_amount_input,
+                    $paid_currency,
+                    $allRates[$paid_currency],
+                    $paid_amount,
+                    null,
+                    $sale_date,
+                    $_SESSION['user_id'],
+                ]);
+            }
+
             $pdo->commit();
             $_SESSION['success'] = '#'.str_pad($saleId,4,'0',STR_PAD_LEFT);
             header("Location: view.php?id=$saleId");
