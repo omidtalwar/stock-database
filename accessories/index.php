@@ -17,18 +17,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $name  = trim($_POST['name'] ?? '');
     $phone = trim($_POST['phone'] ?? '');
-    $notes = trim($_POST['notes'] ?? '');
+    $totalStock = (float)($_POST['total_stock'] ?? 0);
 
     if ($name === '') {
         $_SESSION['error'] = 'Owner name is required.';
+    } elseif ($totalStock < 0) {
+        $_SESSION['error'] = 'Total stock cannot be negative.';
     } else {
-        $stmt = $pdo->prepare("
-            INSERT INTO accessory_owners (name, phone, notes, created_by)
-            VALUES (?, ?, ?, ?)
-        ");
-        $stmt->execute([$name, $phone ?: null, $notes ?: null, $_SESSION['user_id'] ?? null]);
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare("
+                INSERT INTO accessory_owners (name, phone, created_by)
+                VALUES (?, ?, ?)
+            ");
+            $stmt->execute([$name, $phone ?: null, $_SESSION['user_id'] ?? null]);
+            $ownerId = (int)$pdo->lastInsertId();
+
+            if ($totalStock > 0) {
+                $stmt = $pdo->prepare("
+                    INSERT INTO accessory_stock_entries
+                        (owner_id, entry_date, item_name, quantity, total_amount, notes, created_by)
+                    VALUES (?, ?, ?, ?, 0, ?, ?)
+                ");
+                $stmt->execute([
+                    $ownerId,
+                    date('Y-m-d'),
+                    'Opening stock',
+                    $totalStock,
+                    'Initial stock registered with owner',
+                    $_SESSION['user_id'] ?? null,
+                ]);
+            }
+
+            $pdo->commit();
+        } catch (\Throwable $e) {
+            $pdo->rollBack();
+            $_SESSION['error'] = 'Save failed: ' . $e->getMessage();
+            header('Location: index.php'); exit;
+        }
+
         $_SESSION['success'] = 'Accessory owner registered.';
-        header('Location: owner.php?id=' . $pdo->lastInsertId()); exit;
+        header('Location: owner.php?id=' . $ownerId); exit;
     }
 }
 
@@ -172,8 +201,8 @@ require_once '../includes/header.php';
                     <input type="text" name="phone" class="form-control">
                 </div>
                 <div>
-                    <label class="form-label fw-semibold">Notes</label>
-                    <textarea name="notes" class="form-control" rows="3"></textarea>
+                    <label class="form-label fw-semibold">Total Stock</label>
+                    <input type="number" step="0.01" min="0" name="total_stock" class="form-control" value="0" required>
                 </div>
             </div>
             <div class="modal-footer">
