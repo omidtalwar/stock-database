@@ -49,15 +49,33 @@ $rateUSD = $rates['USD'];
 $ratePKR = $rates['PKR'];
 
 // ── Period filter ──
-$period = in_array($_GET['period'] ?? '', ['today','week','month','all'])
+$period = in_array($_GET['period'] ?? '', ['today','week','month','all','custom'])
     ? $_GET['period'] : 'today';
 
-$periodWhere = match($period) {
-    'week'  => "YEARWEEK(created_at, 1) = YEARWEEK(CURDATE(), 1)",
-    'month' => "DATE_FORMAT(created_at, '%Y-%m') = DATE_FORMAT(CURDATE(), '%Y-%m')",
-    'all'   => "1=1",
-    default => "DATE(created_at) = CURDATE()",
+$dateFrom = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['date_from'] ?? '') ? $_GET['date_from'] : date('Y-m-01');
+$dateTo   = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['date_to']   ?? '') ? $_GET['date_to']   : date('Y-m-d');
+
+// Invoice date filter — uses COALESCE(sale_date, DATE(created_at)) so Shamsi-backdated sales are counted correctly
+$_iEx = "COALESCE(sale_date, DATE(created_at))";
+$invWhere = match($period) {
+    'week'   => "YEARWEEK($_iEx,1)=YEARWEEK(CURDATE(),1)",
+    'month'  => "DATE_FORMAT($_iEx,'%Y-%m')=DATE_FORMAT(CURDATE(),'%Y-%m')",
+    'custom' => "$_iEx BETWEEN '$dateFrom' AND '$dateTo'",
+    'all'    => "1=1",
+    default  => "$_iEx=CURDATE()",
 };
+
+// Payment date filter — uses COALESCE(payment_date, DATE(created_at))
+$_pEx = "COALESCE(payment_date, DATE(created_at))";
+$payWhere = match($period) {
+    'week'   => "YEARWEEK($_pEx,1)=YEARWEEK(CURDATE(),1)",
+    'month'  => "DATE_FORMAT($_pEx,'%Y-%m')=DATE_FORMAT(CURDATE(),'%Y-%m')",
+    'custom' => "$_pEx BETWEEN '$dateFrom' AND '$dateTo'",
+    'all'    => "1=1",
+    default  => "$_pEx=CURDATE()",
+};
+
+$periodWhere = $invWhere; // backward compat alias
 
 if ($pinVerified) {
 $periodSales = (float)$pdo->query("SELECT COALESCE(SUM(total_amount),0) FROM sales WHERE $periodWhere")->fetchColumn();
@@ -85,11 +103,12 @@ foreach ($salesByCur as $_r) {
 }
 $grandAfn = array_sum(array_column($curBreakdown,'afn'));
 
-// Receivable by currency — invoice-level, then subtract general payments so total matches customers.total_debt
+// Receivable by currency — filtered by selected period, invoice-level balances
+$_invW2 = str_replace('sale_date', 's.sale_date', str_replace('created_at', 's.created_at', $invWhere));
 $debtByCur = $pdo->query("
-    SELECT COALESCE(currency,'AFN') AS currency,
-           COALESCE(SUM(total_amount - paid_amount),0) AS bal, COUNT(*) AS cnt
-    FROM sales WHERE total_amount > paid_amount GROUP BY currency
+    SELECT COALESCE(s.currency,'AFN') AS currency,
+           COALESCE(SUM(s.total_amount - s.paid_amount),0) AS bal, COUNT(*) AS cnt
+    FROM sales s WHERE s.total_amount > s.paid_amount AND $_invW2 GROUP BY s.currency
 ")->fetchAll(PDO::FETCH_ASSOC);
 $debtCurData = ['AFN'=>['afn'=>0.0,'orig'=>0.0,'cnt'=>0],'USD'=>['afn'=>0.0,'orig'=>0.0,'cnt'=>0],'PKR'=>['afn'=>0.0,'orig'=>0.0,'cnt'=>0]];
 foreach ($debtByCur as $_r) {
@@ -97,28 +116,29 @@ foreach ($debtByCur as $_r) {
     $_a = (float)$_r['bal']; $_rt = $rates[$_c] ?? 1.0;
     $debtCurData[$_c] = ['afn'=>$_a, 'orig'=>$_c==='AFN'?$_a:fromAFN($_a,$_rt), 'cnt'=>(int)$_r['cnt']];
 }
-// Subtract general (unlinked) payments from their matching currency bucket only
-$_genPays = $pdo->query("
-    SELECT COALESCE(currency,'AFN') AS currency,
-           SUM(amount) AS orig,
-           SUM(COALESCE(NULLIF(amount_afn,0), amount)) AS afn
-    FROM payments WHERE sale_id IS NULL
-    GROUP BY COALESCE(currency,'AFN')
-")->fetchAll(PDO::FETCH_ASSOC);
-foreach ($_genPays as $_gp) {
-    $_c = $_gp['currency'];
-    if (!array_key_exists($_c, $debtCurData)) continue;
-    $debtCurData[$_c]['orig'] = max(0, $debtCurData[$_c]['orig'] - (float)$_gp['orig']);
-    $debtCurData[$_c]['afn']  = max(0, $debtCurData[$_c]['afn']  - (float)$_gp['afn']);
-    if ($debtCurData[$_c]['orig'] < 0.01) $debtCurData[$_c]['cnt'] = 0;
+// For all-time view, also subtract general unlinked payments per currency
+if ($period === 'all') {
+    $_genPays = $pdo->query("
+        SELECT COALESCE(currency,'AFN') AS currency,
+               SUM(amount) AS orig, SUM(COALESCE(NULLIF(amount_afn,0),amount)) AS afn
+        FROM payments WHERE sale_id IS NULL
+        GROUP BY COALESCE(currency,'AFN')
+    ")->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($_genPays as $_gp) {
+        $_c = $_gp['currency'];
+        if (!array_key_exists($_c, $debtCurData)) continue;
+        $debtCurData[$_c]['orig'] = max(0, $debtCurData[$_c]['orig'] - (float)$_gp['orig']);
+        $debtCurData[$_c]['afn']  = max(0, $debtCurData[$_c]['afn']  - (float)$_gp['afn']);
+        if ($debtCurData[$_c]['orig'] < 0.01) $debtCurData[$_c]['cnt'] = 0;
+    }
 }
 
-// Collected at-invoice by currency (period-filtered)
-$_pwSC = str_replace('created_at','s.created_at',$periodWhere);
+// Collected by currency — from payments table filtered by payment date
+$_pwSC = str_replace('payment_date','p.payment_date',str_replace('created_at','p.created_at',$payWhere));
 $collByCur = $pdo->query("
-    SELECT COALESCE(s.currency,'AFN') AS currency,
-           COALESCE(SUM(s.paid_amount),0) AS col, COUNT(*) AS cnt
-    FROM sales s WHERE s.paid_amount > 0 AND $_pwSC GROUP BY s.currency
+    SELECT COALESCE(p.currency,'AFN') AS currency,
+           COALESCE(SUM(p.amount),0) AS col, COUNT(*) AS cnt
+    FROM payments p WHERE $_pwSC GROUP BY p.currency
 ")->fetchAll(PDO::FETCH_ASSOC);
 $collCurData = ['AFN'=>['afn'=>0.0,'orig'=>0.0,'cnt'=>0],'USD'=>['afn'=>0.0,'orig'=>0.0,'cnt'=>0],'PKR'=>['afn'=>0.0,'orig'=>0.0,'cnt'=>0]];
 foreach ($collByCur as $_r) {
@@ -142,11 +162,11 @@ $topDebtors = $pdo->query("
     ORDER BY total_debt DESC LIMIT 5
 ")->fetchAll();
 
-    $pwSales = str_replace('created_at', 's.created_at', $periodWhere);
-    $pwPay   = str_replace('created_at', 'p.created_at', $periodWhere);
+    $pwSales = str_replace(['sale_date','created_at'], ['s.sale_date','s.created_at'], $invWhere);
+    $pwPay   = str_replace(['payment_date','created_at'], ['p.payment_date','p.created_at'], $payWhere);
     $adminStats = [
         'total_sales' => (float)$pdo->query("SELECT COALESCE(SUM(total_amount),0) FROM sales s WHERE $pwSales")->fetchColumn(),
-        'collected'   => (float)$pdo->query("SELECT COALESCE(SUM(paid_amount),0) FROM sales s WHERE $pwSales")->fetchColumn(),
+        'collected'   => (float)$pdo->query("SELECT COALESCE(SUM(amount),0) FROM payments p WHERE $pwPay")->fetchColumn(),
         'payments'    => (float)$pdo->query("SELECT COALESCE(SUM(COALESCE(NULLIF(amount_afn,0),amount)),0) FROM payments p WHERE $pwPay")->fetchColumn(),
     ];
 
@@ -799,19 +819,39 @@ body.pin-locked .debtor-debt .s { filter: blur(7px); user-select: none; pointer-
 
         <!-- Period filter bar -->
         <?php
-        $periodUrl = fn(string $p) => '?period=' . $p;
         $periodLabels = [
-            'today' => '<i class="bi bi-sun"></i> ' . __('period_today'),
-            'week'  => '<i class="bi bi-calendar-week"></i> ' . __('period_week'),
-            'month' => '<i class="bi bi-calendar-month"></i> ' . __('period_month'),
-            'all'   => '<i class="bi bi-infinity"></i> ' . __('period_all'),
+            'today'  => '<i class="bi bi-sun"></i> ' . __('period_today'),
+            'week'   => '<i class="bi bi-calendar-week"></i> ' . __('period_week'),
+            'month'  => '<i class="bi bi-calendar-month"></i> ' . __('period_month'),
+            'all'    => '<i class="bi bi-infinity"></i> ' . __('period_all'),
+            'custom' => '<i class="bi bi-calendar-range"></i> Custom',
         ];
+        $keepParams = $period === 'custom' ? "&date_from=$dateFrom&date_to=$dateTo" : '';
         ?>
         <div class="period-bar">
             <?php foreach ($periodLabels as $pk => $pl): ?>
-            <a href="<?= $periodUrl($pk) ?>" class="period-btn <?= $period === $pk ? 'active' : '' ?>"><?= $pl ?></a>
+            <a href="?period=<?= $pk ?><?= $keepParams ?>" class="period-btn <?= $period === $pk ? 'active' : '' ?>"><?= $pl ?></a>
             <?php endforeach; ?>
         </div>
+        <?php if ($period === 'custom'): ?>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap;">
+            <form method="GET" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <input type="hidden" name="period" value="custom">
+                <label style="font-size:0.78rem;font-weight:600;color:var(--w11-muted);">From</label>
+                <input type="date" name="date_from" value="<?= htmlspecialchars($dateFrom) ?>"
+                       class="form-control form-control-sm" style="width:150px;" required>
+                <label style="font-size:0.78rem;font-weight:600;color:var(--w11-muted);">To</label>
+                <input type="date" name="date_to" value="<?= htmlspecialchars($dateTo) ?>"
+                       class="form-control form-control-sm" style="width:150px;" required>
+                <button type="submit" class="btn btn-sm btn-primary">
+                    <i class="bi bi-arrow-right me-1"></i>Apply
+                </button>
+            </form>
+            <span class="text-muted small">
+                Showing: <strong><?= date('d M Y', strtotime($dateFrom)) ?></strong> — <strong><?= date('d M Y', strtotime($dateTo)) ?></strong>
+            </span>
+        </div>
+        <?php endif; ?>
 
         <?php
         // Currency meta used across all 3 cards
