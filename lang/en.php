@@ -26,6 +26,7 @@ return [
     'nav_sales'         => 'Sales / Invoices',
     'nav_payments'      => 'Payments',
     'nav_stock'         => 'Stock Log',
+    'nav_accessories'   => 'Accessories',
     'nav_users'         => 'User Management',
     'nav_reports'       => 'Reports',
     'nav_exchange'      => 'Settings & Exchange',
@@ -280,6 +281,12 @@ return [
     'rep_revenue'        => 'Revenue',
     'rep_qty'            => 'Qty',
     'rep_no_data'        => 'No data for this period',
+
+    // Accessories
+    'accessories_title'            => 'Accessories',
+    'accessories_sub'              => 'Placeholder section for accessories management',
+    'accessories_placeholder_title'=> 'Accessories section coming soon',
+    'accessories_placeholder_text' => 'This area is ready for accessories records, stock entries, suppliers, and reports when you want to build it out.',
 
     // ── Delete messages ──
     'cust_deleted'       => 'Customer "%s" deleted.',

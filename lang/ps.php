@@ -26,6 +26,7 @@ return [
     'nav_sales'         => 'پلورنې / بلونه',
     'nav_payments'      => 'تادیات',
     'nav_stock'         => 'حساب - کابل',
+    'nav_accessories'   => 'Accessories',
     'nav_users'         => 'د کاربرانو مدیریت',
     'nav_reports'       => 'راپورونه',
     'nav_exchange'      => 'د بدلون نرخ',
@@ -280,6 +281,12 @@ return [
     'rep_revenue'        => 'عاید',
     'rep_qty'            => 'شمیر',
     'rep_no_data'        => 'د دې دورې لپاره معلومات نشته',
+
+    // Accessories
+    'accessories_title'            => 'Accessories',
+    'accessories_sub'              => 'Placeholder section for accessories management',
+    'accessories_placeholder_title'=> 'Accessories section coming soon',
+    'accessories_placeholder_text' => 'This area is ready for accessories records, stock entries, suppliers, and reports when you want to build it out.',
 
     // ── Delete messages ──
     'cust_deleted'       => 'پیرودونکی "%s" ړنګ شو.',
