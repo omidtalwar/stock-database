@@ -91,6 +91,37 @@ CREATE TABLE IF NOT EXISTS stock_logs (
     FOREIGN KEY (created_by) REFERENCES users(id)
 );
 
+-- Accessory owners
+CREATE TABLE IF NOT EXISTS accessory_owners (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(150) NOT NULL,
+    phone VARCHAR(40),
+    notes TEXT,
+    created_by INT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_accessory_owners_name (name)
+);
+
+-- Accessory stock ledger
+CREATE TABLE IF NOT EXISTS accessory_stock_entries (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    owner_id INT NOT NULL,
+    entry_date DATE,
+    item_name VARCHAR(180) NOT NULL,
+    quantity DECIMAL(10,2) NOT NULL DEFAULT 0,
+    original_size DECIMAL(10,2),
+    coffee_size DECIMAL(10,2),
+    pes_size DECIMAL(10,2),
+    plastic_size DECIMAL(10,2),
+    meterage DECIMAL(10,2),
+    rate DECIMAL(12,2),
+    total_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+    notes TEXT,
+    created_by INT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (owner_id) REFERENCES accessory_owners(id) ON DELETE CASCADE
+);
+
 -- Settings (exchange rate & currency config)
 CREATE TABLE IF NOT EXISTS settings (
     `key`       VARCHAR(50) PRIMARY KEY,
