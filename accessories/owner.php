@@ -25,15 +25,70 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: owner.php?id=' . $id); exit;
     }
 
-    $itemName = trim($_POST['item_name'] ?? '');
-    $quantity = (float)($_POST['quantity'] ?? 0);
-    $rate     = decimalOrNull($_POST['rate'] ?? null);
-    $total    = accessoryAmount($quantity, $rate, decimalOrNull($_POST['total_amount'] ?? null));
     $date     = trim($_POST['entry_date'] ?? '') ?: date('Y-m-d');
     if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) $date = date('Y-m-d');
 
-    if ($itemName === '' || $quantity <= 0) {
-        $_SESSION['error'] = 'Item name and quantity are required.';
+    $itemNames = $_POST['item_name'] ?? [];
+    $quantities = $_POST['quantity'] ?? [];
+    $originalSizes = $_POST['original_size'] ?? [];
+    $coffeeSizes = $_POST['coffee_size'] ?? [];
+    $pesSizes = $_POST['pes_size'] ?? [];
+    $plasticSizes = $_POST['plastic_size'] ?? [];
+    $meterages = $_POST['meterage'] ?? [];
+    $rates = $_POST['rate'] ?? [];
+    $notes = $_POST['notes'] ?? [];
+
+    $rows = [];
+    $rowCount = max(
+        count($itemNames),
+        count($quantities),
+        count($originalSizes),
+        count($coffeeSizes),
+        count($pesSizes),
+        count($plasticSizes),
+        count($meterages),
+        count($rates),
+        count($notes)
+    );
+
+    for ($i = 0; $i < $rowCount; $i++) {
+        $itemName = trim($itemNames[$i] ?? '');
+        $quantity = (float)($quantities[$i] ?? 0);
+        $originalSize = decimalOrNull($originalSizes[$i] ?? null);
+        $coffeeSize = decimalOrNull($coffeeSizes[$i] ?? null);
+        $pesSize = decimalOrNull($pesSizes[$i] ?? null);
+        $plasticSize = decimalOrNull($plasticSizes[$i] ?? null);
+        $meterage = decimalOrNull($meterages[$i] ?? null);
+        $rate = decimalOrNull($rates[$i] ?? null);
+
+        $hasAnyValue = $itemName !== '' || $quantity > 0 || $originalSize !== null || $coffeeSize !== null
+            || $pesSize !== null || $plasticSize !== null || $meterage !== null || $rate !== null;
+
+        if (!$hasAnyValue) {
+            continue;
+        }
+
+        if ($itemName === '' || $quantity <= 0) {
+            $_SESSION['error'] = 'Every filled row needs quantity and item name.';
+            header('Location: owner.php?id=' . $id); exit;
+        }
+
+        $rows[] = [
+            'item_name' => $itemName,
+            'quantity' => $quantity,
+            'original_size' => $originalSize,
+            'coffee_size' => $coffeeSize,
+            'pes_size' => $pesSize,
+            'plastic_size' => $plasticSize,
+            'meterage' => $meterage,
+            'rate' => $rate,
+            'total_amount' => ($meterage ?? 0) * ($rate ?? 0),
+            'notes' => trim($notes[$i] ?? '') ?: null,
+        ];
+    }
+
+    if (empty($rows)) {
+        $_SESSION['error'] = 'Add at least one accessory row.';
     } else {
         $stmt = $pdo->prepare("
             INSERT INTO accessory_stock_entries
@@ -41,16 +96,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                  pes_size, plastic_size, meterage, rate, total_amount, notes, created_by)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
-        $stmt->execute([
-            $id, $date, $itemName, $quantity,
-            decimalOrNull($_POST['original_size'] ?? null),
-            decimalOrNull($_POST['coffee_size'] ?? null),
-            decimalOrNull($_POST['pes_size'] ?? null),
-            decimalOrNull($_POST['plastic_size'] ?? null),
-            decimalOrNull($_POST['meterage'] ?? null),
-            $rate, $total, trim($_POST['notes'] ?? '') ?: null, $_SESSION['user_id'] ?? null,
-        ]);
-        $_SESSION['success'] = 'Accessory stock entry saved.';
+        foreach ($rows as $row) {
+            $stmt->execute([
+                $id, $date, $row['item_name'], $row['quantity'],
+                $row['original_size'], $row['coffee_size'], $row['pes_size'],
+                $row['plastic_size'], $row['meterage'], $row['rate'],
+                $row['total_amount'], $row['notes'], $_SESSION['user_id'] ?? null,
+            ]);
+        }
+        $_SESSION['success'] = count($rows) . ' accessory row(s) saved.';
         header('Location: owner.php?id=' . $id); exit;
     }
 }
@@ -74,7 +128,7 @@ $totals = [
     'plastic' => array_sum(array_map(fn($e) => (float)$e['plastic_size'], $entries)),
     'meterage' => array_sum(array_map(fn($e) => (float)$e['meterage'], $entries)),
 ];
-$avgRate = $totals['quantity'] > 0 ? $totals['amount'] / $totals['quantity'] : 0;
+$avgRate = $totals['meterage'] > 0 ? $totals['amount'] / $totals['meterage'] : 0;
 $formToken = generateFormToken('accessory_entry_' . $id);
 
 require_once '../includes/header.php';
@@ -121,7 +175,7 @@ require_once '../includes/header.php';
     <div class="col-6 col-lg-3">
         <div class="card border-0" style="background:rgba(157,93,0,0.10);">
             <div class="card-body">
-                <div class="text-muted small fw-semibold text-uppercase">Avg Rate</div>
+                <div class="text-muted small fw-semibold text-uppercase">Avg Rate / مترانه</div>
                 <div class="fs-4 fw-bold" style="color:#9D5D00;">؋ <?= number_format($avgRate, 2) ?></div>
             </div>
         </div>
@@ -134,33 +188,33 @@ require_once '../includes/header.php';
     </div>
     <div class="card-body">
         <div class="row g-3">
-            <div class="col-6 col-md"><div class="text-muted small">Original</div><div class="fw-bold"><?= number_format($totals['original'], 2) ?></div></div>
-            <div class="col-6 col-md"><div class="text-muted small">Coffee</div><div class="fw-bold"><?= number_format($totals['coffee'], 2) ?></div></div>
+            <div class="col-6 col-md"><div class="text-muted small">اصلي چیکو</div><div class="fw-bold"><?= number_format($totals['original'], 2) ?></div></div>
+            <div class="col-6 col-md"><div class="text-muted small">کافی</div><div class="fw-bold"><?= number_format($totals['coffee'], 2) ?></div></div>
             <div class="col-6 col-md"><div class="text-muted small">Pes</div><div class="fw-bold"><?= number_format($totals['pes'], 2) ?></div></div>
-            <div class="col-6 col-md"><div class="text-muted small">Plastic</div><div class="fw-bold"><?= number_format($totals['plastic'], 2) ?></div></div>
-            <div class="col-6 col-md"><div class="text-muted small">Meterage</div><div class="fw-bold"><?= number_format($totals['meterage'], 2) ?></div></div>
+            <div class="col-6 col-md"><div class="text-muted small">پلاستیکی</div><div class="fw-bold"><?= number_format($totals['plastic'], 2) ?></div></div>
+            <div class="col-6 col-md"><div class="text-muted small">مترانه</div><div class="fw-bold"><?= number_format($totals['meterage'], 2) ?></div></div>
         </div>
     </div>
 </div>
 
 <div class="card">
     <div class="card-header py-3 fw-semibold">
-        <i class="bi bi-table me-2 text-primary"></i>Accessory Stock Ledger
+        <i class="bi bi-table me-2 text-primary"></i>دوکان رخت فروشی فضل الحق
     </div>
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
             <thead>
                 <tr>
-                    <th>Date</th>
-                    <th class="text-end">Qty</th>
-                    <th>Item / Type</th>
-                    <th class="text-end">Original</th>
-                    <th class="text-end">Coffee</th>
+                    <th>تاریخ</th>
+                    <th class="text-end">تعداد</th>
+                    <th>جنس</th>
+                    <th class="text-end">اصلي چیکو</th>
+                    <th class="text-end">کافی</th>
                     <th class="text-end">Pes</th>
-                    <th class="text-end">Plastic</th>
-                    <th class="text-end">Meterage</th>
-                    <th class="text-end">Rate</th>
-                    <th class="text-end">Total</th>
+                    <th class="text-end">پلاستیکی</th>
+                    <th class="text-end">مترانه</th>
+                    <th class="text-end">نرخ</th>
+                    <th class="text-end">جمله</th>
                 </tr>
             </thead>
             <tbody>
@@ -186,6 +240,22 @@ require_once '../includes/header.php';
                 <?php endforeach; ?>
                 <?php endif; ?>
             </tbody>
+            <?php if (!empty($entries)): ?>
+            <tfoot>
+                <tr class="table-light fw-bold">
+                    <td>ټول</td>
+                    <td class="text-end"><?= number_format($totals['quantity'], 2) ?></td>
+                    <td></td>
+                    <td class="text-end"><?= number_format($totals['original'], 2) ?></td>
+                    <td class="text-end"><?= number_format($totals['coffee'], 2) ?></td>
+                    <td class="text-end"><?= number_format($totals['pes'], 2) ?></td>
+                    <td class="text-end"><?= number_format($totals['plastic'], 2) ?></td>
+                    <td class="text-end"><?= number_format($totals['meterage'], 2) ?></td>
+                    <td></td>
+                    <td class="text-end">Ø‹ <?= number_format($totals['amount'], 2) ?></td>
+                </tr>
+            </tfoot>
+            <?php endif; ?>
         </table>
     </div>
 </div>
@@ -199,51 +269,61 @@ require_once '../includes/header.php';
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <div class="row g-3">
-                    <div class="col-md-3">
-                        <label class="form-label fw-semibold">Date</label>
+                <div class="d-flex align-items-center justify-content-between gap-2 mb-3 flex-wrap">
+                    <div style="max-width:220px;">
+                        <label class="form-label fw-semibold">تاریخ</label>
                         <input type="date" name="entry_date" class="form-control" value="<?= date('Y-m-d') ?>">
                     </div>
-                    <div class="col-md-3">
-                        <label class="form-label fw-semibold">Quantity</label>
-                        <input type="number" step="0.01" min="0" name="quantity" class="form-control" required>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold">Item / Type</label>
-                        <input type="text" name="item_name" class="form-control" required>
-                    </div>
-                    <div class="col-6 col-md-2">
-                        <label class="form-label fw-semibold">Original</label>
-                        <input type="number" step="0.01" min="0" name="original_size" class="form-control">
-                    </div>
-                    <div class="col-6 col-md-2">
-                        <label class="form-label fw-semibold">Coffee</label>
-                        <input type="number" step="0.01" min="0" name="coffee_size" class="form-control">
-                    </div>
-                    <div class="col-6 col-md-2">
-                        <label class="form-label fw-semibold">Pes</label>
-                        <input type="number" step="0.01" min="0" name="pes_size" class="form-control">
-                    </div>
-                    <div class="col-6 col-md-2">
-                        <label class="form-label fw-semibold">Plastic</label>
-                        <input type="number" step="0.01" min="0" name="plastic_size" class="form-control">
-                    </div>
-                    <div class="col-6 col-md-2">
-                        <label class="form-label fw-semibold">Meterage</label>
-                        <input type="number" step="0.01" min="0" name="meterage" class="form-control">
-                    </div>
-                    <div class="col-6 col-md-2">
-                        <label class="form-label fw-semibold">Rate</label>
-                        <input type="number" step="0.01" min="0" name="rate" class="form-control">
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label fw-semibold">Total Amount</label>
-                        <input type="number" step="0.01" min="0" name="total_amount" class="form-control" placeholder="Auto: quantity x rate">
-                    </div>
-                    <div class="col-md-8">
-                        <label class="form-label fw-semibold">Notes</label>
-                        <input type="text" name="notes" class="form-control">
-                    </div>
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="addAccessoryRow">
+                        <i class="bi bi-plus-lg me-1"></i>Add Row
+                    </button>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-bordered align-middle mb-0" id="accessoryEntryTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width:80px;">تعداد</th>
+                                <th style="min-width:180px;">جنس</th>
+                                <th style="width:95px;">اصلي چیکو</th>
+                                <th style="width:90px;">کافی</th>
+                                <th style="width:90px;">Pes</th>
+                                <th style="width:95px;">پلاستیکی</th>
+                                <th style="width:95px;">مترانه</th>
+                                <th style="width:90px;">نرخ</th>
+                                <th style="width:110px;">جمله</th>
+                                <th style="width:48px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="accessoryEntryRows">
+                            <?php for ($i = 0; $i < 6; $i++): ?>
+                            <tr>
+                                <td><input type="number" step="0.01" min="0" name="quantity[]" class="form-control form-control-sm"></td>
+                                <td><input type="text" name="item_name[]" class="form-control form-control-sm"></td>
+                                <td><input type="number" step="0.01" min="0" name="original_size[]" class="form-control form-control-sm"></td>
+                                <td><input type="number" step="0.01" min="0" name="coffee_size[]" class="form-control form-control-sm"></td>
+                                <td><input type="number" step="0.01" min="0" name="pes_size[]" class="form-control form-control-sm"></td>
+                                <td><input type="number" step="0.01" min="0" name="plastic_size[]" class="form-control form-control-sm"></td>
+                                <td><input type="number" step="0.01" min="0" name="meterage[]" class="form-control form-control-sm calc-meterage"></td>
+                                <td><input type="number" step="0.01" min="0" name="rate[]" class="form-control form-control-sm calc-rate"></td>
+                                <td><input type="text" class="form-control form-control-sm row-total" value="0.00" readonly></td>
+                                <td class="text-center">
+                                    <button type="button" class="btn btn-sm btn-light remove-row" title="Remove row">
+                                        <i class="bi bi-x"></i>
+                                    </button>
+                                    <input type="hidden" name="notes[]" value="">
+                                </td>
+                            </tr>
+                            <?php endfor; ?>
+                        </tbody>
+                        <tfoot>
+                            <tr class="table-light fw-bold">
+                                <td colspan="8" class="text-end">ټول جمله</td>
+                                <td><input type="text" id="entryGrandTotal" class="form-control form-control-sm fw-bold" value="0.00" readonly></td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
+                    </table>
                 </div>
             </div>
             <div class="modal-footer">
@@ -253,5 +333,70 @@ require_once '../includes/header.php';
         </form>
     </div>
 </div>
+
+<template id="accessoryEntryRowTemplate">
+    <tr>
+        <td><input type="number" step="0.01" min="0" name="quantity[]" class="form-control form-control-sm"></td>
+        <td><input type="text" name="item_name[]" class="form-control form-control-sm"></td>
+        <td><input type="number" step="0.01" min="0" name="original_size[]" class="form-control form-control-sm"></td>
+        <td><input type="number" step="0.01" min="0" name="coffee_size[]" class="form-control form-control-sm"></td>
+        <td><input type="number" step="0.01" min="0" name="pes_size[]" class="form-control form-control-sm"></td>
+        <td><input type="number" step="0.01" min="0" name="plastic_size[]" class="form-control form-control-sm"></td>
+        <td><input type="number" step="0.01" min="0" name="meterage[]" class="form-control form-control-sm calc-meterage"></td>
+        <td><input type="number" step="0.01" min="0" name="rate[]" class="form-control form-control-sm calc-rate"></td>
+        <td><input type="text" class="form-control form-control-sm row-total" value="0.00" readonly></td>
+        <td class="text-center">
+            <button type="button" class="btn btn-sm btn-light remove-row" title="Remove row">
+                <i class="bi bi-x"></i>
+            </button>
+            <input type="hidden" name="notes[]" value="">
+        </td>
+    </tr>
+</template>
+
+<script>
+(function () {
+    const rows = document.getElementById('accessoryEntryRows');
+    const addBtn = document.getElementById('addAccessoryRow');
+    const template = document.getElementById('accessoryEntryRowTemplate');
+    const grandTotal = document.getElementById('entryGrandTotal');
+
+    function num(value) {
+        const parsed = parseFloat(value);
+        return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    function recalc() {
+        let total = 0;
+        rows.querySelectorAll('tr').forEach(row => {
+            const meterage = num(row.querySelector('.calc-meterage')?.value);
+            const rate = num(row.querySelector('.calc-rate')?.value);
+            const rowTotal = meterage * rate;
+            const out = row.querySelector('.row-total');
+            if (out) out.value = rowTotal.toFixed(2);
+            total += rowTotal;
+        });
+        grandTotal.value = total.toFixed(2);
+    }
+
+    addBtn?.addEventListener('click', () => {
+        rows.appendChild(template.content.firstElementChild.cloneNode(true));
+        recalc();
+    });
+
+    rows?.addEventListener('input', event => {
+        if (event.target.matches('.calc-meterage, .calc-rate')) recalc();
+    });
+
+    rows?.addEventListener('click', event => {
+        const btn = event.target.closest('.remove-row');
+        if (!btn) return;
+        if (rows.querySelectorAll('tr').length > 1) btn.closest('tr').remove();
+        recalc();
+    });
+
+    recalc();
+})();
+</script>
 
 <?php require_once '../includes/footer.php'; ?>
