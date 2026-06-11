@@ -55,20 +55,33 @@ $owners = $pdo->query("
            COALESCE(SUM(e.coffee_size), 0)   AS issued_coffee,
            COALESCE(SUM(e.pes_size), 0)       AS issued_pes,
            COALESCE(SUM(e.plastic_size), 0)   AS issued_plastic,
+           COALESCE(MAX(si.added_original), 0) AS added_original,
+           COALESCE(MAX(si.added_coffee), 0)   AS added_coffee,
+           COALESCE(MAX(si.added_pes), 0)       AS added_pes,
+           COALESCE(MAX(si.added_plastic), 0)   AS added_plastic,
            MAX(e.entry_date) AS last_entry_date
     FROM accessory_owners o
     LEFT JOIN accessory_stock_entries e ON e.owner_id = o.id
+    LEFT JOIN (
+        SELECT owner_id,
+               SUM(CASE WHEN category='original' THEN quantity ELSE 0 END) AS added_original,
+               SUM(CASE WHEN category='coffee'   THEN quantity ELSE 0 END) AS added_coffee,
+               SUM(CASE WHEN category='pes'       THEN quantity ELSE 0 END) AS added_pes,
+               SUM(CASE WHEN category='plastic'   THEN quantity ELSE 0 END) AS added_plastic
+        FROM accessory_stock_ins
+        GROUP BY owner_id
+    ) si ON si.owner_id = o.id
     GROUP BY o.id
     ORDER BY o.created_at DESC, o.name ASC
 ")->fetchAll();
 
-// Remaining balance per owner = opening - issued, summed across the four categories.
+// Remaining balance per owner = opening + added - issued, summed across the four categories.
 foreach ($owners as &$o) {
     $o['remaining'] =
-        ((float)$o['opening_original'] - (float)$o['issued_original']) +
-        ((float)$o['opening_coffee']   - (float)$o['issued_coffee']) +
-        ((float)$o['opening_pes']       - (float)$o['issued_pes']) +
-        ((float)$o['opening_plastic']   - (float)$o['issued_plastic']);
+        ((float)$o['opening_original'] + (float)$o['added_original'] - (float)$o['issued_original']) +
+        ((float)$o['opening_coffee']   + (float)$o['added_coffee']   - (float)$o['issued_coffee']) +
+        ((float)$o['opening_pes']       + (float)$o['added_pes']       - (float)$o['issued_pes']) +
+        ((float)$o['opening_plastic']   + (float)$o['added_plastic']   - (float)$o['issued_plastic']);
 }
 unset($o);
 

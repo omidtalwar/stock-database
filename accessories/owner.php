@@ -19,6 +19,36 @@ if (!$owner) {
 
 $pageTitle = $owner['name'] . ' - Accessories';
 
+$categories = accessoryCategories();
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'stock_in') {
+    if (!validateFormToken('accessory_stockin_' . $id)) {
+        $_SESSION['error'] = 'Duplicate submission detected. Your data was already saved.';
+        header('Location: owner.php?id=' . $id); exit;
+    }
+
+    $category = $_POST['category'] ?? '';
+    $quantity = (float)($_POST['quantity'] ?? 0);
+    $inDate   = trim($_POST['in_date'] ?? '') ?: date('Y-m-d');
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $inDate)) $inDate = date('Y-m-d');
+    $note     = trim($_POST['note'] ?? '') ?: null;
+
+    if (!isset($categories[$category])) {
+        $_SESSION['error'] = 'Choose a valid stock type.';
+    } elseif ($quantity <= 0) {
+        $_SESSION['error'] = 'Stock quantity must be greater than zero.';
+    } else {
+        $stmt = $pdo->prepare("
+            INSERT INTO accessory_stock_ins (owner_id, in_date, category, quantity, notes, created_by)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ");
+        $stmt->execute([$id, $inDate, $category, $quantity, $note, $_SESSION['user_id'] ?? null]);
+        $_SESSION['success'] = number_format($quantity, 2) . ' ' . $categories[$category]['label'] . ' stock added.';
+        header('Location: owner.php?id=' . $id); exit;
+    }
+    header('Location: owner.php?id=' . $id); exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!validateFormToken('accessory_entry_' . $id)) {
         $_SESSION['error'] = 'Duplicate submission detected. Your data was already saved.';
@@ -132,17 +162,33 @@ $totals = [
 ];
 $avgRate = $totals['meterage'] > 0 ? $totals['amount'] / $totals['meterage'] : 0;
 
-// Per-category stock = owner opening balance minus what has been issued on entries.
+// Stock added per category after registration (stock-ins).
+$addStmt = $pdo->prepare("
+    SELECT category, COALESCE(SUM(quantity), 0) AS added
+    FROM accessory_stock_ins
+    WHERE owner_id = ?
+    GROUP BY category
+");
+$addStmt->execute([$id]);
+$added = [];
+foreach ($addStmt->fetchAll() as $row) {
+    $added[$row['category']] = (float)$row['added'];
+}
+
+// Per-category stock = opening + added - issued.
 $balances = [
     'original' => ['label' => 'اصلي چیکو', 'opening' => (float)$owner['opening_original'], 'issued' => $totals['original']],
     'coffee'   => ['label' => 'کافی',       'opening' => (float)$owner['opening_coffee'],   'issued' => $totals['coffee']],
     'pes'      => ['label' => 'Pes',          'opening' => (float)$owner['opening_pes'],      'issued' => $totals['pes']],
     'plastic'  => ['label' => 'پلاستیکی',    'opening' => (float)$owner['opening_plastic'],  'issued' => $totals['plastic']],
 ];
-foreach ($balances as &$b) {
-    $b['remaining'] = $b['opening'] - $b['issued'];
+foreach ($balances as $key => &$b) {
+    $b['added'] = $added[$key] ?? 0;
+    $b['remaining'] = $b['opening'] + $b['added'] - $b['issued'];
 }
 unset($b);
+
+$stockInToken = generateFormToken('accessory_stockin_' . $id);
 $formToken = generateFormToken('accessory_entry_' . $id);
 
 require_once '../includes/header.php';
@@ -156,9 +202,14 @@ require_once '../includes/header.php';
         <h4 class="mt-1 mb-0"><?= htmlspecialchars($owner['name']) ?></h4>
         <p class="text-muted small mb-0"><?= htmlspecialchars($owner['phone'] ?? '') ?></p>
     </div>
-    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#entryModal">
-        <i class="bi bi-plus-square me-2"></i>Add Stock
-    </button>
+    <div class="d-flex gap-2">
+        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#stockInModal">
+            <i class="bi bi-box-arrow-in-down me-2"></i>Add Stock
+        </button>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#entryModal">
+            <i class="bi bi-receipt me-2"></i>Add Bill
+        </button>
+    </div>
 </div>
 
 <div class="row g-3 mb-4">
@@ -215,6 +266,12 @@ require_once '../includes/header.php';
                     <td class="text-muted small text-start fw-semibold">Opening</td>
                     <?php foreach ($balances as $b): ?>
                     <td><?= number_format($b['opening'], 2) ?></td>
+                    <?php endforeach; ?>
+                </tr>
+                <tr>
+                    <td class="text-muted small text-start fw-semibold">Added</td>
+                    <?php foreach ($balances as $b): ?>
+                    <td class="text-primary"><?= number_format($b['added'], 2) ?></td>
                     <?php endforeach; ?>
                 </tr>
                 <tr>
@@ -297,6 +354,48 @@ require_once '../includes/header.php';
             </tfoot>
             <?php endif; ?>
         </table>
+    </div>
+</div>
+
+<div class="modal fade" id="stockInModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form method="POST" class="modal-content">
+            <input type="hidden" name="_form_token" value="<?= htmlspecialchars($stockInToken) ?>">
+            <input type="hidden" name="action" value="stock_in">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Stock — <?= htmlspecialchars($owner['name']) ?></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Stock Type</label>
+                    <select name="category" class="form-select" required>
+                        <option value="">— select —</option>
+                        <?php foreach ($categories as $key => $cat): ?>
+                        <option value="<?= htmlspecialchars($key) ?>"><?= htmlspecialchars($cat['label']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Quantity</label>
+                    <input type="number" step="0.01" min="0.01" name="quantity" class="form-control" required autofocus>
+                </div>
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="form-label fw-semibold">تاریخ</label>
+                        <input type="date" name="in_date" class="form-control" value="<?= date('Y-m-d') ?>">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label fw-semibold">Note</label>
+                        <input type="text" name="note" class="form-control">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal"><?= __('btn_cancel') ?></button>
+                <button class="btn btn-success"><i class="bi bi-check2-circle me-2"></i><?= __('btn_save') ?></button>
+            </div>
+        </form>
     </div>
 </div>
 

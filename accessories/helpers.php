@@ -54,6 +54,23 @@ function ensureAccessoriesTables(PDO $pdo): void {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
 
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS accessory_stock_ins (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            owner_id INT NOT NULL,
+            in_date DATE NULL,
+            category VARCHAR(20) NOT NULL,
+            quantity DECIMAL(12,2) NOT NULL DEFAULT 0,
+            notes TEXT NULL,
+            created_by INT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_accessory_stock_ins_owner (owner_id),
+            CONSTRAINT fk_accessory_stock_ins_owner
+                FOREIGN KEY (owner_id) REFERENCES accessory_owners(id)
+                ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
     // Migrate older installs that predate the per-category opening + bill columns.
     accessoryAddColumnIfMissing($pdo, 'accessory_owners', 'opening_original', "DECIMAL(12,2) NOT NULL DEFAULT 0");
     accessoryAddColumnIfMissing($pdo, 'accessory_owners', 'opening_coffee',   "DECIMAL(12,2) NOT NULL DEFAULT 0");
