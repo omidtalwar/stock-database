@@ -125,7 +125,7 @@ unset($o);
 $summary = [
     'owners' => count($owners),
     'quantity' => array_sum(array_map(fn($o) => (float)$o['remaining'], $owners)),
-    'amount' => array_sum(array_map(fn($o) => (float)$o['total_amount'], $owners)),
+    'amount' => array_sum(array_map(fn($o) => (float)$o['remaining_amount'], $owners)),
 ];
 
 $formToken = generateFormToken('accessory_owner');
@@ -164,7 +164,7 @@ require_once '../includes/header.php';
     <div class="col-12 col-lg-4">
         <div class="card border-0" style="background:rgba(16,124,16,0.10);">
             <div class="card-body">
-                <div class="text-muted small fw-semibold text-uppercase">Total Amount</div>
+                <div class="text-muted small fw-semibold text-uppercase">Remaining Amount</div>
                 <div class="fs-4 fw-bold text-success">؋ <?= number_format($summary['amount'], 2) ?></div>
             </div>
         </div>
@@ -193,8 +193,8 @@ require_once '../includes/header.php';
                     <th>Owner</th>
                     <th class="d-none d-md-table-cell">Phone</th>
                     <th class="text-end">Entries</th>
-                    <th class="text-end">Remaining</th>
-                    <th class="text-end">Amount</th>
+                    <th class="text-end">Stock</th>
+                    <th class="text-end">Remaining ؋</th>
                     <th class="d-none d-lg-table-cell">Last Entry</th>
                     <th><?= __('field_actions') ?></th>
                 </tr>
@@ -230,7 +230,7 @@ require_once '../includes/header.php';
                     <td class="d-none d-md-table-cell"><?= htmlspecialchars($owner['phone'] ?? '') ?></td>
                     <td class="text-end"><?= number_format((int)$owner['entry_count']) ?></td>
                     <td class="text-end fw-semibold <?= $owner['remaining'] < 0 ? 'text-danger' : '' ?>"><?= number_format((float)$owner['remaining'], 2) ?></td>
-                    <td class="text-end fw-bold text-success">؋ <?= number_format((float)$owner['total_amount'], 2) ?></td>
+                    <td class="text-end fw-bold <?= $owner['remaining_amount'] < 0 ? 'text-danger' : 'text-success' ?>">؋ <?= number_format((float)$owner['remaining_amount'], 2) ?></td>
                     <td class="d-none d-lg-table-cell text-muted small">
                         <?= $owner['last_entry_date'] ? htmlspecialchars($owner['last_entry_date']) : '-' ?>
                     </td>
