@@ -736,6 +736,11 @@ body.pin-locked .debtor-debt .s { filter: blur(7px); user-select: none; pointer-
 
         <div class="nav-section"><?= __('nav_business') ?></div>
         <a href="/customers/index.php" class="nav-item"><i class="bi bi-people"></i> <?= __('nav_customers') ?></a>
+        <?php require_once __DIR__ . '/includes/reminders.php'; $reminderCount = isset($pdo) ? overdueCount($pdo) : 0; ?>
+        <a href="/reminders/index.php" class="nav-item" style="display:flex;align-items:center;">
+            <i class="bi bi-bell"></i> Reminders
+            <?php if ($reminderCount > 0): ?><span class="badge bg-danger" style="margin-inline-start:auto;"><?= $reminderCount ?></span><?php endif; ?>
+        </a>
         <a href="/products/index.php"  class="nav-item"><i class="bi bi-box-seam"></i> <?= __('nav_products') ?></a>
         <a href="/sales/index.php"     class="nav-item"><i class="bi bi-receipt"></i> <?= __('nav_sales') ?></a>
         <a href="/payments/index.php"  class="nav-item"><i class="bi bi-cash-coin"></i> <?= __('nav_payments') ?></a>

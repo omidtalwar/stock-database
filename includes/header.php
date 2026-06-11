@@ -465,6 +465,11 @@ if (!empty($_SESSION['error'])) {
 
         <div class="nav-section"><?= __('nav_business') ?></div>
         <?= navItem('/customers/index.php', 'people',      __('nav_customers'), $currentDir === 'customers', '#C084FC') ?>
+        <?php require_once __DIR__ . '/reminders.php'; $reminderCount = isset($pdo) ? overdueCount($pdo) : 0; ?>
+        <a href="/reminders/index.php" class="nav-item <?= $currentDir === 'reminders' ? 'active' : '' ?>" style="--item-clr:#F87171;display:flex;align-items:center;">
+            <i class="bi bi-bell"></i> Reminders
+            <?php if ($reminderCount > 0): ?><span class="badge bg-danger" style="margin-inline-start:auto;"><?= $reminderCount ?></span><?php endif; ?>
+        </a>
         <?= navItem('/products/index.php',  'box-seam',    __('nav_products'),  $currentDir === 'products',  '#34D399') ?>
         <?= navItem('/sales/index.php',     'receipt',     __('nav_sales'),     $currentDir === 'sales',     '#FB923C') ?>
         <?= navItem('/payments/index.php',  'cash-coin',   __('nav_payments'),  $currentDir === 'payments',  '#4ADE80') ?>
