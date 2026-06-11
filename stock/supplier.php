@@ -4,6 +4,7 @@ requireLogin();
 require_once '../includes/lang.php';
 require_once '../config/db.php';
 require_once '../includes/currency.php';
+require_once '../includes/telegram.php';
 
 $supplierName = trim($_GET['name'] ?? '');
 if ($supplierName === '') { header('Location: index.php'); exit; }
@@ -86,6 +87,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'payme
         ")->execute([$payAmt, -$payAmt, $supplierName, $payNotes ?: null, $payBill ?: null, $payCurrency, $payDate, $_SESSION['user_id']]);
 
         $curSym = CURRENCIES[$payCurrency]['symbol'] ?? $payCurrency;
+        tgNotify("🏭 <b>Supplier payment</b>\nSupplier: " . tgEsc($supplierName)
+            . "\nAmount: <b>" . tgEsc($curSym . number_format($payAmt, 0)) . "</b>"
+            . "\nBy: " . tgActor(), 'supplier');
         $_SESSION['success'] = 'Payment of '.$curSym.number_format($payAmt, 0).' recorded.';
         header('Location: supplier.php?name='.urlencode($supplierName));
         exit;

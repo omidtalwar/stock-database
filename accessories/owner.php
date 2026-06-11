@@ -3,6 +3,7 @@ require_once '../includes/session.php';
 requireLogin();
 require_once '../includes/lang.php';
 require_once '../config/db.php';
+require_once '../includes/telegram.php';
 require_once 'helpers.php';
 
 ensureAccessoriesTables($pdo);
@@ -48,6 +49,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'stock
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ");
         $stmt->execute([$id, $inDate, $billNo, $category, $quantity, $note, $photo['file'], $_SESSION['user_id'] ?? null]);
+        tgNotify("📦 <b>Accessory stock added</b>\nOwner: " . tgEsc($owner['name'])
+            . "\nType: " . tgEsc($categories[$category]['label'])
+            . "\nQty: <b>" . number_format($quantity, 2) . "</b>"
+            . ($billNo ? "\nBill: " . tgEsc($billNo) : '')
+            . "\nBy: " . tgActor(), 'acc_stock');
         $_SESSION['success'] = number_format($quantity, 2) . ' ' . $categories[$category]['label'] . ' stock added.';
         header('Location: owner.php?id=' . $id); exit;
     }
@@ -75,6 +81,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'payme
             VALUES (?, ?, ?, ?, ?, ?, ?)
         ");
         $stmt->execute([$id, $payDate, $billNo, $kind, $amount, $note, $_SESSION['user_id'] ?? null]);
+        tgNotify(($kind === 'charge' ? "🧾 <b>Accessory amount added</b>" : "💵 <b>Accessory payment</b>")
+            . "\nOwner: " . tgEsc($owner['name'])
+            . "\nAmount: <b>؋ " . number_format($amount, 2) . "</b>"
+            . ($billNo ? "\nBill: " . tgEsc($billNo) : '')
+            . "\nBy: " . tgActor(), 'acc_pay');
         $_SESSION['success'] = $kind === 'charge'
             ? 'Previous amount of ؋ ' . number_format($amount, 2) . ' added.'
             : 'Payment of ؋ ' . number_format($amount, 2) . ' recorded.';
@@ -224,6 +235,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $row['total_amount'], $row['notes'], $row['bill_photo'], $_SESSION['user_id'] ?? null,
             ]);
         }
+        $billTotal = array_sum(array_map(fn($r) => (float)$r['total_amount'], $rows));
+        tgNotify("🧾 <b>Accessory bill added</b>\nOwner: " . tgEsc($owner['name'])
+            . "\nRows: <b>" . count($rows) . "</b>"
+            . ($billNo ? "\nBill: " . tgEsc($billNo) : '')
+            . ($billTotal > 0 ? "\nTotal: <b>؋ " . number_format($billTotal, 2) . "</b>" : '')
+            . "\nBy: " . tgActor(), 'acc_bill');
         $_SESSION['success'] = count($rows) . ' accessory row(s) saved.';
         header('Location: owner.php?id=' . $id); exit;
     }

@@ -4,6 +4,7 @@ requireLogin();
 require_once '../includes/lang.php';
 require_once '../config/db.php';
 require_once '../includes/currency.php';
+require_once '../includes/telegram.php';
 
 $pageTitle = __('pay_add');
 
@@ -139,6 +140,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             $pdo->commit();
+
+            $custName = '';
+            foreach ($customers as $cu) { if ((int)$cu['id'] === $customer_id) { $custName = $cu['name']; break; } }
+            tgNotify("💵 <b>Payment received</b>\nCustomer: " . tgEsc($custName)
+                . "\nAmount: <b>" . tgEsc(formatMoney($amount, $currency)) . "</b>"
+                . ($currency !== 'AFN' ? ' (' . tgEsc(formatAFN($amountAfn)) . ')' : '')
+                . ($sale_id ? "\nInvoice: #" . (int)$sale_id : "\nType: General")
+                . "\nBy: " . tgActor(), 'payment');
+
             $_SESSION['success'] = formatMoney($amount, $currency)
                 . ($currency !== 'AFN' ? ' (' . formatAFN($amountAfn) . ')' : '');
             header($sale_id

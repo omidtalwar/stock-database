@@ -4,6 +4,7 @@ requireLogin();
 require_once '../includes/lang.php';
 require_once '../config/db.php';
 require_once '../includes/currency.php';
+require_once '../includes/telegram.php';
 
 $pageTitle = __('sale_create_title');
 
@@ -132,6 +133,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             $pdo->commit();
+
+            $custName = (string)($pdo->query("SELECT name FROM customers WHERE id = " . (int)$customer_id)->fetchColumn());
+            tgNotify("🧾 <b>New invoice</b> #" . str_pad($saleId, 4, '0', STR_PAD_LEFT)
+                . "\nCustomer: " . tgEsc($custName)
+                . "\nTotal: <b>" . tgEsc(formatAFN($total)) . "</b>"
+                . "\nPaid: " . tgEsc(formatAFN($paid_amount))
+                . "\nBalance: <b>" . tgEsc(formatAFN($balance)) . "</b>"
+                . "\nBy: " . tgActor(), 'invoice');
+
             $_SESSION['success'] = '#'.str_pad($saleId,4,'0',STR_PAD_LEFT);
             header("Location: view.php?id=$saleId");
             exit;

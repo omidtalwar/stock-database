@@ -3,6 +3,7 @@ require_once '../includes/session.php';
 requireLogin();
 require_once '../includes/lang.php';
 require_once '../config/db.php';
+require_once '../includes/telegram.php';
 require_once 'helpers.php';
 
 ensureAccessoriesTables($pdo);
@@ -16,8 +17,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
     }
     $delId = (int)($_POST['owner_id'] ?? 0);
     if ($delId > 0) {
+        $nameStmt = $pdo->prepare("SELECT name FROM accessory_owners WHERE id = ?");
+        $nameStmt->execute([$delId]);
+        $delName = (string)$nameStmt->fetchColumn();
         $stmt = $pdo->prepare("DELETE FROM accessory_owners WHERE id = ?");
         $stmt->execute([$delId]);
+        tgNotify("🗑 <b>Accessory owner deleted</b>\nOwner: " . tgEsc($delName) . "\nBy: " . tgActor(), 'acc_owner');
         $_SESSION['success'] = 'Owner and all related records deleted.';
     }
     header('Location: index.php'); exit;
@@ -56,6 +61,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: index.php'); exit;
         }
 
+        tgNotify("👤 <b>Accessory owner added</b>\nName: " . tgEsc($name)
+            . ($phone ? "\nPhone: " . tgEsc($phone) : '')
+            . "\nBy: " . tgActor(), 'acc_owner');
         $_SESSION['success'] = 'Accessory owner registered.';
         header('Location: owner.php?id=' . $ownerId); exit;
     }

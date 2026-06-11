@@ -4,6 +4,7 @@ requireLogin();
 require_once '../includes/lang.php';
 require_once '../config/db.php';
 require_once '../includes/currency.php';
+require_once '../includes/telegram.php';
 
 $pageTitle = __('stock_move_title');
 
@@ -121,6 +122,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
             }
             $pdo->commit();
+            tgNotify(($type === 'in' ? "📥 <b>Stock IN</b>" : "📤 <b>Stock OUT</b>")
+                . "\nRows: <b>" . count($rows) . "</b>"
+                . ($supplier ? "\nSupplier: " . tgEsc($supplier) : '')
+                . ($billNo ? "\nBill: " . tgEsc($billNo) : '')
+                . "\nTotal: <b>" . tgEsc(formatMoney($grandTotal, $currency)) . "</b>"
+                . "\nBy: " . tgActor(), 'stock');
             $_SESSION['success'] = count($rows).' stock record(s) saved.';
             header('Location: index.php'); exit;
         } catch (\Exception $e) {

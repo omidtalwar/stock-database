@@ -15,7 +15,9 @@
       "PowerShell($php = \"C:\\\\xampp\\\\php\\\\php.exe\"; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\includes\\\\reminders.php; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\reminders\\\\index.php; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\includes\\\\header.php; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\dashboard.php)",
       "PowerShell($php = \"C:\\\\xampp\\\\php\\\\php.exe\"; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\reminders\\\\index.php)",
       "PowerShell($php = \"C:\\\\xampp\\\\php\\\\php.exe\"; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\reminders\\\\debug.php)",
-      "Bash(git rm *)"
+      "Bash(git rm *)",
+      "Bash(gh repo *)",
+      "PowerShell($r = git ls-remote --get-url origin; Write-Output $r; try { $resp = Invoke-WebRequest -Uri \"https://api.github.com/repos/omidtalwar/stock-database\" -UseBasicParsing -TimeoutSec 10; $j = $resp.Content | ConvertFrom-Json; Write-Output \\(\"visibility=\" + $j.visibility + \" private=\" + $j.private\\) } catch { Write-Output \\(\"API_CHECK_FAILED: \" + $_.Exception.Message\\) })"
     ]
   }
 }

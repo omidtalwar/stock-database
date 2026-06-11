@@ -1,5 +1,6 @@
 # Secrets — never commit these
 config/secrets.php
+config/telegram.php
 
 # Uploads / user-generated files
 uploads/
