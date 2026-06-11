@@ -59,6 +59,7 @@ function ensureAccessoriesTables(PDO $pdo): void {
             id INT AUTO_INCREMENT PRIMARY KEY,
             owner_id INT NOT NULL,
             in_date DATE NULL,
+            bill_no VARCHAR(80) NULL,
             category VARCHAR(20) NOT NULL,
             quantity DECIMAL(12,2) NOT NULL DEFAULT 0,
             notes TEXT NULL,
@@ -77,6 +78,29 @@ function ensureAccessoriesTables(PDO $pdo): void {
     accessoryAddColumnIfMissing($pdo, 'accessory_owners', 'opening_pes',      "DECIMAL(12,2) NOT NULL DEFAULT 0");
     accessoryAddColumnIfMissing($pdo, 'accessory_owners', 'opening_plastic',  "DECIMAL(12,2) NOT NULL DEFAULT 0");
     accessoryAddColumnIfMissing($pdo, 'accessory_stock_entries', 'bill_no',   "VARCHAR(80) NULL AFTER entry_date");
+    accessoryAddColumnIfMissing($pdo, 'accessory_stock_ins',     'bill_no',   "VARCHAR(80) NULL AFTER in_date");
+}
+
+/**
+ * Convert a Gregorian date to Solar Hijri (Shamsi/Afghan). Mirrors stock/add.php.
+ */
+function accessoryToShamsi(int $gy, int $gm, int $gd): array {
+    $g_d_m = [0,31,59,90,120,151,181,212,243,273,304,334];
+    if ($gy > 1600) { $jy = 979; $gy -= 1600; } else { $jy = 0; $gy -= 621; }
+    $gy2  = $gm > 2 ? $gy + 1 : $gy;
+    $days = 365*$gy + intdiv($gy2+3,4) - intdiv($gy2+99,100) + intdiv($gy2+399,400)
+            - 80 + $gd + $g_d_m[$gm - 1];
+    $jy  += 33 * intdiv($days, 12053); $days %= 12053;
+    $jy  +=  4 * intdiv($days,  1461); $days %= 1461;
+    if ($days > 365) { $jy += intdiv($days-1, 365); $days = ($days-1) % 365; }
+    $jm = $days < 186 ? 1 + intdiv($days, 31) : 7 + intdiv($days - 186, 30);
+    $jd = 1 + ($days < 186 ? $days % 31 : ($days - 186) % 30);
+    return ['y' => $jy, 'm' => $jm, 'd' => $jd];
+}
+
+function accessoryShamsiMonths(): array {
+    return ['۱ حمل','۲ ثور','۳ جوزا','۴ سرطان','۵ اسد','۶ سنبله',
+            '۷ میزان','۸ عقرب','۹ قوس','۱۰ جدی','۱۱ دلو','۱۲ حوت'];
 }
 
 function accessoryAddColumnIfMissing(PDO $pdo, string $table, string $column, string $definition): void {

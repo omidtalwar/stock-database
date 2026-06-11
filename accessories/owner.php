@@ -31,6 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'stock
     $quantity = (float)($_POST['quantity'] ?? 0);
     $inDate   = trim($_POST['in_date'] ?? '') ?: date('Y-m-d');
     if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $inDate)) $inDate = date('Y-m-d');
+    $billNo   = trim($_POST['bill_no'] ?? '') ?: null;
     $note     = trim($_POST['note'] ?? '') ?: null;
 
     if (!isset($categories[$category])) {
@@ -39,10 +40,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'stock
         $_SESSION['error'] = 'Stock quantity must be greater than zero.';
     } else {
         $stmt = $pdo->prepare("
-            INSERT INTO accessory_stock_ins (owner_id, in_date, category, quantity, notes, created_by)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO accessory_stock_ins (owner_id, in_date, bill_no, category, quantity, notes, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         ");
-        $stmt->execute([$id, $inDate, $category, $quantity, $note, $_SESSION['user_id'] ?? null]);
+        $stmt->execute([$id, $inDate, $billNo, $category, $quantity, $note, $_SESSION['user_id'] ?? null]);
         $_SESSION['success'] = number_format($quantity, 2) . ' ' . $categories[$category]['label'] . ' stock added.';
         header('Location: owner.php?id=' . $id); exit;
     }
@@ -189,6 +190,8 @@ foreach ($balances as $key => &$b) {
 unset($b);
 
 $stockInToken = generateFormToken('accessory_stockin_' . $id);
+$todayShamsi  = accessoryToShamsi((int)date('Y'), (int)date('n'), (int)date('j'));
+$jMonths      = accessoryShamsiMonths();
 $formToken = generateFormToken('accessory_entry_' . $id);
 
 require_once '../includes/header.php';
@@ -376,19 +379,40 @@ require_once '../includes/header.php';
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="mb-3">
-                    <label class="form-label fw-semibold">Quantity</label>
-                    <input type="number" step="0.01" min="0.01" name="quantity" class="form-control" required autofocus>
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <label class="form-label fw-semibold">Quantity</label>
+                        <input type="number" step="0.01" min="0.01" name="quantity" class="form-control" required autofocus>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label fw-semibold"><i class="bi bi-receipt me-1 text-primary"></i>بل / Bill No</label>
+                        <input type="text" name="bill_no" class="form-control" placeholder="Bill #">
+                    </div>
                 </div>
-                <div class="row g-2">
-                    <div class="col-6">
-                        <label class="form-label fw-semibold">تاریخ</label>
-                        <input type="date" name="in_date" class="form-control" value="<?= date('Y-m-d') ?>">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold d-flex align-items-center gap-2">
+                        <i class="bi bi-calendar3 me-1 text-primary"></i>تاریخ
+                        <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size:0.62rem;">Solar Hijri</span>
+                    </label>
+                    <div class="d-flex align-items-center gap-1">
+                        <input type="number" id="stockInJYear" class="form-control form-control-sm text-center fw-semibold"
+                               value="<?= $todayShamsi['y'] ?>" min="1300" max="1600" style="width:80px;" oninput="syncStockInShamsi()">
+                        <span class="text-muted">/</span>
+                        <select id="stockInJMonth" class="form-select form-select-sm" style="width:140px;" onchange="syncStockInShamsi()">
+                            <?php foreach ($jMonths as $i => $nm): ?>
+                            <option value="<?= $i+1 ?>" <?= $todayShamsi['m'] === $i+1 ? 'selected' : '' ?>><?= $nm ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <span class="text-muted">/</span>
+                        <input type="number" id="stockInJDay" class="form-control form-control-sm text-center fw-semibold"
+                               value="<?= $todayShamsi['d'] ?>" min="1" max="31" style="width:64px;" oninput="syncStockInShamsi()">
                     </div>
-                    <div class="col-6">
-                        <label class="form-label fw-semibold">Note</label>
-                        <input type="text" name="note" class="form-control">
-                    </div>
+                    <input type="hidden" name="in_date" id="stockInDateHidden" value="<?= date('Y-m-d') ?>">
+                    <div id="stockInGregorianBadge" class="mt-1 text-muted" style="font-size:0.71rem;"></div>
+                </div>
+                <div class="mb-1">
+                    <label class="form-label fw-semibold">Note</label>
+                    <input type="text" name="note" class="form-control">
                 </div>
             </div>
             <div class="modal-footer">
@@ -542,6 +566,45 @@ require_once '../includes/header.php';
 
     recalc();
 })();
+</script>
+
+<script>
+function accShamsiToGregorian(jy, jm, jd) {
+    var breaks = [-61,9,38,199,426,686,756,818,1111,1181,1210,1635,2060,2097,2192,2262,2324,2394,2456,3178];
+    var gy = jy + 621, leapJ = -14, jp = breaks[0], jm2, jump, n, i;
+    for (i = 1; i < 20; i++) {
+        jm2 = breaks[i]; jump = jm2 - jp;
+        if (jy < jm2) break;
+        leapJ += Math.floor(jump / 33) * 8 + Math.floor((jump % 33) / 4);
+        jp = jm2;
+    }
+    n = jy - jp;
+    leapJ += Math.floor(n / 33) * 8 + Math.floor((n % 33 + 3) / 4);
+    if ((jump % 33) === 4 && (jump - n) === 4) leapJ++;
+    var leapG = Math.floor(gy / 4) - Math.floor((Math.floor(gy / 100) + 1) * 3 / 4) - 150;
+    var march = 20 + leapJ - leapG;
+    var dayOfYear = jm <= 6 ? (jm - 1) * 31 + jd : 186 + (jm - 7) * 30 + jd;
+    var gDay = march + dayOfYear - 1, gMon = 3, gYr = gy;
+    function dim(m, y) {
+        if (m === 2) return ((y%4===0&&y%100!==0)||y%400===0) ? 29 : 28;
+        return [0,31,28,31,30,31,30,31,31,30,31,30,31][m];
+    }
+    while (gDay > dim(gMon, gYr)) { gDay -= dim(gMon, gYr); if (++gMon > 12) { gMon = 1; gYr++; } }
+    return {y: gYr, m: gMon, d: gDay};
+}
+function syncStockInShamsi() {
+    var jy = parseInt(document.getElementById('stockInJYear').value)  || 0;
+    var jm = parseInt(document.getElementById('stockInJMonth').value) || 0;
+    var jd = parseInt(document.getElementById('stockInJDay').value)   || 0;
+    if (jy < 1300 || jy > 1600 || jm < 1 || jm > 12 || jd < 1 || jd > 31) return;
+    var g = accShamsiToGregorian(jy, jm, jd);
+    if (!g) return;
+    var gStr = g.y + '-' + String(g.m).padStart(2,'0') + '-' + String(g.d).padStart(2,'0');
+    document.getElementById('stockInDateHidden').value = gStr;
+    document.getElementById('stockInGregorianBadge').textContent =
+        '≡ ' + g.y + '/' + String(g.m).padStart(2,'0') + '/' + String(g.d).padStart(2,'0') + ' (Gregorian)';
+}
+syncStockInShamsi();
 </script>
 
 <?php require_once '../includes/footer.php'; ?>
