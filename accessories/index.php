@@ -9,6 +9,20 @@ ensureAccessoriesTables($pdo);
 
 $pageTitle = __('accessories_title');
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete') {
+    if (!validateFormToken('accessory_owner_delete')) {
+        $_SESSION['error'] = 'Duplicate submission detected.';
+        header('Location: index.php'); exit;
+    }
+    $delId = (int)($_POST['owner_id'] ?? 0);
+    if ($delId > 0) {
+        $stmt = $pdo->prepare("DELETE FROM accessory_owners WHERE id = ?");
+        $stmt->execute([$delId]);
+        $_SESSION['success'] = 'Owner and all related records deleted.';
+    }
+    header('Location: index.php'); exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!validateFormToken('accessory_owner')) {
         $_SESSION['error'] = 'Duplicate submission detected. Your data was already saved.';
@@ -47,7 +61,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$owners = $pdo->query("
+$q = trim($_GET['q'] ?? '');
+$where = '';
+$params = [];
+if ($q !== '') {
+    $where = "WHERE o.name LIKE ? OR o.phone LIKE ?";
+    $params = ['%' . $q . '%', '%' . $q . '%'];
+}
+
+$ownersStmt = $pdo->prepare("
     SELECT o.*,
            COUNT(e.id) AS entry_count,
            COALESCE(SUM(e.total_amount), 0) AS total_amount,
@@ -59,6 +81,8 @@ $owners = $pdo->query("
            COALESCE(MAX(si.added_coffee), 0)   AS added_coffee,
            COALESCE(MAX(si.added_pes), 0)       AS added_pes,
            COALESCE(MAX(si.added_plastic), 0)   AS added_plastic,
+           COALESCE(MAX(pm.charged), 0) AS pay_charged,
+           COALESCE(MAX(pm.paid), 0)    AS pay_paid,
            MAX(e.entry_date) AS last_entry_date
     FROM accessory_owners o
     LEFT JOIN accessory_stock_entries e ON e.owner_id = o.id
@@ -71,17 +95,30 @@ $owners = $pdo->query("
         FROM accessory_stock_ins
         GROUP BY owner_id
     ) si ON si.owner_id = o.id
+    LEFT JOIN (
+        SELECT owner_id,
+               SUM(CASE WHEN kind='charge'  THEN amount ELSE 0 END) AS charged,
+               SUM(CASE WHEN kind='payment' THEN amount ELSE 0 END) AS paid
+        FROM accessory_payments
+        GROUP BY owner_id
+    ) pm ON pm.owner_id = o.id
+    $where
     GROUP BY o.id
     ORDER BY o.created_at DESC, o.name ASC
-")->fetchAll();
+");
+$ownersStmt->execute($params);
+$owners = $ownersStmt->fetchAll();
 
-// Remaining balance per owner = opening + added - issued, summed across the four categories.
+// Remaining stock per owner = opening + added - issued, summed across the four categories.
+// Total Amount = bills + previous added; Remaining owed = Total Amount - paid.
 foreach ($owners as &$o) {
     $o['remaining'] =
         ((float)$o['opening_original'] + (float)$o['added_original'] - (float)$o['issued_original']) +
         ((float)$o['opening_coffee']   + (float)$o['added_coffee']   - (float)$o['issued_coffee']) +
         ((float)$o['opening_pes']       + (float)$o['added_pes']       - (float)$o['issued_pes']) +
         ((float)$o['opening_plastic']   + (float)$o['added_plastic']   - (float)$o['issued_plastic']);
+    $o['total_amount'] = (float)$o['total_amount'] + (float)$o['pay_charged'];
+    $o['remaining_amount'] = $o['total_amount'] - (float)$o['pay_paid'];
 }
 unset($o);
 
@@ -92,6 +129,7 @@ $summary = [
 ];
 
 $formToken = generateFormToken('accessory_owner');
+$deleteToken = generateFormToken('accessory_owner_delete');
 
 require_once '../includes/header.php';
 ?>
@@ -134,9 +172,19 @@ require_once '../includes/header.php';
 </div>
 
 <div class="card">
-    <div class="card-header py-3 d-flex align-items-center justify-content-between">
+    <div class="card-header py-3 d-flex align-items-center justify-content-between gap-2 flex-wrap">
         <span class="fw-semibold"><i class="bi bi-people me-2 text-primary"></i>Accessory Owners</span>
-        <span class="text-muted small"><?= count($owners) ?> registered</span>
+        <div class="d-flex align-items-center gap-2">
+            <form method="GET" class="d-flex gap-1">
+                <input type="text" name="q" class="form-control form-control-sm" style="min-width:200px;"
+                       placeholder="Search name or phone…" value="<?= htmlspecialchars($q) ?>">
+                <button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-search"></i></button>
+                <?php if ($q !== ''): ?>
+                <a href="index.php" class="btn btn-sm btn-light" title="Clear"><i class="bi bi-x-lg"></i></a>
+                <?php endif; ?>
+            </form>
+            <span class="text-muted small"><?= count($owners) ?> shown</span>
+        </div>
     </div>
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
@@ -155,7 +203,11 @@ require_once '../includes/header.php';
                 <?php if (empty($owners)): ?>
                 <tr>
                     <td colspan="7" class="text-center text-muted py-5">
+                        <?php if ($q !== ''): ?>
+                        No owners match "<?= htmlspecialchars($q) ?>".
+                        <?php else: ?>
                         No accessory owners yet. Register the first owner to start tracking stock.
+                        <?php endif; ?>
                     </td>
                 </tr>
                 <?php else: ?>
@@ -183,9 +235,19 @@ require_once '../includes/header.php';
                         <?= $owner['last_entry_date'] ? htmlspecialchars($owner['last_entry_date']) : '-' ?>
                     </td>
                     <td>
-                        <a href="owner.php?id=<?= $owner['id'] ?>" class="btn btn-sm btn-light" title="Dashboard">
-                            <i class="bi bi-speedometer2"></i>
-                        </a>
+                        <div class="d-flex gap-1">
+                            <a href="owner.php?id=<?= $owner['id'] ?>" class="btn btn-sm btn-light" title="Dashboard">
+                                <i class="bi bi-speedometer2"></i>
+                            </a>
+                            <form method="POST" onsubmit="return confirm('Delete <?= htmlspecialchars(addslashes($owner['name'])) ?> and ALL their stock, bills and payments? This cannot be undone.');" class="d-inline">
+                                <input type="hidden" name="_form_token" value="<?= htmlspecialchars($deleteToken) ?>">
+                                <input type="hidden" name="action" value="delete">
+                                <input type="hidden" name="owner_id" value="<?= $owner['id'] ?>">
+                                <button class="btn btn-sm btn-outline-danger" title="Delete owner">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                        </div>
                     </td>
                 </tr>
                 <?php endforeach; ?>
