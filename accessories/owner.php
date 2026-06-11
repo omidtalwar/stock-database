@@ -28,6 +28,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $date     = trim($_POST['entry_date'] ?? '') ?: date('Y-m-d');
     if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) $date = date('Y-m-d');
 
+    $billNo   = trim($_POST['bill_no'] ?? '') ?: null;
+
     $itemNames = $_POST['item_name'] ?? [];
     $quantities = $_POST['quantity'] ?? [];
     $originalSizes = $_POST['original_size'] ?? [];
@@ -92,13 +94,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $stmt = $pdo->prepare("
             INSERT INTO accessory_stock_entries
-                (owner_id, entry_date, item_name, quantity, original_size, coffee_size,
+                (owner_id, entry_date, bill_no, item_name, quantity, original_size, coffee_size,
                  pes_size, plastic_size, meterage, rate, total_amount, notes, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
         foreach ($rows as $row) {
             $stmt->execute([
-                $id, $date, $row['item_name'], $row['quantity'],
+                $id, $date, $billNo, $row['item_name'], $row['quantity'],
                 $row['original_size'], $row['coffee_size'], $row['pes_size'],
                 $row['plastic_size'], $row['meterage'], $row['rate'],
                 $row['total_amount'], $row['notes'], $_SESSION['user_id'] ?? null,
@@ -129,6 +131,18 @@ $totals = [
     'meterage' => array_sum(array_map(fn($e) => (float)$e['meterage'], $entries)),
 ];
 $avgRate = $totals['meterage'] > 0 ? $totals['amount'] / $totals['meterage'] : 0;
+
+// Per-category stock = owner opening balance minus what has been issued on entries.
+$balances = [
+    'original' => ['label' => 'اصلي چیکو', 'opening' => (float)$owner['opening_original'], 'issued' => $totals['original']],
+    'coffee'   => ['label' => 'کافی',       'opening' => (float)$owner['opening_coffee'],   'issued' => $totals['coffee']],
+    'pes'      => ['label' => 'Pes',          'opening' => (float)$owner['opening_pes'],      'issued' => $totals['pes']],
+    'plastic'  => ['label' => 'پلاستیکی',    'opening' => (float)$owner['opening_plastic'],  'issued' => $totals['plastic']],
+];
+foreach ($balances as &$b) {
+    $b['remaining'] = $b['opening'] - $b['issued'];
+}
+unset($b);
 $formToken = generateFormToken('accessory_entry_' . $id);
 
 require_once '../includes/header.php';
@@ -184,16 +198,39 @@ require_once '../includes/header.php';
 
 <div class="card mb-4">
     <div class="card-header py-3 fw-semibold">
-        <i class="bi bi-calculator me-2 text-primary"></i>Category Calculation
+        <i class="bi bi-calculator me-2 text-primary"></i>Stock Balance per Category
     </div>
-    <div class="card-body">
-        <div class="row g-3">
-            <div class="col-6 col-md"><div class="text-muted small">اصلي چیکو</div><div class="fw-bold"><?= number_format($totals['original'], 2) ?></div></div>
-            <div class="col-6 col-md"><div class="text-muted small">کافی</div><div class="fw-bold"><?= number_format($totals['coffee'], 2) ?></div></div>
-            <div class="col-6 col-md"><div class="text-muted small">Pes</div><div class="fw-bold"><?= number_format($totals['pes'], 2) ?></div></div>
-            <div class="col-6 col-md"><div class="text-muted small">پلاستیکی</div><div class="fw-bold"><?= number_format($totals['plastic'], 2) ?></div></div>
-            <div class="col-6 col-md"><div class="text-muted small">مترانه</div><div class="fw-bold"><?= number_format($totals['meterage'], 2) ?></div></div>
-        </div>
+    <div class="table-responsive">
+        <table class="table align-middle mb-0 text-center">
+            <thead class="table-light">
+                <tr>
+                    <th></th>
+                    <?php foreach ($balances as $b): ?>
+                    <th><?= htmlspecialchars($b['label']) ?></th>
+                    <?php endforeach; ?>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="text-muted small text-start fw-semibold">Opening</td>
+                    <?php foreach ($balances as $b): ?>
+                    <td><?= number_format($b['opening'], 2) ?></td>
+                    <?php endforeach; ?>
+                </tr>
+                <tr>
+                    <td class="text-muted small text-start fw-semibold">Issued</td>
+                    <?php foreach ($balances as $b): ?>
+                    <td class="text-danger"><?= number_format($b['issued'], 2) ?></td>
+                    <?php endforeach; ?>
+                </tr>
+                <tr class="fw-bold">
+                    <td class="text-start">Remaining</td>
+                    <?php foreach ($balances as $b): ?>
+                    <td class="<?= $b['remaining'] < 0 ? 'text-danger' : 'text-success' ?>"><?= number_format($b['remaining'], 2) ?></td>
+                    <?php endforeach; ?>
+                </tr>
+            </tbody>
+        </table>
     </div>
 </div>
 
@@ -206,6 +243,7 @@ require_once '../includes/header.php';
             <thead>
                 <tr>
                     <th>تاریخ</th>
+                    <th>بل</th>
                     <th class="text-end">تعداد</th>
                     <th>جنس</th>
                     <th class="text-end">اصلي چیکو</th>
@@ -219,11 +257,12 @@ require_once '../includes/header.php';
             </thead>
             <tbody>
                 <?php if (empty($entries)): ?>
-                <tr><td colspan="10" class="text-center text-muted py-5">No stock entries yet.</td></tr>
+                <tr><td colspan="11" class="text-center text-muted py-5">No stock entries yet.</td></tr>
                 <?php else: ?>
                 <?php foreach ($entries as $entry): ?>
                 <tr>
                     <td class="text-muted small"><?= htmlspecialchars($entry['entry_date'] ?? '') ?></td>
+                    <td class="text-muted small"><?= htmlspecialchars($entry['bill_no'] ?? '') ?: '-' ?></td>
                     <td class="text-end fw-semibold"><?= number_format((float)$entry['quantity'], 2) ?></td>
                     <td>
                         <div class="fw-semibold"><?= htmlspecialchars($entry['item_name']) ?></div>
@@ -244,6 +283,7 @@ require_once '../includes/header.php';
             <tfoot>
                 <tr class="table-light fw-bold">
                     <td>ټول</td>
+                    <td></td>
                     <td class="text-end"><?= number_format($totals['quantity'], 2) ?></td>
                     <td></td>
                     <td class="text-end"><?= number_format($totals['original'], 2) ?></td>
@@ -270,9 +310,15 @@ require_once '../includes/header.php';
             </div>
             <div class="modal-body">
                 <div class="d-flex align-items-center justify-content-between gap-2 mb-3 flex-wrap">
-                    <div style="max-width:220px;">
-                        <label class="form-label fw-semibold">تاریخ</label>
-                        <input type="date" name="entry_date" class="form-control" value="<?= date('Y-m-d') ?>">
+                    <div class="d-flex gap-2">
+                        <div style="max-width:200px;">
+                            <label class="form-label fw-semibold">تاریخ</label>
+                            <input type="date" name="entry_date" class="form-control" value="<?= date('Y-m-d') ?>">
+                        </div>
+                        <div style="max-width:200px;">
+                            <label class="form-label fw-semibold">بل / Bill No</label>
+                            <input type="text" name="bill_no" class="form-control" placeholder="Bill #">
+                        </div>
                     </div>
                     <button type="button" class="btn btn-outline-primary btn-sm" id="addAccessoryRow">
                         <i class="bi bi-plus-lg me-1"></i>Add Row

@@ -17,41 +17,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $name  = trim($_POST['name'] ?? '');
     $phone = trim($_POST['phone'] ?? '');
-    $totalStock = (float)($_POST['total_stock'] ?? 0);
+    $openingOriginal = max(0, (float)($_POST['opening_original'] ?? 0));
+    $openingCoffee   = max(0, (float)($_POST['opening_coffee'] ?? 0));
+    $openingPes      = max(0, (float)($_POST['opening_pes'] ?? 0));
+    $openingPlastic  = max(0, (float)($_POST['opening_plastic'] ?? 0));
 
     if ($name === '') {
         $_SESSION['error'] = 'Owner name is required.';
-    } elseif ($totalStock < 0) {
-        $_SESSION['error'] = 'Total stock cannot be negative.';
     } else {
-        $pdo->beginTransaction();
         try {
             $stmt = $pdo->prepare("
-                INSERT INTO accessory_owners (name, phone, created_by)
-                VALUES (?, ?, ?)
+                INSERT INTO accessory_owners
+                    (name, phone, opening_original, opening_coffee, opening_pes, opening_plastic, created_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             ");
-            $stmt->execute([$name, $phone ?: null, $_SESSION['user_id'] ?? null]);
+            $stmt->execute([
+                $name, $phone ?: null,
+                $openingOriginal, $openingCoffee, $openingPes, $openingPlastic,
+                $_SESSION['user_id'] ?? null,
+            ]);
             $ownerId = (int)$pdo->lastInsertId();
-
-            if ($totalStock > 0) {
-                $stmt = $pdo->prepare("
-                    INSERT INTO accessory_stock_entries
-                        (owner_id, entry_date, item_name, quantity, total_amount, notes, created_by)
-                    VALUES (?, ?, ?, ?, 0, ?, ?)
-                ");
-                $stmt->execute([
-                    $ownerId,
-                    date('Y-m-d'),
-                    'Opening stock',
-                    $totalStock,
-                    'Initial stock registered with owner',
-                    $_SESSION['user_id'] ?? null,
-                ]);
-            }
-
-            $pdo->commit();
         } catch (\Throwable $e) {
-            $pdo->rollBack();
             $_SESSION['error'] = 'Save failed: ' . $e->getMessage();
             header('Location: index.php'); exit;
         }
@@ -64,8 +50,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $owners = $pdo->query("
     SELECT o.*,
            COUNT(e.id) AS entry_count,
-           COALESCE(SUM(e.quantity), 0) AS total_quantity,
            COALESCE(SUM(e.total_amount), 0) AS total_amount,
+           COALESCE(SUM(e.original_size), 0) AS issued_original,
+           COALESCE(SUM(e.coffee_size), 0)   AS issued_coffee,
+           COALESCE(SUM(e.pes_size), 0)       AS issued_pes,
+           COALESCE(SUM(e.plastic_size), 0)   AS issued_plastic,
            MAX(e.entry_date) AS last_entry_date
     FROM accessory_owners o
     LEFT JOIN accessory_stock_entries e ON e.owner_id = o.id
@@ -73,9 +62,19 @@ $owners = $pdo->query("
     ORDER BY o.created_at DESC, o.name ASC
 ")->fetchAll();
 
+// Remaining balance per owner = opening - issued, summed across the four categories.
+foreach ($owners as &$o) {
+    $o['remaining'] =
+        ((float)$o['opening_original'] - (float)$o['issued_original']) +
+        ((float)$o['opening_coffee']   - (float)$o['issued_coffee']) +
+        ((float)$o['opening_pes']       - (float)$o['issued_pes']) +
+        ((float)$o['opening_plastic']   - (float)$o['issued_plastic']);
+}
+unset($o);
+
 $summary = [
     'owners' => count($owners),
-    'quantity' => array_sum(array_map(fn($o) => (float)$o['total_quantity'], $owners)),
+    'quantity' => array_sum(array_map(fn($o) => (float)$o['remaining'], $owners)),
     'amount' => array_sum(array_map(fn($o) => (float)$o['total_amount'], $owners)),
 ];
 
@@ -106,7 +105,7 @@ require_once '../includes/header.php';
     <div class="col-6 col-lg-4">
         <div class="card border-0" style="background:rgba(34,211,238,0.12);">
             <div class="card-body">
-                <div class="text-muted small fw-semibold text-uppercase">Total Stock</div>
+                <div class="text-muted small fw-semibold text-uppercase">Remaining Stock</div>
                 <div class="fs-4 fw-bold" style="color:#0E7490;"><?= number_format($summary['quantity'], 2) ?></div>
             </div>
         </div>
@@ -133,7 +132,7 @@ require_once '../includes/header.php';
                     <th>Owner</th>
                     <th class="d-none d-md-table-cell">Phone</th>
                     <th class="text-end">Entries</th>
-                    <th class="text-end">Stock</th>
+                    <th class="text-end">Remaining</th>
                     <th class="text-end">Amount</th>
                     <th class="d-none d-lg-table-cell">Last Entry</th>
                     <th><?= __('field_actions') ?></th>
@@ -165,7 +164,7 @@ require_once '../includes/header.php';
                     </td>
                     <td class="d-none d-md-table-cell"><?= htmlspecialchars($owner['phone'] ?? '') ?></td>
                     <td class="text-end"><?= number_format((int)$owner['entry_count']) ?></td>
-                    <td class="text-end fw-semibold"><?= number_format((float)$owner['total_quantity'], 2) ?></td>
+                    <td class="text-end fw-semibold <?= $owner['remaining'] < 0 ? 'text-danger' : '' ?>"><?= number_format((float)$owner['remaining'], 2) ?></td>
                     <td class="text-end fw-bold text-success">؋ <?= number_format((float)$owner['total_amount'], 2) ?></td>
                     <td class="d-none d-lg-table-cell text-muted small">
                         <?= $owner['last_entry_date'] ? htmlspecialchars($owner['last_entry_date']) : '-' ?>
@@ -200,9 +199,24 @@ require_once '../includes/header.php';
                     <label class="form-label fw-semibold">Phone</label>
                     <input type="text" name="phone" class="form-control">
                 </div>
-                <div>
-                    <label class="form-label fw-semibold">Total Stock</label>
-                    <input type="number" step="0.01" min="0" name="total_stock" class="form-control" value="0" required>
+                <label class="form-label fw-semibold">Opening Stock per Category</label>
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="form-label small text-muted mb-1">اصلي چیکو</label>
+                        <input type="number" step="0.01" min="0" name="opening_original" class="form-control" value="0">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small text-muted mb-1">کافی</label>
+                        <input type="number" step="0.01" min="0" name="opening_coffee" class="form-control" value="0">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small text-muted mb-1">Pes</label>
+                        <input type="number" step="0.01" min="0" name="opening_pes" class="form-control" value="0">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small text-muted mb-1">پلاستیکی</label>
+                        <input type="number" step="0.01" min="0" name="opening_plastic" class="form-control" value="0">
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
