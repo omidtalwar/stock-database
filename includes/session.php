@@ -1,6 +1,11 @@
 ﻿<?php
 date_default_timezone_set('Asia/Kabul');
 
+// Device/network lock — only approved IPs may open the management app.
+// Public pages (e.g. sales/share.php) do not include this file, so they stay open.
+require_once __DIR__ . '/ip_guard.php';
+enforceIpAllowlist();
+
 if (session_status() === PHP_SESSION_NONE) {
     $__lifetime = 365 * 24 * 60 * 60; // 1 year
 

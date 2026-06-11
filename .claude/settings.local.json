@@ -9,7 +9,8 @@
       "PowerShell($php = \"C:\\\\xampp\\\\php\\\\php.exe\"; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\accessories\\\\index.php; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\accessories\\\\owner.php; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\accessories\\\\helpers.php)",
       "PowerShell($php = \"C:\\\\xampp\\\\php\\\\php.exe\"; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\accessories\\\\owner.php; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\accessories\\\\helpers.php)",
       "PowerShell($php = \"C:\\\\xampp\\\\php\\\\php.exe\"; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\accessories\\\\owner.php)",
-      "PowerShell($php = \"C:\\\\xampp\\\\php\\\\php.exe\"; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\accessories\\\\index.php)"
+      "PowerShell($php = \"C:\\\\xampp\\\\php\\\\php.exe\"; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\accessories\\\\index.php)",
+      "PowerShell($php = \"C:\\\\xampp\\\\php\\\\php.exe\"; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\config\\\\access.php; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\includes\\\\ip_guard.php; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\includes\\\\session.php; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\auth\\\\myip.php)"
     ]
   }
 }
