@@ -8,9 +8,7 @@
 function tgConfig(): array {
     static $cfg = null;
     if ($cfg === null) {
-        $path = __DIR__ . '/../config/telegram.php';
-        if (!is_file($path)) $path = __DIR__ . '/../config/telegram.example.php';
-        $cfg = @include $path;
+        $cfg = @include __DIR__ . '/../config/telegram.php';
         if (!is_array($cfg)) $cfg = [];
     }
     return $cfg;
