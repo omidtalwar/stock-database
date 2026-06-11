@@ -46,6 +46,7 @@ function ensureAccessoriesTables(PDO $pdo): void {
             rate DECIMAL(12,2) NULL,
             total_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
             notes TEXT NULL,
+            bill_photo VARCHAR(255) NULL,
             created_by INT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_accessory_stock_owner (owner_id),
@@ -98,6 +99,7 @@ function ensureAccessoriesTables(PDO $pdo): void {
     accessoryAddColumnIfMissing($pdo, 'accessory_owners', 'opening_plastic',  "DECIMAL(12,2) NOT NULL DEFAULT 0");
     accessoryAddColumnIfMissing($pdo, 'accessory_stock_entries', 'bill_no',    "VARCHAR(80) NULL AFTER entry_date");
     accessoryAddColumnIfMissing($pdo, 'accessory_stock_entries', 'bill_group', "VARCHAR(40) NULL AFTER bill_no");
+    accessoryAddColumnIfMissing($pdo, 'accessory_stock_entries', 'bill_photo', "VARCHAR(255) NULL AFTER notes");
     accessoryAddColumnIfMissing($pdo, 'accessory_stock_ins',     'bill_no',    "VARCHAR(80) NULL AFTER in_date");
 }
 
@@ -121,6 +123,47 @@ function accessoryToShamsi(int $gy, int $gm, int $gd): array {
 function accessoryShamsiMonths(): array {
     return ['۱ حمل','۲ ثور','۳ جوزا','۴ سرطان','۵ اسد','۶ سنبله',
             '۷ میزان','۸ عقرب','۹ قوس','۱۰ جدی','۱۱ دلو','۱۲ حوت'];
+}
+
+/** Disk directory where accessory bill photos are stored. */
+function accessoryBillUploadDir(): string {
+    return __DIR__ . '/../uploads/accessory-bills/';
+}
+
+/**
+ * Validate and move one uploaded bill photo from $_FILES['bill_photo'] at index $i.
+ * Returns ['file' => saved-filename|null, 'error' => message|null].
+ */
+function accessorySaveBillPhoto(int $i): array {
+    if (empty($_FILES['bill_photo']) || !isset($_FILES['bill_photo']['error'][$i])) {
+        return ['file' => null, 'error' => null];
+    }
+    $err = $_FILES['bill_photo']['error'][$i];
+    if ($err === UPLOAD_ERR_NO_FILE) return ['file' => null, 'error' => null];
+    if ($err !== UPLOAD_ERR_OK)      return ['file' => null, 'error' => 'Photo upload failed (code ' . $err . ').'];
+
+    $name = (string)($_FILES['bill_photo']['name'][$i] ?? '');
+    $tmp  = (string)($_FILES['bill_photo']['tmp_name'][$i] ?? '');
+    $size = (int)($_FILES['bill_photo']['size'][$i] ?? 0);
+
+    $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+    if (!in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif'], true)) {
+        return ['file' => null, 'error' => 'Only JPG, PNG, WebP, GIF photos allowed.'];
+    }
+    if ($size > 5 * 1024 * 1024) {
+        return ['file' => null, 'error' => 'Photo exceeds 5 MB.'];
+    }
+    if (@getimagesize($tmp) === false) {
+        return ['file' => null, 'error' => 'Uploaded file is not a valid image.'];
+    }
+
+    $dir = accessoryBillUploadDir();
+    if (!is_dir($dir)) mkdir($dir, 0755, true);
+    $fname = 'abill_' . date('Ymd') . '_' . bin2hex(random_bytes(8)) . '.' . $ext;
+    if (!move_uploaded_file($tmp, $dir . $fname)) {
+        return ['file' => null, 'error' => 'Could not save photo.'];
+    }
+    return ['file' => $fname, 'error' => null];
 }
 
 /** Format a stored Gregorian date (Y-m-d) as a Solar Hijri label like 1403/03/21. */

@@ -167,9 +167,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: owner.php?id=' . $id); exit;
         }
 
+        $photo = accessorySaveBillPhoto($i);
+        if ($photo['error'] !== null) {
+            $_SESSION['error'] = $photo['error'];
+            header('Location: owner.php?id=' . $id); exit;
+        }
+
         $rows[] = [
             'item_name' => $itemName,
             'quantity' => $quantity,
+            'bill_photo' => $photo['file'],
             'original_size' => $originalSize,
             'coffee_size' => $coffeeSize,
             'pes_size' => $pesSize,
@@ -188,15 +195,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt = $pdo->prepare("
             INSERT INTO accessory_stock_entries
                 (owner_id, entry_date, bill_no, bill_group, item_name, quantity, original_size, coffee_size,
-                 pes_size, plastic_size, meterage, rate, total_amount, notes, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 pes_size, plastic_size, meterage, rate, total_amount, notes, bill_photo, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
         foreach ($rows as $row) {
             $stmt->execute([
                 $id, $date, $billNo, $billGroup, $row['item_name'], $row['quantity'],
                 $row['original_size'], $row['coffee_size'], $row['pes_size'],
                 $row['plastic_size'], $row['meterage'], $row['rate'],
-                $row['total_amount'], $row['notes'], $_SESSION['user_id'] ?? null,
+                $row['total_amount'], $row['notes'], $row['bill_photo'], $_SESSION['user_id'] ?? null,
             ]);
         }
         $_SESSION['success'] = count($rows) . ' accessory row(s) saved.';
@@ -524,6 +531,11 @@ require_once '../includes/header.php';
                     <td>
                         <div class="fw-semibold"><?= htmlspecialchars($entry['item_name']) ?></div>
                         <?php if ($entry['notes']): ?><div class="text-muted small"><?= htmlspecialchars($entry['notes']) ?></div><?php endif; ?>
+                        <?php if (!empty($entry['bill_photo'])): ?>
+                        <a href="/uploads/accessory-bills/<?= htmlspecialchars($entry['bill_photo']) ?>" target="_blank" class="d-inline-block mt-1" title="View bill photo">
+                            <img src="/uploads/accessory-bills/<?= htmlspecialchars($entry['bill_photo']) ?>" alt="bill" style="height:38px;width:38px;object-fit:cover;border-radius:6px;border:1px solid rgba(0,0,0,.1);">
+                        </a>
+                        <?php endif; ?>
                     </td>
                     <td class="text-end"><?= $entry['original_size'] !== null ? number_format((float)$entry['original_size'], 2) : '-' ?></td>
                     <td class="text-end"><?= $entry['coffee_size'] !== null ? number_format((float)$entry['coffee_size'], 2) : '-' ?></td>
@@ -690,7 +702,7 @@ require_once '../includes/header.php';
 
 <div class="modal fade" id="entryModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-centered">
-        <form method="POST" class="modal-content">
+        <form method="POST" enctype="multipart/form-data" class="modal-content">
             <input type="hidden" name="_form_token" value="<?= htmlspecialchars($formToken) ?>">
             <div class="modal-header">
                 <h5 class="modal-title">Add Accessory Stock</h5>
@@ -726,6 +738,7 @@ require_once '../includes/header.php';
                                 <th style="width:95px;">مترانه</th>
                                 <th style="width:90px;">نرخ</th>
                                 <th style="width:110px;">جمله</th>
+                                <th style="width:120px;">بل عکس</th>
                                 <th style="width:48px;"></th>
                             </tr>
                         </thead>
@@ -741,6 +754,7 @@ require_once '../includes/header.php';
                                 <td><input type="number" step="0.01" min="0" name="meterage[]" class="form-control form-control-sm calc-meterage"></td>
                                 <td><input type="number" step="0.01" min="0" name="rate[]" class="form-control form-control-sm calc-rate"></td>
                                 <td><input type="text" class="form-control form-control-sm row-total" value="0.00" readonly></td>
+                                <td><input type="file" accept="image/*" name="bill_photo[]" class="form-control form-control-sm"></td>
                                 <td class="text-center">
                                     <button type="button" class="btn btn-sm btn-light remove-row" title="Remove row">
                                         <i class="bi bi-x"></i>
@@ -754,6 +768,7 @@ require_once '../includes/header.php';
                             <tr class="table-light fw-bold">
                                 <td colspan="8" class="text-end">ټول جمله</td>
                                 <td><input type="text" id="entryGrandTotal" class="form-control form-control-sm fw-bold" value="0.00" readonly></td>
+                                <td></td>
                                 <td></td>
                             </tr>
                         </tfoot>
@@ -779,6 +794,7 @@ require_once '../includes/header.php';
         <td><input type="number" step="0.01" min="0" name="meterage[]" class="form-control form-control-sm calc-meterage"></td>
         <td><input type="number" step="0.01" min="0" name="rate[]" class="form-control form-control-sm calc-rate"></td>
         <td><input type="text" class="form-control form-control-sm row-total" value="0.00" readonly></td>
+        <td><input type="file" accept="image/*" name="bill_photo[]" class="form-control form-control-sm"></td>
         <td class="text-center">
             <button type="button" class="btn btn-sm btn-light remove-row" title="Remove row">
                 <i class="bi bi-x"></i>
