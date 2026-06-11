@@ -1,6 +1,9 @@
 <?php
 require_once '../includes/session.php';
 requireLogin();
+require_once '../config/db.php';
+require_once '../includes/currency.php';
+require_once '../includes/reminders.php';
 require_once '../includes/telegram.php';
 
 $cfg   = tgConfig();
@@ -14,6 +17,18 @@ if (($_GET['action'] ?? '') === 'test') {
     } else {
         $ok = tgSend($token, (string)$cfg['chat_id'], "✅ <b>FZL test message</b>\nYour Telegram alerts are working.");
         $flash = $ok ? ['ok', 'Test message sent. Check your Telegram.'] : ['err', 'Send failed — check token/chat_id and outbound connectivity.'];
+    }
+}
+
+// Send the daily reminders digest now (test).
+if (($_GET['action'] ?? '') === 'daily_now') {
+    if (!tgEnabled()) {
+        $flash = ['warn', 'Bot is not enabled yet.'];
+    } else {
+        $msg  = reminderSummaryMessage($pdo, 15);
+        $sent = 0;
+        foreach (tgAllowedChatIds() as $cid) { if (tgReply($cid, $msg)) $sent++; }
+        $flash = $sent ? ['ok', 'Reminders summary sent. Check Telegram.'] : ['err', 'Send failed.'];
     }
 }
 
@@ -103,6 +118,19 @@ $whSet  = !empty($whInfo['ok']) && !empty($whInfo['result']['url']);
             <a href="?action=remove_webhook" class="btn btn-outline-danger btn-sm"><i class="bi bi-x-circle me-1"></i>Remove webhook</a>
         </div>
         <div class="text-muted small mt-2"><i class="bi bi-info-circle me-1"></i>Note: while the webhook is active, "Fetch chat IDs" above won't work (Telegram sends updates to the webhook instead).</div>
+    </div>
+</div>
+
+<?php
+$cronUrl = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? '') . '/telegram/daily_reminders.php';
+?>
+<div class="card mb-3">
+    <div class="card-header py-3 fw-semibold">Daily reminders digest (08:00 Kabul)</div>
+    <div class="card-body">
+        <p class="small text-muted mb-2">Sends the list of customers unpaid 15+ days every morning. Set up a cron job in <b>cPanel → Cron Jobs</b> to run this <b>hourly</b> (the script self-guards to 08:00 Kabul and sends once per day):</p>
+        <pre class="bg-light p-2 rounded small mb-2" style="white-space:pre-wrap;">/usr/local/bin/php /home/USERNAME/public_html/telegram/daily_reminders.php</pre>
+        <p class="small text-muted mb-2">Replace the path with your real one (find it in File Manager). Suggested schedule: minute <code>0</code>, every hour.</p>
+        <a href="?action=daily_now" class="btn btn-success btn-sm"><i class="bi bi-send me-1"></i>Send reminders summary now (test)</a>
     </div>
 </div>
 

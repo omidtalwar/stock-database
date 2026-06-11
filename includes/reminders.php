@@ -42,6 +42,30 @@ function overdueCustomers(PDO $pdo, int $days = 15): array {
     return $stmt->fetchAll();
 }
 
+/**
+ * Build a Telegram-ready summary of overdue customers. Requires currency.php
+ * (formatAFN) to be loaded by the caller.
+ */
+function reminderSummaryMessage(PDO $pdo, int $days = 15): string {
+    $customers = overdueCustomers($pdo, $days);
+    if (empty($customers)) {
+        return "☀️ <b>Good morning</b>\nNo customers overdue {$days}+ days. All caught up. 🎉";
+    }
+    $total = array_sum(array_map(fn($c) => (float)$c['total_debt'], $customers));
+    $msg = "☀️ <b>Daily reminders</b>\n"
+         . count($customers) . " customer(s) unpaid {$days}+ days · outstanding <b>" . formatAFN($total) . "</b>\n";
+
+    $i = 0;
+    foreach ($customers as $c) {
+        if (++$i > 30) { $msg .= "\n… and " . (count($customers) - 30) . " more — open the Reminders page."; break; }
+        $msg .= "\n<code>#" . $c['id'] . "</code> " . htmlspecialchars($c['name'], ENT_QUOTES)
+              . " · " . formatAFN((float)$c['total_debt'])
+              . " · " . (int)$c['days_since'] . "d"
+              . (!empty($c['phone']) ? " · " . htmlspecialchars($c['phone'], ENT_QUOTES) : '');
+    }
+    return $msg;
+}
+
 /** Lightweight count for the sidebar badge. Never throws. */
 function overdueCount(PDO $pdo, int $days = 15): int {
     try {
