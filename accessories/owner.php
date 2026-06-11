@@ -115,6 +115,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
     header('Location: owner.php?id=' . $id); exit;
 }
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete_stockin') {
+    if (!validateFormToken('accessory_delete_' . $id)) {
+        $_SESSION['error'] = 'Duplicate submission detected.';
+        header('Location: owner.php?id=' . $id); exit;
+    }
+    $sid = (int)($_POST['stockin_id'] ?? 0);
+    if ($sid > 0) {
+        $stmt = $pdo->prepare("DELETE FROM accessory_stock_ins WHERE owner_id = ? AND id = ?");
+        $stmt->execute([$id, $sid]);
+    }
+    $_SESSION['success'] = 'Stock-in record deleted.';
+    header('Location: owner.php?id=' . $id); exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!validateFormToken('accessory_entry_' . $id)) {
         $_SESSION['error'] = 'Duplicate submission detected. Your data was already saved.';
@@ -274,6 +288,20 @@ foreach ($addStmt->fetchAll() as $row) {
     $added[$row['category']] = (float)$row['added'];
 }
 
+// Detailed stock-in history grouped by category (for the per-category history modals).
+$stockInRowsStmt = $pdo->prepare("
+    SELECT * FROM accessory_stock_ins
+    WHERE owner_id = ?
+    ORDER BY COALESCE(in_date, DATE(created_at)) DESC, id DESC
+");
+$stockInRowsStmt->execute([$id]);
+$stockInsByCat = ['original' => [], 'coffee' => [], 'pes' => [], 'plastic' => []];
+foreach ($stockInRowsStmt->fetchAll() as $row) {
+    if (isset($stockInsByCat[$row['category']])) {
+        $stockInsByCat[$row['category']][] = $row;
+    }
+}
+
 // Per-category stock = opening + added - issued.
 $balances = [
     'original' => ['label' => 'اصلي چیکو', 'opening' => (float)$owner['opening_original'], 'issued' => $totals['original']],
@@ -372,16 +400,22 @@ require_once '../includes/header.php';
 </div>
 
 <div class="card mb-4">
-    <div class="card-header py-3 fw-semibold">
-        <i class="bi bi-calculator me-2 text-primary"></i>Stock Balance per Category
+    <div class="card-header py-3 fw-semibold d-flex align-items-center justify-content-between">
+        <span><i class="bi bi-calculator me-2 text-primary"></i>Stock Balance per Category</span>
+        <span class="text-muted small fw-normal"><i class="bi bi-info-circle me-1"></i>Click a category for its add-stock history</span>
     </div>
     <div class="table-responsive">
         <table class="table align-middle mb-0 text-center">
             <thead class="table-light">
                 <tr>
                     <th></th>
-                    <?php foreach ($balances as $b): ?>
-                    <th><?= htmlspecialchars($b['label']) ?></th>
+                    <?php foreach ($balances as $key => $b): ?>
+                    <th>
+                        <button type="button" class="btn btn-link p-0 fw-semibold text-decoration-none"
+                                data-bs-toggle="modal" data-bs-target="#sihist-<?= $key ?>">
+                            <?= htmlspecialchars($b['label']) ?> <i class="bi bi-clock-history small"></i>
+                        </button>
+                    </th>
                     <?php endforeach; ?>
                 </tr>
             </thead>
@@ -394,8 +428,15 @@ require_once '../includes/header.php';
                 </tr>
                 <tr>
                     <td class="text-muted small text-start fw-semibold">Added</td>
-                    <?php foreach ($balances as $b): ?>
-                    <td class="text-primary"><?= number_format($b['added'], 2) ?></td>
+                    <?php foreach ($balances as $key => $b): ?>
+                    <td>
+                        <button type="button" class="btn btn-link p-0 text-primary text-decoration-none fw-semibold"
+                                data-bs-toggle="modal" data-bs-target="#sihist-<?= $key ?>"
+                                title="<?= count($stockInsByCat[$key]) ?> stock-in record(s)">
+                            <?= number_format($b['added'], 2) ?>
+                            <?php if (count($stockInsByCat[$key])): ?><span class="badge bg-primary-subtle text-primary"><?= count($stockInsByCat[$key]) ?></span><?php endif; ?>
+                        </button>
+                    </td>
                     <?php endforeach; ?>
                 </tr>
                 <tr>
@@ -414,6 +455,73 @@ require_once '../includes/header.php';
         </table>
     </div>
 </div>
+
+<?php foreach ($balances as $key => $b): ?>
+<div class="modal fade" id="sihist-<?= $key ?>" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-box-arrow-in-down me-2 text-success"></i>Add-Stock History — <?= htmlspecialchars($b['label']) ?>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <?php if (empty($stockInsByCat[$key])): ?>
+                <div class="text-center text-muted py-4">No stock added for this category yet.</div>
+                <?php else: ?>
+                <div class="d-flex justify-content-between mb-2 small">
+                    <span class="text-muted"><?= count($stockInsByCat[$key]) ?> record(s)</span>
+                    <span class="fw-bold text-primary">Total added: <?= number_format($b['added'], 2) ?></span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>تاریخ</th>
+                                <th>بل</th>
+                                <th class="text-end">Qty</th>
+                                <th>Note</th>
+                                <th>Image</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($stockInsByCat[$key] as $si): ?>
+                            <tr>
+                                <td class="text-muted small"><?= htmlspecialchars(accessoryShamsiDate($si['in_date'])) ?></td>
+                                <td class="text-muted small"><?= htmlspecialchars($si['bill_no'] ?? '') ?: '-' ?></td>
+                                <td class="text-end fw-semibold text-primary">+<?= number_format((float)$si['quantity'], 2) ?></td>
+                                <td class="text-muted small"><?= htmlspecialchars($si['notes'] ?? '') ?></td>
+                                <td>
+                                    <?php if (!empty($si['bill_photo'])): ?>
+                                    <a href="/uploads/accessory-bills/<?= htmlspecialchars($si['bill_photo']) ?>" target="_blank" title="View bill image">
+                                        <img src="/uploads/accessory-bills/<?= htmlspecialchars($si['bill_photo']) ?>" alt="bill" style="height:34px;width:34px;object-fit:cover;border-radius:6px;border:1px solid rgba(0,0,0,.1);">
+                                    </a>
+                                    <?php else: ?><span class="text-muted">-</span><?php endif; ?>
+                                </td>
+                                <td class="text-end">
+                                    <form method="POST" class="d-inline" onsubmit="return confirm('Delete this stock-in (<?= number_format((float)$si['quantity'], 2) ?>)? Balance will drop.');">
+                                        <input type="hidden" name="_form_token" value="<?= htmlspecialchars($deleteToken) ?>">
+                                        <input type="hidden" name="action" value="delete_stockin">
+                                        <input type="hidden" name="stockin_id" value="<?= (int)$si['id'] ?>">
+                                        <button class="btn btn-sm btn-outline-danger py-0 px-1" title="Delete"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+                <?php endif; ?>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal"><?= __('btn_cancel') ?></button>
+            </div>
+        </div>
+    </div>
+</div>
+<?php endforeach; ?>
 
 <div class="card mb-4">
     <div class="card-header py-3 fw-semibold d-flex align-items-center justify-content-between">
