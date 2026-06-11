@@ -267,15 +267,7 @@ require_once '../includes/header.php';
 </div>
 
 <div class="row g-3 mb-4">
-    <div class="col-6 col-lg-3">
-        <div class="card border-0" style="background:rgba(0,103,192,0.08);">
-            <div class="card-body">
-                <div class="text-muted small fw-semibold text-uppercase">Rows</div>
-                <div class="fs-4 fw-bold text-primary"><?= number_format($totals['rows']) ?></div>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-lg-3">
+    <div class="col-6 col-lg">
         <div class="card border-0" style="background:rgba(34,211,238,0.12);">
             <div class="card-body">
                 <div class="text-muted small fw-semibold text-uppercase">Stock Qty</div>
@@ -283,19 +275,27 @@ require_once '../includes/header.php';
             </div>
         </div>
     </div>
-    <div class="col-6 col-lg-3">
+    <div class="col-6 col-lg">
         <div class="card border-0" style="background:rgba(16,124,16,0.10);">
             <div class="card-body">
                 <div class="text-muted small fw-semibold text-uppercase">Total Amount</div>
-                <div class="fs-4 fw-bold text-success">؋ <?= number_format($totals['amount'], 2) ?></div>
+                <div class="fs-4 fw-bold text-success">؋ <?= number_format($account['payable'], 2) ?></div>
             </div>
         </div>
     </div>
-    <div class="col-6 col-lg-3">
-        <div class="card border-0" style="background:rgba(157,93,0,0.10);">
+    <div class="col-6 col-lg">
+        <div class="card border-0" style="background:rgba(220,53,69,0.10);">
             <div class="card-body">
-                <div class="text-muted small fw-semibold text-uppercase">Avg Rate / مترانه</div>
-                <div class="fs-4 fw-bold" style="color:#9D5D00;">؋ <?= number_format($avgRate, 2) ?></div>
+                <div class="text-muted small fw-semibold text-uppercase">Paid</div>
+                <div class="fs-4 fw-bold text-danger">؋ <?= number_format($account['paid'], 2) ?></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="card border-0" style="background:rgba(124,58,237,0.12);">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold text-uppercase">Remaining</div>
+                <div class="fs-4 fw-bold <?= $account['remaining'] < 0 ? 'text-danger' : '' ?>" style="<?= $account['remaining'] < 0 ? '' : 'color:#7C3AED;' ?>">؋ <?= number_format($account['remaining'], 2) ?></div>
             </div>
         </div>
     </div>
@@ -354,23 +354,15 @@ require_once '../includes/header.php';
     </div>
     <div class="card-body">
         <div class="row g-3 text-center">
-            <div class="col-6 col-md">
-                <div class="text-muted small text-uppercase">Bills Amount</div>
-                <div class="fs-5 fw-bold">؋ <?= number_format($account['bills'], 2) ?></div>
-            </div>
-            <div class="col-6 col-md">
-                <div class="text-muted small text-uppercase">Previous / Added</div>
-                <div class="fs-5 fw-bold text-primary">؋ <?= number_format($account['charged'], 2) ?></div>
-            </div>
-            <div class="col-6 col-md">
-                <div class="text-muted small text-uppercase">Total Payable</div>
+            <div class="col-4">
+                <div class="text-muted small text-uppercase">Total Amount</div>
                 <div class="fs-5 fw-bold">؋ <?= number_format($account['payable'], 2) ?></div>
             </div>
-            <div class="col-6 col-md">
+            <div class="col-4">
                 <div class="text-muted small text-uppercase">Paid</div>
                 <div class="fs-5 fw-bold text-danger">؋ <?= number_format($account['paid'], 2) ?></div>
             </div>
-            <div class="col-6 col-md">
+            <div class="col-4">
                 <div class="text-muted small text-uppercase">Remaining</div>
                 <div class="fs-5 fw-bold <?= $account['remaining'] < 0 ? 'text-danger' : 'text-success' ?>">؋ <?= number_format($account['remaining'], 2) ?></div>
             </div>

@@ -7,7 +7,8 @@
       "Bash(php -l c:/xampp/htdocs/fzl/accessories/helpers.php)",
       "PowerShell($php = \\(Get-Command php -ErrorAction SilentlyContinue\\).Source; if \\(-not $php\\) { $php = \"C:\\\\xampp\\\\php\\\\php.exe\" }; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\accessories\\\\index.php; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\accessories\\\\owner.php; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\accessories\\\\helpers.php)",
       "PowerShell($php = \"C:\\\\xampp\\\\php\\\\php.exe\"; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\accessories\\\\index.php; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\accessories\\\\owner.php; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\accessories\\\\helpers.php)",
-      "PowerShell($php = \"C:\\\\xampp\\\\php\\\\php.exe\"; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\accessories\\\\owner.php; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\accessories\\\\helpers.php)"
+      "PowerShell($php = \"C:\\\\xampp\\\\php\\\\php.exe\"; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\accessories\\\\owner.php; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\accessories\\\\helpers.php)",
+      "PowerShell($php = \"C:\\\\xampp\\\\php\\\\php.exe\"; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\accessories\\\\owner.php)"
     ]
   }
 }
