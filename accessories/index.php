@@ -232,7 +232,7 @@ require_once '../includes/header.php';
                     <td class="text-end fw-semibold <?= $owner['remaining'] < 0 ? 'text-danger' : '' ?>"><?= number_format((float)$owner['remaining'], 2) ?></td>
                     <td class="text-end fw-bold <?= $owner['remaining_amount'] < 0 ? 'text-danger' : 'text-success' ?>">؋ <?= number_format((float)$owner['remaining_amount'], 2) ?></td>
                     <td class="d-none d-lg-table-cell text-muted small">
-                        <?= $owner['last_entry_date'] ? htmlspecialchars($owner['last_entry_date']) : '-' ?>
+                        <?= $owner['last_entry_date'] ? htmlspecialchars(accessoryShamsiDate($owner['last_entry_date'])) : '-' ?>
                     </td>
                     <td>
                         <div class="d-flex gap-1">

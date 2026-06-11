@@ -443,7 +443,7 @@ require_once '../includes/header.php';
                 <tbody>
                     <?php foreach ($payments as $p): ?>
                     <tr>
-                        <td class="text-muted small"><?= htmlspecialchars($p['entry_date'] ?? '') ?></td>
+                        <td class="text-muted small"><?= htmlspecialchars(accessoryShamsiDate($p['entry_date'])) ?></td>
                         <td class="text-muted small"><?= htmlspecialchars($p['bill_no'] ?? '') ?: '-' ?></td>
                         <td>
                             <?php if ($p['kind'] === 'charge'): ?>
@@ -486,7 +486,7 @@ require_once '../includes/header.php';
     <div class="card-header py-2 d-flex align-items-center justify-content-between bg-light">
         <div>
             <span class="fw-semibold">بل: <?= htmlspecialchars($bill['bill_no'] ?? '') ?: '—' ?></span>
-            <span class="text-muted small ms-2"><i class="bi bi-calendar3 me-1"></i><?= htmlspecialchars($bill['date'] ?? '') ?></span>
+            <span class="text-muted small ms-2"><i class="bi bi-calendar3 me-1"></i><?= htmlspecialchars(accessoryShamsiDate($bill['date'])) ?></span>
         </div>
         <div class="d-flex align-items-center gap-3">
             <span class="fw-bold text-success">؋ <?= number_format($bill['t']['amount'], 2) ?></span>

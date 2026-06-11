@@ -123,6 +123,15 @@ function accessoryShamsiMonths(): array {
             '۷ میزان','۸ عقرب','۹ قوس','۱۰ جدی','۱۱ دلو','۱۲ حوت'];
 }
 
+/** Format a stored Gregorian date (Y-m-d) as a Solar Hijri label like 1403/03/21. */
+function accessoryShamsiDate(?string $date): string {
+    if (!$date) return '';
+    $ts = strtotime($date);
+    if ($ts === false) return (string)$date;
+    $s = accessoryToShamsi((int)date('Y', $ts), (int)date('n', $ts), (int)date('j', $ts));
+    return sprintf('%04d/%02d/%02d', $s['y'], $s['m'], $s['d']);
+}
+
 function accessoryAddColumnIfMissing(PDO $pdo, string $table, string $column, string $definition): void {
     $stmt = $pdo->prepare("
         SELECT COUNT(*) FROM information_schema.COLUMNS
