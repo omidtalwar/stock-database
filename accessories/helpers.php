@@ -65,6 +65,7 @@ function ensureAccessoriesTables(PDO $pdo): void {
             category VARCHAR(20) NOT NULL,
             quantity DECIMAL(12,2) NOT NULL DEFAULT 0,
             notes TEXT NULL,
+            bill_photo VARCHAR(255) NULL,
             created_by INT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_accessory_stock_ins_owner (owner_id),
@@ -101,6 +102,7 @@ function ensureAccessoriesTables(PDO $pdo): void {
     accessoryAddColumnIfMissing($pdo, 'accessory_stock_entries', 'bill_group', "VARCHAR(40) NULL AFTER bill_no");
     accessoryAddColumnIfMissing($pdo, 'accessory_stock_entries', 'bill_photo', "VARCHAR(255) NULL AFTER notes");
     accessoryAddColumnIfMissing($pdo, 'accessory_stock_ins',     'bill_no',    "VARCHAR(80) NULL AFTER in_date");
+    accessoryAddColumnIfMissing($pdo, 'accessory_stock_ins',     'bill_photo', "VARCHAR(255) NULL AFTER notes");
 }
 
 /**
@@ -131,39 +133,56 @@ function accessoryBillUploadDir(): string {
 }
 
 /**
- * Validate and move one uploaded bill photo from $_FILES['bill_photo'] at index $i.
- * Returns ['file' => saved-filename|null, 'error' => message|null].
+ * Validate and move one uploaded image. Returns ['file' => filename|null, 'error' => msg|null].
  */
-function accessorySaveBillPhoto(int $i): array {
-    if (empty($_FILES['bill_photo']) || !isset($_FILES['bill_photo']['error'][$i])) {
-        return ['file' => null, 'error' => null];
-    }
-    $err = $_FILES['bill_photo']['error'][$i];
+function accessoryStoreImage(?string $name, ?string $tmp, int $size, int $err): array {
     if ($err === UPLOAD_ERR_NO_FILE) return ['file' => null, 'error' => null];
     if ($err !== UPLOAD_ERR_OK)      return ['file' => null, 'error' => 'Photo upload failed (code ' . $err . ').'];
 
-    $name = (string)($_FILES['bill_photo']['name'][$i] ?? '');
-    $tmp  = (string)($_FILES['bill_photo']['tmp_name'][$i] ?? '');
-    $size = (int)($_FILES['bill_photo']['size'][$i] ?? 0);
-
-    $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+    $ext = strtolower(pathinfo((string)$name, PATHINFO_EXTENSION));
     if (!in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif'], true)) {
         return ['file' => null, 'error' => 'Only JPG, PNG, WebP, GIF photos allowed.'];
     }
     if ($size > 5 * 1024 * 1024) {
         return ['file' => null, 'error' => 'Photo exceeds 5 MB.'];
     }
-    if (@getimagesize($tmp) === false) {
+    if (@getimagesize((string)$tmp) === false) {
         return ['file' => null, 'error' => 'Uploaded file is not a valid image.'];
     }
 
     $dir = accessoryBillUploadDir();
     if (!is_dir($dir)) mkdir($dir, 0755, true);
     $fname = 'abill_' . date('Ymd') . '_' . bin2hex(random_bytes(8)) . '.' . $ext;
-    if (!move_uploaded_file($tmp, $dir . $fname)) {
+    if (!move_uploaded_file((string)$tmp, $dir . $fname)) {
         return ['file' => null, 'error' => 'Could not save photo.'];
     }
     return ['file' => $fname, 'error' => null];
+}
+
+/** One uploaded bill photo from the array field $_FILES['bill_photo'] at index $i. */
+function accessorySaveBillPhoto(int $i): array {
+    if (empty($_FILES['bill_photo']) || !isset($_FILES['bill_photo']['error'][$i])) {
+        return ['file' => null, 'error' => null];
+    }
+    return accessoryStoreImage(
+        $_FILES['bill_photo']['name'][$i] ?? '',
+        $_FILES['bill_photo']['tmp_name'][$i] ?? '',
+        (int)($_FILES['bill_photo']['size'][$i] ?? 0),
+        (int)$_FILES['bill_photo']['error'][$i]
+    );
+}
+
+/** One uploaded image from a single (non-array) file field, e.g. the Add Stock modal. */
+function accessorySaveSinglePhoto(string $field): array {
+    if (empty($_FILES[$field]) || !isset($_FILES[$field]['error']) || is_array($_FILES[$field]['error'])) {
+        return ['file' => null, 'error' => null];
+    }
+    return accessoryStoreImage(
+        $_FILES[$field]['name'] ?? '',
+        $_FILES[$field]['tmp_name'] ?? '',
+        (int)($_FILES[$field]['size'] ?? 0),
+        (int)$_FILES[$field]['error']
+    );
 }
 
 /** Format a stored Gregorian date (Y-m-d) as a Solar Hijri label like 1403/03/21. */

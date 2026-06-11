@@ -13,7 +13,9 @@
       "PowerShell($php = \"C:\\\\xampp\\\\php\\\\php.exe\"; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\config\\\\access.php; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\includes\\\\ip_guard.php; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\includes\\\\session.php; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\auth\\\\myip.php)",
       "PowerShell($php = \"C:\\\\xampp\\\\php\\\\php.exe\"; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\accessories\\\\owner.php; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\accessories\\\\index.php; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\accessories\\\\helpers.php)",
       "PowerShell($php = \"C:\\\\xampp\\\\php\\\\php.exe\"; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\includes\\\\reminders.php; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\reminders\\\\index.php; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\includes\\\\header.php; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\dashboard.php)",
-      "PowerShell($php = \"C:\\\\xampp\\\\php\\\\php.exe\"; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\reminders\\\\index.php)"
+      "PowerShell($php = \"C:\\\\xampp\\\\php\\\\php.exe\"; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\reminders\\\\index.php)",
+      "PowerShell($php = \"C:\\\\xampp\\\\php\\\\php.exe\"; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\reminders\\\\debug.php)",
+      "Bash(git rm *)"
     ]
   }
 }

@@ -34,16 +34,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'stock
     $billNo   = trim($_POST['bill_no'] ?? '') ?: null;
     $note     = trim($_POST['note'] ?? '') ?: null;
 
+    $photo = accessorySaveSinglePhoto('bill_photo');
+
     if (!isset($categories[$category])) {
         $_SESSION['error'] = 'Choose a valid stock type.';
     } elseif ($quantity <= 0) {
         $_SESSION['error'] = 'Stock quantity must be greater than zero.';
+    } elseif ($photo['error'] !== null) {
+        $_SESSION['error'] = $photo['error'];
     } else {
         $stmt = $pdo->prepare("
-            INSERT INTO accessory_stock_ins (owner_id, in_date, bill_no, category, quantity, notes, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO accessory_stock_ins (owner_id, in_date, bill_no, category, quantity, notes, bill_photo, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ");
-        $stmt->execute([$id, $inDate, $billNo, $category, $quantity, $note, $_SESSION['user_id'] ?? null]);
+        $stmt->execute([$id, $inDate, $billNo, $category, $quantity, $note, $photo['file'], $_SESSION['user_id'] ?? null]);
         $_SESSION['success'] = number_format($quantity, 2) . ' ' . $categories[$category]['label'] . ' stock added.';
         header('Location: owner.php?id=' . $id); exit;
     }
@@ -639,7 +643,7 @@ require_once '../includes/header.php';
 
 <div class="modal fade" id="stockInModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
-        <form method="POST" class="modal-content">
+        <form method="POST" enctype="multipart/form-data" class="modal-content">
             <input type="hidden" name="_form_token" value="<?= htmlspecialchars($stockInToken) ?>">
             <input type="hidden" name="action" value="stock_in">
             <div class="modal-header">
@@ -687,9 +691,17 @@ require_once '../includes/header.php';
                     <input type="hidden" name="in_date" id="stockInDateHidden" value="<?= date('Y-m-d') ?>">
                     <div id="stockInGregorianBadge" class="mt-1 text-muted" style="font-size:0.71rem;"></div>
                 </div>
-                <div class="mb-1">
+                <div class="mb-3">
                     <label class="form-label fw-semibold">Note</label>
                     <input type="text" name="note" class="form-control">
+                </div>
+                <div class="mb-1">
+                    <label class="form-label fw-semibold"><i class="bi bi-image me-1 text-primary"></i>Bill Image</label>
+                    <input type="file" name="bill_photo" id="stockInPhoto" accept="image/*" class="form-control">
+                    <div id="stockInPhotoPreview" class="mt-2 text-center" style="display:none;">
+                        <img src="" alt="preview" style="max-height:160px;max-width:100%;border-radius:8px;border:1px solid rgba(0,0,0,.1);">
+                        <div><button type="button" id="stockInPhotoClear" class="btn btn-sm btn-link text-danger p-0 mt-1">Remove image</button></div>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -899,6 +911,28 @@ function syncPayShamsi() {
 }
 syncStockInShamsi();
 syncPayShamsi();
+
+(function () {
+    const input   = document.getElementById('stockInPhoto');
+    const preview = document.getElementById('stockInPhotoPreview');
+    const img     = preview ? preview.querySelector('img') : null;
+    const clear   = document.getElementById('stockInPhotoClear');
+    if (!input || !preview || !img) return;
+
+    input.addEventListener('change', function () {
+        const file = input.files && input.files[0];
+        if (!file || !file.type.startsWith('image/')) { preview.style.display = 'none'; img.src = ''; return; }
+        const reader = new FileReader();
+        reader.onload = e => { img.src = e.target.result; preview.style.display = ''; };
+        reader.readAsDataURL(file);
+    });
+
+    clear?.addEventListener('click', function () {
+        input.value = '';
+        img.src = '';
+        preview.style.display = 'none';
+    });
+})();
 </script>
 
 <?php require_once '../includes/footer.php'; ?>
