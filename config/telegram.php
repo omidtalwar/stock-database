@@ -22,6 +22,7 @@ return [
     'enabled'   => defined('TELEGRAM_ENABLED')   ? (bool)TELEGRAM_ENABLED   : false,
     'bot_token' => defined('TELEGRAM_BOT_TOKEN')  ? (string)TELEGRAM_BOT_TOKEN : '',
     'chat_id'   => defined('TELEGRAM_CHAT_ID')    ? (string)TELEGRAM_CHAT_ID  : '',
+    'secret'    => defined('TELEGRAM_SECRET')     ? (string)TELEGRAM_SECRET   : '',  // optional; auto-derived from token if blank
 
     // Per-event switches — turn individual alerts on/off.
     'events' => [

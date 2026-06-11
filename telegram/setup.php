@@ -17,6 +17,22 @@ if (($_GET['action'] ?? '') === 'test') {
     }
 }
 
+// Compute the webhook URL for this site.
+$scheme     = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$webhookUrl = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? '') . '/telegram/webhook.php';
+
+// Set / remove webhook (enables two-way commands).
+if (($_GET['action'] ?? '') === 'set_webhook') {
+    $r = tgSetWebhook($webhookUrl);
+    $flash = !empty($r['ok'])
+        ? ['ok', 'Webhook set. Message your bot a command like /help.']
+        : ['err', 'setWebhook failed: ' . ($r['description'] ?? 'unknown error')];
+}
+if (($_GET['action'] ?? '') === 'remove_webhook') {
+    $r = tgDeleteWebhook();
+    $flash = !empty($r['ok']) ? ['ok', 'Webhook removed.'] : ['err', 'deleteWebhook failed.'];
+}
+
 // Fetch recent chats that messaged the bot (to discover chat IDs).
 $updates = null; $updErr = null;
 if (($_GET['action'] ?? '') === 'fetch') {
@@ -64,6 +80,29 @@ require_once '../includes/header.php';
             <a href="?action=fetch" class="btn btn-primary btn-sm"><i class="bi bi-search me-1"></i>Fetch chat IDs</a>
             <a href="?action=test" class="btn btn-success btn-sm"><i class="bi bi-send me-1"></i>Send test message</a>
         </div>
+    </div>
+</div>
+
+<?php
+$whInfo = ($token !== '') ? tgWebhookInfo() : ['ok' => false];
+$whSet  = !empty($whInfo['ok']) && !empty($whInfo['result']['url']);
+?>
+<div class="card mb-3">
+    <div class="card-header py-3 fw-semibold">Commands (two-way) — webhook</div>
+    <div class="card-body">
+        <p class="small text-muted mb-2">Set the webhook to let you query data by messaging the bot, e.g. <code>/customer 134</code>, <code>/find ahmad</code>, <code>/debtors</code>. Only your configured chat ID can use it.</p>
+        <ul class="mb-3" style="line-height:2;">
+            <li>Webhook active: <strong class="<?= $whSet ? 'text-success' : 'text-danger' ?>"><?= $whSet ? 'YES' : 'NO' ?></strong></li>
+            <li>URL: <code><?= htmlspecialchars($webhookUrl) ?></code></li>
+            <?php if ($whSet && !empty($whInfo['result']['last_error_message'])): ?>
+            <li class="text-danger small">Last error: <?= htmlspecialchars($whInfo['result']['last_error_message']) ?></li>
+            <?php endif; ?>
+        </ul>
+        <div class="d-flex gap-2">
+            <a href="?action=set_webhook" class="btn btn-primary btn-sm"><i class="bi bi-link-45deg me-1"></i>Set webhook</a>
+            <a href="?action=remove_webhook" class="btn btn-outline-danger btn-sm"><i class="bi bi-x-circle me-1"></i>Remove webhook</a>
+        </div>
+        <div class="text-muted small mt-2"><i class="bi bi-info-circle me-1"></i>Note: while the webhook is active, "Fetch chat IDs" above won't work (Telegram sends updates to the webhook instead).</div>
     </div>
 </div>
 
