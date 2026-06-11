@@ -3,6 +3,7 @@ require_once '../includes/session.php';
 requireAdmin();
 require_once '../includes/lang.php';
 require_once '../config/db.php';
+require_once '../includes/telegram.php';
 
 $id = (int)($_GET['id'] ?? 0);
 $stmt = $pdo->prepare("SELECT * FROM customers WHERE id = ?");
@@ -24,6 +25,7 @@ if ($salesCount->fetchColumn() > 0) {
 }
 
 $pdo->prepare("DELETE FROM customers WHERE id = ?")->execute([$id]);
+tgNotify("🗑 <b>Customer deleted</b>\nName: " . tgEsc($customer['name']) . "\nBy: " . tgActor(), 'delete');
 $_SESSION['success'] = sprintf(__('cust_deleted'), $customer['name']);
 header('Location: index.php');
 exit;

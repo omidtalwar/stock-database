@@ -3,6 +3,7 @@ require_once '../includes/session.php';
 requireAdmin();
 require_once '../includes/lang.php';
 require_once '../config/db.php';
+require_once '../includes/telegram.php';
 
 $id   = (int)($_GET['id'] ?? 0);
 $back = $_SERVER['HTTP_REFERER'] ?? '/payments/index.php';
@@ -30,6 +31,8 @@ try {
             ->execute([$amtAfn, $payment['sale_id']]);
     }
     $pdo->commit();
+    tgNotify("🗑 <b>Payment deleted</b>\nAmount: " . tgEsc(number_format($amtAfn, 2)) . " AFN"
+        . "\nBy: " . tgActor(), 'delete');
     $_SESSION['success'] = __('pay_deleted');
 } catch (\Throwable $e) {
     $pdo->rollBack();

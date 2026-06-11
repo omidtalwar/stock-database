@@ -108,6 +108,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
         $stmt = $pdo->prepare("DELETE FROM accessory_stock_entries WHERE owner_id = ? AND id = ?");
         $stmt->execute([$id, $eid]);
     }
+    tgNotify("🗑 <b>Accessory bill deleted</b>\nOwner: " . tgEsc($owner['name']) . "\nBy: " . tgActor(), 'delete');
     $_SESSION['success'] = 'Bill deleted.';
     header('Location: owner.php?id=' . $id); exit;
 }
@@ -122,6 +123,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
         $stmt = $pdo->prepare("DELETE FROM accessory_payments WHERE owner_id = ? AND id = ?");
         $stmt->execute([$id, $pid]);
     }
+    tgNotify("🗑 <b>Accessory payment deleted</b>\nOwner: " . tgEsc($owner['name']) . "\nBy: " . tgActor(), 'delete');
     $_SESSION['success'] = 'Payment deleted.';
     header('Location: owner.php?id=' . $id); exit;
 }
@@ -136,6 +138,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
         $stmt = $pdo->prepare("DELETE FROM accessory_stock_ins WHERE owner_id = ? AND id = ?");
         $stmt->execute([$id, $sid]);
     }
+    tgNotify("🗑 <b>Accessory stock-in deleted</b>\nOwner: " . tgEsc($owner['name']) . "\nBy: " . tgActor(), 'delete');
     $_SESSION['success'] = 'Stock-in record deleted.';
     header('Location: owner.php?id=' . $id); exit;
 }

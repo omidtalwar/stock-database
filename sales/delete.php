@@ -3,6 +3,7 @@ require_once '../includes/session.php';
 requireAdmin();
 require_once '../includes/lang.php';
 require_once '../config/db.php';
+require_once '../includes/telegram.php';
 
 $id = (int)($_GET['id'] ?? 0);
 $sale = $pdo->prepare("SELECT * FROM sales WHERE id = ?");
@@ -27,6 +28,9 @@ try {
     // Delete sale (cascade deletes items)
     $pdo->prepare("DELETE FROM sales WHERE id = ?")->execute([$id]);
     $pdo->commit();
+    tgNotify("🗑 <b>Invoice deleted</b> #" . str_pad($id, 4, '0', STR_PAD_LEFT)
+        . "\nAmount: " . tgEsc(number_format((float)$sale['total_amount'], 2)) . " AFN"
+        . "\nBy: " . tgActor(), 'delete');
     $_SESSION['success'] = __('sale_deleted');
 } catch (Exception $e) {
     $pdo->rollBack();

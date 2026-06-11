@@ -33,5 +33,6 @@ return [
         'acc_bill'  => true,  // accessories: add bill
         'acc_pay'   => true,  // accessories: payment / charge
         'acc_owner' => true,  // accessories: owner added / deleted
+        'delete'    => true,  // any record deleted (customer, invoice, payment, product, stock, accessory bill/payment/stock-in)
     ],
 ];
