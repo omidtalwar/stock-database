@@ -12,7 +12,17 @@ $rateUSD = $rates['USD'];
 $days = (int)($_GET['days'] ?? 15);
 if ($days < 1) $days = 15;
 
+$search = trim($_GET['search'] ?? '');
+
 $customers = overdueCustomers($pdo, $days);
+
+if ($search !== '') {
+    $needle = mb_strtolower($search);
+    $customers = array_values(array_filter($customers, function ($c) use ($needle) {
+        $hay = mb_strtolower(($c['name'] ?? '') . ' ' . ($c['shop_name'] ?? '') . ' ' . ($c['phone'] ?? ''));
+        return mb_strpos($hay, $needle) !== false;
+    }));
+}
 
 $totalDebt = array_sum(array_map(fn($c) => (float)$c['total_debt'], $customers));
 
@@ -25,7 +35,15 @@ require_once '../includes/header.php';
         <h4 class="mb-1"><i class="bi bi-bell me-2 text-danger"></i>Payment Reminders</h4>
         <p class="text-muted small mb-0">Customers with debt and no payment for <?= $days ?>+ days</p>
     </div>
-    <form method="GET" class="d-flex align-items-center gap-2">
+    <form method="GET" class="d-flex align-items-center gap-2 flex-wrap">
+        <div class="input-group input-group-sm" style="width:220px;">
+            <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search" style="font-size:.8rem;"></i></span>
+            <input type="text" name="search" class="form-control border-start-0 ps-0"
+                   placeholder="Search name, shop, phone…" value="<?= htmlspecialchars($search) ?>" autocomplete="off">
+            <?php if ($search !== ''): ?>
+            <a href="?days=<?= $days ?>" class="btn btn-outline-secondary border-start-0" title="Clear"><i class="bi bi-x"></i></a>
+            <?php endif; ?>
+        </div>
         <label class="text-muted small mb-0">Overdue by</label>
         <select name="days" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
             <?php foreach ([15, 30, 45, 60, 90] as $opt): ?>
@@ -36,9 +54,13 @@ require_once '../includes/header.php';
 </div>
 
 <?php if (empty($customers)): ?>
-<div class="alert alert-success d-flex align-items-center gap-2">
-    <i class="bi bi-check-circle-fill"></i>
+<div class="alert <?= $search !== '' ? 'alert-secondary' : 'alert-success' ?> d-flex align-items-center gap-2">
+    <i class="bi bi-<?= $search !== '' ? 'search' : 'check-circle-fill' ?>"></i>
+    <?php if ($search !== ''): ?>
+    No overdue customers match "<?= htmlspecialchars($search) ?>".
+    <?php else: ?>
     No customers are overdue by <?= $days ?>+ days. All caught up.
+    <?php endif; ?>
 </div>
 <?php else: ?>
 
