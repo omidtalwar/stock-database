@@ -3,6 +3,7 @@ require_once '../includes/session.php';
 requireLogin();
 require_once '../includes/lang.php';
 require_once '../config/db.php';
+require_once '../includes/telegram.php';
 
 $id = (int)($_GET['id'] ?? 0);
 $customer = $pdo->prepare("SELECT * FROM customers WHERE id = ?");
@@ -22,6 +23,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $pdo->prepare("UPDATE customers SET name=?, phone=?, shop_name=?, notes=? WHERE id=?")
             ->execute([$name, $phone, $shop_name, $notes, $id]);
+        tgNotify("✏️ <b>Customer edited</b>\nName: " . tgEsc($name)
+            . ($name !== $customer['name'] ? " (was " . tgEsc($customer['name']) . ")" : '')
+            . "\nBy: " . tgActor(), 'edit');
         $_SESSION['success'] = __('btn_update');
         header("Location: view.php?id=$id");
         exit;

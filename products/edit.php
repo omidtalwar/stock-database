@@ -3,6 +3,7 @@ require_once '../includes/session.php';
 requireLogin();
 require_once '../includes/lang.php';
 require_once '../config/db.php';
+require_once '../includes/telegram.php';
 
 $id = (int)($_GET['id'] ?? 0);
 $stmt = $pdo->prepare("SELECT * FROM products WHERE id = ?");
@@ -22,6 +23,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $pdo->prepare("UPDATE products SET name=?, size=?, color=?, price=? WHERE id=?")
             ->execute([$name, $size, $color, $price, $id]);
+        tgNotify("✏️ <b>Product edited</b>\nName: " . tgEsc($name)
+            . "\nPrice: " . tgEsc(number_format($price, 2))
+            . "\nBy: " . tgActor(), 'edit');
         $_SESSION['success'] = __('btn_update');
         header('Location: index.php');
         exit;

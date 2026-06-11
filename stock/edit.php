@@ -4,6 +4,7 @@ requireAdmin();
 require_once '../includes/lang.php';
 require_once '../config/db.php';
 require_once '../includes/currency.php';
+require_once '../includes/telegram.php';
 
 $id = (int)($_GET['id'] ?? 0);
 $stmt = $pdo->prepare("
@@ -84,6 +85,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
 
             $pdo->commit();
+            tgNotify("✏️ <b>Stock record edited</b> #" . (int)$id
+                . "\nType: " . tgEsc($type) . "  Qty: " . tgEsc($qty)
+                . ($supplier ? "\nSupplier: " . tgEsc($supplier) : '')
+                . "\nBy: " . tgActor(), 'edit');
             $_SESSION['success'] = 'Stock record updated.';
             header('Location: index.php');
             exit;
