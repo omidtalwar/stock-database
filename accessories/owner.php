@@ -79,6 +79,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'payme
     header('Location: owner.php?id=' . $id); exit;
 }
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete_bill') {
+    if (!validateFormToken('accessory_delete_' . $id)) {
+        $_SESSION['error'] = 'Duplicate submission detected.';
+        header('Location: owner.php?id=' . $id); exit;
+    }
+    $group = trim($_POST['bill_group'] ?? '');
+    $eid   = (int)($_POST['entry_id'] ?? 0);
+    if ($group !== '') {
+        $stmt = $pdo->prepare("DELETE FROM accessory_stock_entries WHERE owner_id = ? AND bill_group = ?");
+        $stmt->execute([$id, $group]);
+    } elseif ($eid > 0) {
+        $stmt = $pdo->prepare("DELETE FROM accessory_stock_entries WHERE owner_id = ? AND id = ?");
+        $stmt->execute([$id, $eid]);
+    }
+    $_SESSION['success'] = 'Bill deleted.';
+    header('Location: owner.php?id=' . $id); exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete_payment') {
+    if (!validateFormToken('accessory_delete_' . $id)) {
+        $_SESSION['error'] = 'Duplicate submission detected.';
+        header('Location: owner.php?id=' . $id); exit;
+    }
+    $pid = (int)($_POST['payment_id'] ?? 0);
+    if ($pid > 0) {
+        $stmt = $pdo->prepare("DELETE FROM accessory_payments WHERE owner_id = ? AND id = ?");
+        $stmt->execute([$id, $pid]);
+    }
+    $_SESSION['success'] = 'Payment deleted.';
+    header('Location: owner.php?id=' . $id); exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!validateFormToken('accessory_entry_' . $id)) {
         $_SESSION['error'] = 'Duplicate submission detected. Your data was already saved.';
@@ -152,15 +184,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($rows)) {
         $_SESSION['error'] = 'Add at least one accessory row.';
     } else {
+        $billGroup = bin2hex(random_bytes(8));
         $stmt = $pdo->prepare("
             INSERT INTO accessory_stock_entries
-                (owner_id, entry_date, bill_no, item_name, quantity, original_size, coffee_size,
+                (owner_id, entry_date, bill_no, bill_group, item_name, quantity, original_size, coffee_size,
                  pes_size, plastic_size, meterage, rate, total_amount, notes, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
         foreach ($rows as $row) {
             $stmt->execute([
-                $id, $date, $billNo, $row['item_name'], $row['quantity'],
+                $id, $date, $billNo, $billGroup, $row['item_name'], $row['quantity'],
                 $row['original_size'], $row['coffee_size'], $row['pes_size'],
                 $row['plastic_size'], $row['meterage'], $row['rate'],
                 $row['total_amount'], $row['notes'], $_SESSION['user_id'] ?? null,
@@ -179,6 +212,31 @@ $entriesStmt = $pdo->prepare("
 ");
 $entriesStmt->execute([$id]);
 $entries = $entriesStmt->fetchAll();
+
+// Group entry rows into individual bills (one "Add Bill" submission = one bill_group).
+// Legacy rows without a bill_group are shown as their own single-row bill.
+$bills = [];
+foreach ($entries as $e) {
+    $key = !empty($e['bill_group']) ? 'g:' . $e['bill_group'] : 'r:' . $e['id'];
+    if (!isset($bills[$key])) {
+        $bills[$key] = [
+            'group'    => !empty($e['bill_group']) ? $e['bill_group'] : null,
+            'first_id' => (int)$e['id'],
+            'date'     => $e['entry_date'],
+            'bill_no'  => $e['bill_no'],
+            'rows'     => [],
+            't'        => ['quantity'=>0,'original'=>0,'coffee'=>0,'pes'=>0,'plastic'=>0,'meterage'=>0,'amount'=>0],
+        ];
+    }
+    $bills[$key]['rows'][] = $e;
+    $bills[$key]['t']['quantity'] += (float)$e['quantity'];
+    $bills[$key]['t']['original'] += (float)$e['original_size'];
+    $bills[$key]['t']['coffee']   += (float)$e['coffee_size'];
+    $bills[$key]['t']['pes']      += (float)$e['pes_size'];
+    $bills[$key]['t']['plastic']  += (float)$e['plastic_size'];
+    $bills[$key]['t']['meterage'] += (float)$e['meterage'];
+    $bills[$key]['t']['amount']   += (float)$e['total_amount'];
+}
 
 $totals = [
     'rows' => count($entries),
@@ -240,6 +298,7 @@ $account['payable']   = $account['bills'] + $account['charged'];
 $account['remaining'] = $account['payable'] - $account['paid'];
 
 $paymentToken = generateFormToken('accessory_payment_' . $id);
+$deleteToken  = generateFormToken('accessory_delete_' . $id);
 $formToken = generateFormToken('accessory_entry_' . $id);
 
 require_once '../includes/header.php';
@@ -378,6 +437,7 @@ require_once '../includes/header.php';
                         <th>Type</th>
                         <th class="text-end">Amount</th>
                         <th>Note</th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -396,6 +456,14 @@ require_once '../includes/header.php';
                             <?= $p['kind'] === 'charge' ? '+' : '-' ?>؋ <?= number_format((float)$p['amount'], 2) ?>
                         </td>
                         <td class="text-muted small"><?= htmlspecialchars($p['notes'] ?? '') ?></td>
+                        <td class="text-end">
+                            <form method="POST" class="d-inline" onsubmit="return confirm('Delete this payment record?');">
+                                <input type="hidden" name="_form_token" value="<?= htmlspecialchars($deleteToken) ?>">
+                                <input type="hidden" name="action" value="delete_payment">
+                                <input type="hidden" name="payment_id" value="<?= (int)$p['id'] ?>">
+                                <button class="btn btn-sm btn-outline-danger py-0 px-1" title="Delete"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
                     </tr>
                     <?php endforeach; ?>
                 </tbody>
@@ -405,16 +473,39 @@ require_once '../includes/header.php';
     </div>
 </div>
 
-<div class="card">
-    <div class="card-header py-3 fw-semibold">
-        <i class="bi bi-table me-2 text-primary"></i>دوکان رخت فروشی فضل الحق
+<div class="d-flex align-items-center justify-content-between mb-2">
+    <h5 class="mb-0 fw-semibold"><i class="bi bi-receipt-cutoff me-2 text-primary"></i>Bills — دوکان رخت فروشی فضل الحق</h5>
+    <span class="text-muted small"><?= count($bills) ?> bill(s)</span>
+</div>
+
+<?php if (empty($bills)): ?>
+<div class="card"><div class="card-body text-center text-muted py-5">No bills yet.</div></div>
+<?php else: ?>
+<?php foreach ($bills as $bill): ?>
+<div class="card mb-3">
+    <div class="card-header py-2 d-flex align-items-center justify-content-between bg-light">
+        <div>
+            <span class="fw-semibold">بل: <?= htmlspecialchars($bill['bill_no'] ?? '') ?: '—' ?></span>
+            <span class="text-muted small ms-2"><i class="bi bi-calendar3 me-1"></i><?= htmlspecialchars($bill['date'] ?? '') ?></span>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <span class="fw-bold text-success">؋ <?= number_format($bill['t']['amount'], 2) ?></span>
+            <form method="POST" class="d-inline" onsubmit="return confirm('Delete this whole bill (<?= count($bill['rows']) ?> row(s))? This cannot be undone.');">
+                <input type="hidden" name="_form_token" value="<?= htmlspecialchars($deleteToken) ?>">
+                <input type="hidden" name="action" value="delete_bill">
+                <?php if ($bill['group'] !== null): ?>
+                <input type="hidden" name="bill_group" value="<?= htmlspecialchars($bill['group']) ?>">
+                <?php else: ?>
+                <input type="hidden" name="entry_id" value="<?= (int)$bill['first_id'] ?>">
+                <?php endif; ?>
+                <button class="btn btn-sm btn-outline-danger" title="Delete bill"><i class="bi bi-trash"></i></button>
+            </form>
+        </div>
     </div>
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
             <thead>
                 <tr>
-                    <th>تاریخ</th>
-                    <th>بل</th>
                     <th class="text-end">تعداد</th>
                     <th>جنس</th>
                     <th class="text-end">اصلي چیکو</th>
@@ -427,13 +518,8 @@ require_once '../includes/header.php';
                 </tr>
             </thead>
             <tbody>
-                <?php if (empty($entries)): ?>
-                <tr><td colspan="11" class="text-center text-muted py-5">No stock entries yet.</td></tr>
-                <?php else: ?>
-                <?php foreach ($entries as $entry): ?>
+                <?php foreach ($bill['rows'] as $entry): ?>
                 <tr>
-                    <td class="text-muted small"><?= htmlspecialchars($entry['entry_date'] ?? '') ?></td>
-                    <td class="text-muted small"><?= htmlspecialchars($entry['bill_no'] ?? '') ?: '-' ?></td>
                     <td class="text-end fw-semibold"><?= number_format((float)$entry['quantity'], 2) ?></td>
                     <td>
                         <div class="fw-semibold"><?= htmlspecialchars($entry['item_name']) ?></div>
@@ -448,28 +534,25 @@ require_once '../includes/header.php';
                     <td class="text-end fw-bold">؋ <?= number_format((float)$entry['total_amount'], 2) ?></td>
                 </tr>
                 <?php endforeach; ?>
-                <?php endif; ?>
             </tbody>
-            <?php if (!empty($entries)): ?>
             <tfoot>
                 <tr class="table-light fw-bold">
+                    <td class="text-end"><?= number_format($bill['t']['quantity'], 2) ?></td>
                     <td>ټول</td>
+                    <td class="text-end"><?= number_format($bill['t']['original'], 2) ?></td>
+                    <td class="text-end"><?= number_format($bill['t']['coffee'], 2) ?></td>
+                    <td class="text-end"><?= number_format($bill['t']['pes'], 2) ?></td>
+                    <td class="text-end"><?= number_format($bill['t']['plastic'], 2) ?></td>
+                    <td class="text-end"><?= number_format($bill['t']['meterage'], 2) ?></td>
                     <td></td>
-                    <td class="text-end"><?= number_format($totals['quantity'], 2) ?></td>
-                    <td></td>
-                    <td class="text-end"><?= number_format($totals['original'], 2) ?></td>
-                    <td class="text-end"><?= number_format($totals['coffee'], 2) ?></td>
-                    <td class="text-end"><?= number_format($totals['pes'], 2) ?></td>
-                    <td class="text-end"><?= number_format($totals['plastic'], 2) ?></td>
-                    <td class="text-end"><?= number_format($totals['meterage'], 2) ?></td>
-                    <td></td>
-                    <td class="text-end">Ø‹ <?= number_format($totals['amount'], 2) ?></td>
+                    <td class="text-end">؋ <?= number_format($bill['t']['amount'], 2) ?></td>
                 </tr>
             </tfoot>
-            <?php endif; ?>
         </table>
     </div>
 </div>
+<?php endforeach; ?>
+<?php endif; ?>
 
 <div class="modal fade" id="paymentModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">

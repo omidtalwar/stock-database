@@ -35,6 +35,7 @@ function ensureAccessoriesTables(PDO $pdo): void {
             owner_id INT NOT NULL,
             entry_date DATE NULL,
             bill_no VARCHAR(80) NULL,
+            bill_group VARCHAR(40) NULL,
             item_name VARCHAR(180) NOT NULL,
             quantity DECIMAL(10,2) NOT NULL DEFAULT 0,
             original_size DECIMAL(10,2) NULL,
@@ -95,8 +96,9 @@ function ensureAccessoriesTables(PDO $pdo): void {
     accessoryAddColumnIfMissing($pdo, 'accessory_owners', 'opening_coffee',   "DECIMAL(12,2) NOT NULL DEFAULT 0");
     accessoryAddColumnIfMissing($pdo, 'accessory_owners', 'opening_pes',      "DECIMAL(12,2) NOT NULL DEFAULT 0");
     accessoryAddColumnIfMissing($pdo, 'accessory_owners', 'opening_plastic',  "DECIMAL(12,2) NOT NULL DEFAULT 0");
-    accessoryAddColumnIfMissing($pdo, 'accessory_stock_entries', 'bill_no',   "VARCHAR(80) NULL AFTER entry_date");
-    accessoryAddColumnIfMissing($pdo, 'accessory_stock_ins',     'bill_no',   "VARCHAR(80) NULL AFTER in_date");
+    accessoryAddColumnIfMissing($pdo, 'accessory_stock_entries', 'bill_no',    "VARCHAR(80) NULL AFTER entry_date");
+    accessoryAddColumnIfMissing($pdo, 'accessory_stock_entries', 'bill_group', "VARCHAR(40) NULL AFTER bill_no");
+    accessoryAddColumnIfMissing($pdo, 'accessory_stock_ins',     'bill_no',    "VARCHAR(80) NULL AFTER in_date");
 }
 
 /**
