@@ -72,6 +72,24 @@ function ensureAccessoriesTables(PDO $pdo): void {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
 
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS accessory_payments (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            owner_id INT NOT NULL,
+            entry_date DATE NULL,
+            bill_no VARCHAR(80) NULL,
+            kind VARCHAR(10) NOT NULL DEFAULT 'payment',
+            amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+            notes TEXT NULL,
+            created_by INT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_accessory_payments_owner (owner_id),
+            CONSTRAINT fk_accessory_payments_owner
+                FOREIGN KEY (owner_id) REFERENCES accessory_owners(id)
+                ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
     // Migrate older installs that predate the per-category opening + bill columns.
     accessoryAddColumnIfMissing($pdo, 'accessory_owners', 'opening_original', "DECIMAL(12,2) NOT NULL DEFAULT 0");
     accessoryAddColumnIfMissing($pdo, 'accessory_owners', 'opening_coffee',   "DECIMAL(12,2) NOT NULL DEFAULT 0");

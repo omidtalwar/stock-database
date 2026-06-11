@@ -50,6 +50,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'stock
     header('Location: owner.php?id=' . $id); exit;
 }
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'payment') {
+    if (!validateFormToken('accessory_payment_' . $id)) {
+        $_SESSION['error'] = 'Duplicate submission detected. Your data was already saved.';
+        header('Location: owner.php?id=' . $id); exit;
+    }
+
+    $kind     = ($_POST['kind'] ?? 'payment') === 'charge' ? 'charge' : 'payment';
+    $amount   = (float)($_POST['amount'] ?? 0);
+    $payDate  = trim($_POST['entry_date'] ?? '') ?: date('Y-m-d');
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $payDate)) $payDate = date('Y-m-d');
+    $billNo   = trim($_POST['bill_no'] ?? '') ?: null;
+    $note     = trim($_POST['note'] ?? '') ?: null;
+
+    if ($amount <= 0) {
+        $_SESSION['error'] = 'Amount must be greater than zero.';
+    } else {
+        $stmt = $pdo->prepare("
+            INSERT INTO accessory_payments (owner_id, entry_date, bill_no, kind, amount, notes, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ");
+        $stmt->execute([$id, $payDate, $billNo, $kind, $amount, $note, $_SESSION['user_id'] ?? null]);
+        $_SESSION['success'] = $kind === 'charge'
+            ? 'Previous amount of ؋ ' . number_format($amount, 2) . ' added.'
+            : 'Payment of ؋ ' . number_format($amount, 2) . ' recorded.';
+        header('Location: owner.php?id=' . $id); exit;
+    }
+    header('Location: owner.php?id=' . $id); exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!validateFormToken('accessory_entry_' . $id)) {
         $_SESSION['error'] = 'Duplicate submission detected. Your data was already saved.';
@@ -192,6 +221,25 @@ unset($b);
 $stockInToken = generateFormToken('accessory_stockin_' . $id);
 $todayShamsi  = accessoryToShamsi((int)date('Y'), (int)date('n'), (int)date('j'));
 $jMonths      = accessoryShamsiMonths();
+
+// Money ledger: bills generate amount owed; charges add previous owed; payments reduce it.
+$payStmt = $pdo->prepare("
+    SELECT * FROM accessory_payments
+    WHERE owner_id = ?
+    ORDER BY COALESCE(entry_date, DATE(created_at)) DESC, id DESC
+");
+$payStmt->execute([$id]);
+$payments = $payStmt->fetchAll();
+
+$account = [
+    'bills'   => (float)$totals['amount'],
+    'charged' => array_sum(array_map(fn($p) => $p['kind'] === 'charge'  ? (float)$p['amount'] : 0, $payments)),
+    'paid'    => array_sum(array_map(fn($p) => $p['kind'] === 'payment' ? (float)$p['amount'] : 0, $payments)),
+];
+$account['payable']   = $account['bills'] + $account['charged'];
+$account['remaining'] = $account['payable'] - $account['paid'];
+
+$paymentToken = generateFormToken('accessory_payment_' . $id);
 $formToken = generateFormToken('accessory_entry_' . $id);
 
 require_once '../includes/header.php';
@@ -211,6 +259,9 @@ require_once '../includes/header.php';
         </button>
         <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#entryModal">
             <i class="bi bi-receipt me-2"></i>Add Bill
+        </button>
+        <button class="btn btn-dark" data-bs-toggle="modal" data-bs-target="#paymentModal">
+            <i class="bi bi-cash-coin me-2"></i>Pay
         </button>
     </div>
 </div>
@@ -294,6 +345,74 @@ require_once '../includes/header.php';
     </div>
 </div>
 
+<div class="card mb-4">
+    <div class="card-header py-3 fw-semibold d-flex align-items-center justify-content-between">
+        <span><i class="bi bi-cash-stack me-2 text-success"></i>Account / حساب پیسو</span>
+        <button class="btn btn-sm btn-dark" data-bs-toggle="modal" data-bs-target="#paymentModal">
+            <i class="bi bi-cash-coin me-1"></i>Pay / Add Amount
+        </button>
+    </div>
+    <div class="card-body">
+        <div class="row g-3 text-center">
+            <div class="col-6 col-md">
+                <div class="text-muted small text-uppercase">Bills Amount</div>
+                <div class="fs-5 fw-bold">؋ <?= number_format($account['bills'], 2) ?></div>
+            </div>
+            <div class="col-6 col-md">
+                <div class="text-muted small text-uppercase">Previous / Added</div>
+                <div class="fs-5 fw-bold text-primary">؋ <?= number_format($account['charged'], 2) ?></div>
+            </div>
+            <div class="col-6 col-md">
+                <div class="text-muted small text-uppercase">Total Payable</div>
+                <div class="fs-5 fw-bold">؋ <?= number_format($account['payable'], 2) ?></div>
+            </div>
+            <div class="col-6 col-md">
+                <div class="text-muted small text-uppercase">Paid</div>
+                <div class="fs-5 fw-bold text-danger">؋ <?= number_format($account['paid'], 2) ?></div>
+            </div>
+            <div class="col-6 col-md">
+                <div class="text-muted small text-uppercase">Remaining</div>
+                <div class="fs-5 fw-bold <?= $account['remaining'] < 0 ? 'text-danger' : 'text-success' ?>">؋ <?= number_format($account['remaining'], 2) ?></div>
+            </div>
+        </div>
+
+        <?php if (!empty($payments)): ?>
+        <div class="table-responsive mt-3">
+            <table class="table table-sm table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>تاریخ</th>
+                        <th>بل</th>
+                        <th>Type</th>
+                        <th class="text-end">Amount</th>
+                        <th>Note</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($payments as $p): ?>
+                    <tr>
+                        <td class="text-muted small"><?= htmlspecialchars($p['entry_date'] ?? '') ?></td>
+                        <td class="text-muted small"><?= htmlspecialchars($p['bill_no'] ?? '') ?: '-' ?></td>
+                        <td>
+                            <?php if ($p['kind'] === 'charge'): ?>
+                            <span class="badge bg-primary-subtle text-primary">Added</span>
+                            <?php else: ?>
+                            <span class="badge bg-danger-subtle text-danger">Paid</span>
+                            <?php endif; ?>
+                        </td>
+                        <td class="text-end fw-semibold <?= $p['kind'] === 'charge' ? 'text-primary' : 'text-danger' ?>">
+                            <?= $p['kind'] === 'charge' ? '+' : '-' ?>؋ <?= number_format((float)$p['amount'], 2) ?>
+                        </td>
+                        <td class="text-muted small"><?= htmlspecialchars($p['notes'] ?? '') ?></td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php endif; ?>
+    </div>
+</div>
+
 <div class="card">
     <div class="card-header py-3 fw-semibold">
         <i class="bi bi-table me-2 text-primary"></i>دوکان رخت فروشی فضل الحق
@@ -357,6 +476,77 @@ require_once '../includes/header.php';
             </tfoot>
             <?php endif; ?>
         </table>
+    </div>
+</div>
+
+<div class="modal fade" id="paymentModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form method="POST" class="modal-content">
+            <input type="hidden" name="_form_token" value="<?= htmlspecialchars($paymentToken) ?>">
+            <input type="hidden" name="action" value="payment">
+            <div class="modal-header">
+                <h5 class="modal-title">Payment — <?= htmlspecialchars($owner['name']) ?></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Type</label>
+                    <div class="d-flex gap-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="kind" id="kindPayment" value="payment" checked>
+                            <label class="form-check-label fw-semibold text-danger" for="kindPayment">
+                                <i class="bi bi-arrow-up-circle me-1"></i>Pay owner (decrease)
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="kind" id="kindCharge" value="charge">
+                            <label class="form-check-label fw-semibold text-primary" for="kindCharge">
+                                <i class="bi bi-arrow-down-circle me-1"></i>Add previous amount
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <label class="form-label fw-semibold">Amount (؋)</label>
+                        <input type="number" step="0.01" min="0.01" name="amount" class="form-control" required>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label fw-semibold"><i class="bi bi-receipt me-1 text-primary"></i>بل / Bill No</label>
+                        <input type="text" name="bill_no" class="form-control" placeholder="Bill #">
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold d-flex align-items-center gap-2">
+                        <i class="bi bi-calendar3 me-1 text-primary"></i>تاریخ
+                        <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size:0.62rem;">Solar Hijri</span>
+                    </label>
+                    <div class="d-flex align-items-center gap-1">
+                        <input type="number" id="payJYear" class="form-control form-control-sm text-center fw-semibold"
+                               value="<?= $todayShamsi['y'] ?>" min="1300" max="1600" style="width:80px;" oninput="syncPayShamsi()">
+                        <span class="text-muted">/</span>
+                        <select id="payJMonth" class="form-select form-select-sm" style="width:140px;" onchange="syncPayShamsi()">
+                            <?php foreach ($jMonths as $i => $nm): ?>
+                            <option value="<?= $i+1 ?>" <?= $todayShamsi['m'] === $i+1 ? 'selected' : '' ?>><?= $nm ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <span class="text-muted">/</span>
+                        <input type="number" id="payJDay" class="form-control form-control-sm text-center fw-semibold"
+                               value="<?= $todayShamsi['d'] ?>" min="1" max="31" style="width:64px;" oninput="syncPayShamsi()">
+                    </div>
+                    <input type="hidden" name="entry_date" id="payDateHidden" value="<?= date('Y-m-d') ?>">
+                    <div id="payGregorianBadge" class="mt-1 text-muted" style="font-size:0.71rem;"></div>
+                </div>
+                <div class="mb-1">
+                    <label class="form-label fw-semibold">Note</label>
+                    <input type="text" name="note" class="form-control">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal"><?= __('btn_cancel') ?></button>
+                <button class="btn btn-dark"><i class="bi bi-check2-circle me-2"></i><?= __('btn_save') ?></button>
+            </div>
+        </form>
     </div>
 </div>
 
@@ -604,7 +794,20 @@ function syncStockInShamsi() {
     document.getElementById('stockInGregorianBadge').textContent =
         '≡ ' + g.y + '/' + String(g.m).padStart(2,'0') + '/' + String(g.d).padStart(2,'0') + ' (Gregorian)';
 }
+function syncPayShamsi() {
+    var jy = parseInt(document.getElementById('payJYear').value)  || 0;
+    var jm = parseInt(document.getElementById('payJMonth').value) || 0;
+    var jd = parseInt(document.getElementById('payJDay').value)   || 0;
+    if (jy < 1300 || jy > 1600 || jm < 1 || jm > 12 || jd < 1 || jd > 31) return;
+    var g = accShamsiToGregorian(jy, jm, jd);
+    if (!g) return;
+    var gStr = g.y + '-' + String(g.m).padStart(2,'0') + '-' + String(g.d).padStart(2,'0');
+    document.getElementById('payDateHidden').value = gStr;
+    document.getElementById('payGregorianBadge').textContent =
+        '≡ ' + g.y + '/' + String(g.m).padStart(2,'0') + '/' + String(g.d).padStart(2,'0') + ' (Gregorian)';
+}
 syncStockInShamsi();
+syncPayShamsi();
 </script>
 
 <?php require_once '../includes/footer.php'; ?>
