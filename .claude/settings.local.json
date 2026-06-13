@@ -22,7 +22,8 @@
       "PowerShell($php = \"C:\\\\xampp\\\\php\\\\php.exe\"; @\\(\"customers\\\\delete.php\",\"sales\\\\delete.php\",\"payments\\\\delete.php\",\"products\\\\delete.php\",\"stock\\\\delete.php\",\"accessories\\\\owner.php\",\"config\\\\telegram.php\"\\) | ForEach-Object { & $php -l \\(\"C:\\\\xampp\\\\htdocs\\\\fzl\\\\\" + $_\\) })",
       "PowerShell($php = \"C:\\\\xampp\\\\php\\\\php.exe\"; @\\(\"customers\\\\edit.php\",\"products\\\\edit.php\",\"stock\\\\edit.php\",\"config\\\\telegram.php\"\\) | ForEach-Object { & $php -l \\(\"C:\\\\xampp\\\\htdocs\\\\fzl\\\\\" + $_\\) }; cd C:\\\\xampp\\\\htdocs\\\\fzl; git status --short)",
       "PowerShell($php = \"C:\\\\xampp\\\\php\\\\php.exe\"; @\\(\"includes\\\\telegram.php\",\"config\\\\telegram.php\",\"telegram\\\\webhook.php\",\"telegram\\\\setup.php\"\\) | ForEach-Object { & $php -l \\(\"C:\\\\xampp\\\\htdocs\\\\fzl\\\\\" + $_\\) })",
-      "PowerShell($php = \"C:\\\\xampp\\\\php\\\\php.exe\"; @\\(\"includes\\\\reminders.php\",\"telegram\\\\daily_reminders.php\",\"telegram\\\\setup.php\"\\) | ForEach-Object { & $php -l \\(\"C:\\\\xampp\\\\htdocs\\\\fzl\\\\\" + $_\\) })"
+      "PowerShell($php = \"C:\\\\xampp\\\\php\\\\php.exe\"; @\\(\"includes\\\\reminders.php\",\"telegram\\\\daily_reminders.php\",\"telegram\\\\setup.php\"\\) | ForEach-Object { & $php -l \\(\"C:\\\\xampp\\\\htdocs\\\\fzl\\\\\" + $_\\) })",
+      "PowerShell($php = \"C:\\\\xampp\\\\php\\\\php.exe\"; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\accessories\\\\share.php; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\accessories\\\\owner.php)"
     ]
   }
 }
