@@ -124,6 +124,28 @@ foreach ($payments as $p) {
     }
 }
 
+// Gregorian (Y-m-d / timestamp) → Afghan Solar Hijri label like 1405/03/21
+function custToShamsi(int $gy, int $gm, int $gd): array {
+    $g_d_m = [0,31,59,90,120,151,181,212,243,273,304,334];
+    if ($gy > 1600) { $jy = 979; $gy -= 1600; } else { $jy = 0; $gy -= 621; }
+    $gy2  = $gm > 2 ? $gy + 1 : $gy;
+    $days = 365*$gy + intdiv($gy2+3,4) - intdiv($gy2+99,100) + intdiv($gy2+399,400)
+            - 80 + $gd + $g_d_m[$gm - 1];
+    $jy  += 33 * intdiv($days, 12053); $days %= 12053;
+    $jy  +=  4 * intdiv($days,  1461); $days %= 1461;
+    if ($days > 365) { $jy += intdiv($days-1, 365); $days = ($days-1) % 365; }
+    $jm = $days < 186 ? 1 + intdiv($days, 31) : 7 + intdiv($days - 186, 30);
+    $jd = 1 + ($days < 186 ? $days % 31 : ($days - 186) % 30);
+    return ['y' => $jy, 'm' => $jm, 'd' => $jd];
+}
+function shamsiLabel(?string $date): string {
+    if (!$date) return '';
+    $ts = strtotime($date);
+    if ($ts === false) return (string)$date;
+    $s = custToShamsi((int)date('Y', $ts), (int)date('n', $ts), (int)date('j', $ts));
+    return sprintf('%04d/%02d/%02d', $s['y'], $s['m'], $s['d']);
+}
+
 require_once '../includes/header.php';
 ?>
 
@@ -322,7 +344,10 @@ $cvCurMeta = [
                                     <span class="text-success">✓ <?= __('sale_fully_paid') ?></span>
                                 <?php endif; ?>
                             </td>
-                            <td class="text-muted small"><?= date('d M Y', strtotime($s['created_at'])) ?></td>
+                            <td class="small">
+                                <div><?= htmlspecialchars(shamsiLabel($s['created_at'])) ?></div>
+                                <div class="text-muted" style="font-size:.72rem;"><?= date('d M Y', strtotime($s['created_at'])) ?></div>
+                            </td>
                             <td><a href="/sales/view.php?id=<?= $s['id'] ?>" class="btn btn-sm btn-light"><i class="bi bi-eye"></i></a></td>
                         </tr>
                         <?php endforeach; ?>
@@ -374,7 +399,10 @@ $cvCurMeta = [
                                 <?php endif; ?>
                             </td>
                             <td class="text-muted small"><?= htmlspecialchars($p['notes'] ?: '—') ?></td>
-                            <td class="text-muted small"><?= date('d M Y', strtotime($pDate)) ?></td>
+                            <td class="small">
+                                <div><?= htmlspecialchars(shamsiLabel($pDate)) ?></div>
+                                <div class="text-muted" style="font-size:.72rem;"><?= date('d M Y', strtotime($pDate)) ?></div>
+                            </td>
                         </tr>
                         <?php endforeach; ?>
                         <?php endif; ?>
