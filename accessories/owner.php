@@ -381,6 +381,9 @@ require_once '../includes/header.php';
         <button class="btn btn-dark" data-bs-toggle="modal" data-bs-target="#paymentModal">
             <i class="bi bi-cash-coin me-2"></i>Pay
         </button>
+        <a href="share.php?id=<?= $id ?>" target="_blank" rel="noopener" class="btn btn-outline-secondary" title="Open shareable statement">
+            <i class="bi bi-share me-2"></i>Share
+        </a>
     </div>
 </div>
 
