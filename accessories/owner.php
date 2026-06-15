@@ -73,14 +73,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'payme
     $billNo   = trim($_POST['bill_no'] ?? '') ?: null;
     $note     = trim($_POST['note'] ?? '') ?: null;
 
+    $photo = accessorySaveSinglePhoto('bill_photo');
+
     if ($amount <= 0) {
         $_SESSION['error'] = 'Amount must be greater than zero.';
+    } elseif ($photo['error'] !== null) {
+        $_SESSION['error'] = $photo['error'];
     } else {
         $stmt = $pdo->prepare("
-            INSERT INTO accessory_payments (owner_id, entry_date, bill_no, kind, amount, notes, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO accessory_payments (owner_id, entry_date, bill_no, kind, amount, notes, bill_photo, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ");
-        $stmt->execute([$id, $payDate, $billNo, $kind, $amount, $note, $_SESSION['user_id'] ?? null]);
+        $stmt->execute([$id, $payDate, $billNo, $kind, $amount, $note, $photo['file'], $_SESSION['user_id'] ?? null]);
         tgNotify(($kind === 'charge' ? "🧾 <b>Accessory amount added</b>" : "💵 <b>Accessory payment</b>")
             . "\nOwner: " . tgEsc($owner['name'])
             . "\nAmount: <b>؋ " . number_format($amount, 2) . "</b>"
@@ -597,7 +601,14 @@ require_once '../includes/header.php';
                         <td class="text-end fw-semibold <?= $p['kind'] === 'charge' ? 'text-primary' : 'text-danger' ?>">
                             <?= $p['kind'] === 'charge' ? '+' : '-' ?>؋ <?= number_format((float)$p['amount'], 2) ?>
                         </td>
-                        <td class="text-muted small"><?= htmlspecialchars($p['notes'] ?? '') ?></td>
+                        <td class="text-muted small">
+                            <?= htmlspecialchars($p['notes'] ?? '') ?>
+                            <?php if (!empty($p['bill_photo'])): ?>
+                            <a href="/uploads/accessory-bills/<?= htmlspecialchars($p['bill_photo']) ?>" target="_blank" class="d-inline-block ms-1" title="View bill image">
+                                <img src="/uploads/accessory-bills/<?= htmlspecialchars($p['bill_photo']) ?>" alt="bill" style="height:28px;width:28px;object-fit:cover;border-radius:5px;border:1px solid rgba(0,0,0,.1);vertical-align:middle;">
+                            </a>
+                            <?php endif; ?>
+                        </td>
                         <td class="text-end">
                             <form method="POST" class="d-inline" onsubmit="return confirm('Delete this payment record?');">
                                 <input type="hidden" name="_form_token" value="<?= htmlspecialchars($deleteToken) ?>">
@@ -703,7 +714,7 @@ require_once '../includes/header.php';
 
 <div class="modal fade" id="paymentModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
-        <form method="POST" class="modal-content">
+        <form method="POST" enctype="multipart/form-data" class="modal-content">
             <input type="hidden" name="_form_token" value="<?= htmlspecialchars($paymentToken) ?>">
             <input type="hidden" name="action" value="payment">
             <div class="modal-header">
@@ -759,9 +770,17 @@ require_once '../includes/header.php';
                     <input type="hidden" name="entry_date" id="payDateHidden" value="<?= date('Y-m-d') ?>">
                     <div id="payGregorianBadge" class="mt-1 text-muted" style="font-size:0.71rem;"></div>
                 </div>
-                <div class="mb-1">
+                <div class="mb-3">
                     <label class="form-label fw-semibold">Note</label>
                     <input type="text" name="note" class="form-control">
+                </div>
+                <div class="mb-1">
+                    <label class="form-label fw-semibold"><i class="bi bi-image me-1 text-primary"></i>Bill Image</label>
+                    <input type="file" name="bill_photo" id="payPhoto" accept="image/*" class="form-control">
+                    <div id="payPhotoPreview" class="mt-2 text-center" style="display:none;">
+                        <img src="" alt="preview" style="max-height:160px;max-width:100%;border-radius:8px;border:1px solid rgba(0,0,0,.1);">
+                        <div><button type="button" id="payPhotoClear" class="btn btn-sm btn-link text-danger p-0 mt-1">Remove image</button></div>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -1048,6 +1067,28 @@ syncPayShamsi();
     const preview = document.getElementById('stockInPhotoPreview');
     const img     = preview ? preview.querySelector('img') : null;
     const clear   = document.getElementById('stockInPhotoClear');
+    if (!input || !preview || !img) return;
+
+    input.addEventListener('change', function () {
+        const file = input.files && input.files[0];
+        if (!file || !file.type.startsWith('image/')) { preview.style.display = 'none'; img.src = ''; return; }
+        const reader = new FileReader();
+        reader.onload = e => { img.src = e.target.result; preview.style.display = ''; };
+        reader.readAsDataURL(file);
+    });
+
+    clear?.addEventListener('click', function () {
+        input.value = '';
+        img.src = '';
+        preview.style.display = 'none';
+    });
+})();
+
+(function () {
+    const input   = document.getElementById('payPhoto');
+    const preview = document.getElementById('payPhotoPreview');
+    const img     = preview ? preview.querySelector('img') : null;
+    const clear   = document.getElementById('payPhotoClear');
     if (!input || !preview || !img) return;
 
     input.addEventListener('change', function () {

@@ -84,6 +84,7 @@ function ensureAccessoriesTables(PDO $pdo): void {
             kind VARCHAR(10) NOT NULL DEFAULT 'payment',
             amount DECIMAL(12,2) NOT NULL DEFAULT 0,
             notes TEXT NULL,
+            bill_photo VARCHAR(255) NULL,
             created_by INT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_accessory_payments_owner (owner_id),
@@ -103,6 +104,7 @@ function ensureAccessoriesTables(PDO $pdo): void {
     accessoryAddColumnIfMissing($pdo, 'accessory_stock_entries', 'bill_photo', "VARCHAR(255) NULL AFTER notes");
     accessoryAddColumnIfMissing($pdo, 'accessory_stock_ins',     'bill_no',    "VARCHAR(80) NULL AFTER in_date");
     accessoryAddColumnIfMissing($pdo, 'accessory_stock_ins',     'bill_photo', "VARCHAR(255) NULL AFTER notes");
+    accessoryAddColumnIfMissing($pdo, 'accessory_payments',      'bill_photo', "VARCHAR(255) NULL AFTER notes");
 }
 
 /**
