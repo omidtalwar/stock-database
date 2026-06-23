@@ -85,6 +85,15 @@ $todayShamsi = toShamsi((int)date('Y'), (int)date('n'), (int)date('j'));
 
 // ── POST handler ──────────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Block duplicate submits (double-click / network retry): the one-time token
+    // is consumed on the first valid save; a repeat POST is ignored.
+    if (!validateFormToken('payment_add')) {
+        $_SESSION['error'] = 'Duplicate submission ignored — the payment was already saved.';
+        $back = (int)($_POST['customer_id'] ?? 0);
+        header('Location: ' . ($back ? "/customers/view.php?id=$back" : '/payments/index.php'));
+        exit;
+    }
+
     $customer_id  = (int)($_POST['customer_id'] ?? 0);
     $sale_id      = (int)($_POST['sale_id']     ?? 0) ?: null;
     $amount       = (float)($_POST['amount']    ?? 0);
@@ -188,6 +197,7 @@ require_once '../includes/header.php';
             <div class="card-header fw-semibold"><?= __('pay_details') ?></div>
             <div class="card-body">
                 <form method="POST" id="payForm">
+                    <input type="hidden" name="_form_token" value="<?= htmlspecialchars(generateFormToken('payment_add')) ?>">
                     <input type="hidden" name="sale_id" id="saleIdInput" value="<?= $preSaleId ?>">
 
                     <!-- Customer searchable picker -->
@@ -688,5 +698,19 @@ function syncPayDate() {
 </script>
 JS;
 ?>
+
+<script>
+// Prevent double-click duplicates: disable submit once the form is being sent.
+(function () {
+    var f = document.getElementById('payForm');
+    if (!f) return;
+    f.addEventListener('submit', function () {
+        if (f.checkValidity && !f.checkValidity()) return;
+        var btns = f.querySelectorAll('button[type="submit"], button:not([type])');
+        btns.forEach(function (b) { b.disabled = true; });
+        setTimeout(function () { btns.forEach(function (b) { b.disabled = false; }); }, 12000);
+    });
+})();
+</script>
 
 <?php require_once '../includes/footer.php'; ?>

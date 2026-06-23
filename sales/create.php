@@ -36,6 +36,14 @@ $nextId          = (int)$pdo->query("SELECT COALESCE(MAX(id),0)+1 FROM sales")->
 $suggestedBillNo = 'BL-' . date('ymd') . '-' . str_pad($nextId, 3, '0', STR_PAD_LEFT);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Block duplicate submits (double-click / network retry): the one-time token
+    // is consumed on the first valid save; a repeat POST is ignored.
+    if (!validateFormToken('sale_create')) {
+        $_SESSION['error'] = 'Duplicate submission ignored — the invoice was already saved.';
+        header('Location: /sales/index.php');
+        exit;
+    }
+
     $customer_id       = (int)($_POST['customer_id'] ?? 0);
     $sale_currency     = strtoupper(trim($_POST['sale_currency'] ?? 'AFN'));
     if (!array_key_exists($sale_currency, CURRENCIES)) $sale_currency = 'AFN';
@@ -310,6 +318,7 @@ require_once '../includes/header.php';
 </div>
 
 <form method="POST" id="invoiceForm">
+<input type="hidden" name="_form_token" value="<?= htmlspecialchars(generateFormToken('sale_create')) ?>">
 <div class="row g-3">
 
     <!-- ── Left column ── -->
@@ -1110,6 +1119,20 @@ function refreshDropZone() {
         if (dzRemEl) dzRemEl.textContent = '(' + remaining + ' remaining)';
     }
 }
+</script>
+
+<script>
+// Prevent double-click duplicates: disable submit once the form is being sent.
+(function () {
+    var f = document.getElementById('invoiceForm');
+    if (!f) return;
+    f.addEventListener('submit', function () {
+        if (f.checkValidity && !f.checkValidity()) return;
+        var btns = f.querySelectorAll('button[type="submit"], button:not([type])');
+        btns.forEach(function (b) { b.disabled = true; });
+        setTimeout(function () { btns.forEach(function (b) { b.disabled = false; }); }, 12000);
+    });
+})();
 </script>
 
 <?php require_once '../includes/footer.php'; ?>
