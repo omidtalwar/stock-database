@@ -8,6 +8,7 @@ if (isset($_SESSION['user_id'])) {
 
 require_once '../includes/lang.php';
 require_once '../config/db.php';
+require_once '../includes/telegram.php';
 
 $error = '';
 
@@ -21,13 +22,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $user = $stmt->fetch();
 
         if ($user && password_verify($password, $user['password'])) {
-            $_SESSION['user_id']   = $user['id'];
-            $_SESSION['username']  = $user['username'];
-            $_SESSION['full_name'] = $user['full_name'];
-            $_SESSION['role']      = $user['role'];
-            $redirect = $user['role'] === 'admin' ? '/dashboard.php' : '/sales/index.php';
-            header('Location: ' . $redirect);
-            exit;
+            $require2fa = defined('LOGIN_2FA_ENABLED') && LOGIN_2FA_ENABLED;
+
+            if (!$require2fa) {
+                $_SESSION['user_id']   = $user['id'];
+                $_SESSION['username']  = $user['username'];
+                $_SESSION['full_name'] = $user['full_name'];
+                $_SESSION['role']      = $user['role'];
+                $redirect = $user['role'] === 'admin' ? '/dashboard.php' : '/sales/index.php';
+                header('Location: ' . $redirect);
+                exit;
+            }
+
+            // Two-factor: send a one-time code via Telegram, then go to verify.php.
+            $cfg   = tgConfig();
+            $token = (string)($cfg['bot_token'] ?? '');
+            $chat  = (string)($user['telegram_chat_id'] ?? '') ?: (string)($cfg['chat_id'] ?? '');
+
+            if ($token === '' || $chat === '') {
+                $error = 'Login verification is enabled but Telegram is not configured.';
+            } else {
+                $code = str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+                $sent = tgSend($token, $chat,
+                    "🔐 <b>Login code:</b> <code>{$code}</code>\n"
+                    . "User: " . tgEsc($user['username']) . "\n"
+                    . "Expires in 10 minutes.\nIf this wasn't you, change your password.");
+                if (!$sent) {
+                    $error = 'Could not send the verification code. Please try again.';
+                } else {
+                    $_SESSION['pending_2fa'] = [
+                        'uid'       => $user['id'],
+                        'username'  => $user['username'],
+                        'full_name' => $user['full_name'],
+                        'role'      => $user['role'],
+                        'code_hash' => password_hash($code, PASSWORD_DEFAULT),
+                        'expires'   => time() + 600,
+                        'attempts'  => 0,
+                        'last_sent' => time(),
+                    ];
+                    header('Location: /auth/verify.php');
+                    exit;
+                }
+            }
         } else {
             $error = __('incorrect_login');
         }
