@@ -152,13 +152,12 @@ require_once '../includes/header.php';
                     <th class="d-none d-md-table-cell"><?= __('field_shop') ?></th>
                     <th class="d-none d-sm-table-cell"><?= __('field_phone') ?></th>
                     <th class="d-none d-sm-table-cell"><?= __('cust_invoices') ?></th>
-                    <th><?= __('cust_debt') ?></th>
                     <th><?= __('field_actions') ?></th>
                 </tr>
             </thead>
             <tbody>
                 <?php if (empty($customers)): ?>
-                <tr><td colspan="7" class="text-center text-muted py-5"><?= __('no_data') ?></td></tr>
+                <tr><td colspan="6" class="text-center text-muted py-5"><?= __('no_data') ?></td></tr>
                 <?php else: ?>
                 <?php foreach ($customers as $i => $c): ?>
                 <tr>
@@ -181,15 +180,6 @@ require_once '../includes/header.php';
                     <td class="d-none d-md-table-cell"><?= htmlspecialchars($c['shop_name']) ?></td>
                     <td class="d-none d-sm-table-cell"><?= htmlspecialchars($c['phone']) ?></td>
                     <td class="d-none d-sm-table-cell"><span class="badge bg-light text-dark"><?= $c['sale_count'] ?></span></td>
-                    <td>
-                        <?php $cDebtAfn = (float)$c['total_debt']; ?>
-                        <?php if ($cDebtAfn > 0.01): ?>
-                        <div class="fw-bold text-danger" style="font-size:0.85rem;"><?= formatAFN($cDebtAfn) ?></div>
-                        <div class="text-muted" style="font-size:0.65rem;">≈ <?= formatMoney(fromAFN($cDebtAfn, $rateUSD), 'USD') ?></div>
-                        <?php else: ?>
-                        <span class="text-success fw-semibold"><?= __('cust_cleared') ?></span>
-                        <?php endif; ?>
-                    </td>
                     <td>
                         <a href="view.php?id=<?= $c['id'] ?>" class="btn btn-sm btn-light me-1" title="<?= __('btn_view') ?>">
                             <i class="bi bi-eye"></i>
