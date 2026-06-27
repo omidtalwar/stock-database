@@ -1,13 +1,20 @@
 ﻿<?php
 date_default_timezone_set('Asia/Kabul');
 
+// Weekly re-login checkpoint: a session is valid until the next Saturday 00:00
+// (Asia/Kabul). So every Saturday the user must sign in (and verify) again.
+function loginExpiryTimestamp(): int {
+    $ts = strtotime('next saturday 00:00:00');
+    return $ts ?: (time() + 7 * 24 * 60 * 60);
+}
+
 // Device/network lock — only approved IPs may open the management app.
 // Public pages (e.g. sales/share.php) do not include this file, so they stay open.
 require_once __DIR__ . '/ip_guard.php';
 enforceIpAllowlist();
 
 if (session_status() === PHP_SESSION_NONE) {
-    $__lifetime = 365 * 24 * 60 * 60; // 1 year
+    $__lifetime = 7 * 24 * 60 * 60; // up to a week
 
     ini_set('session.gc_maxlifetime', $__lifetime);
 
@@ -21,15 +28,24 @@ if (session_status() === PHP_SESSION_NONE) {
 
     session_start();
 
-    // Refresh cookie expiry on every request so it never expires while the user is active
     if (isset($_SESSION['user_id'])) {
-        setcookie(session_name(), session_id(), [
-            'expires'  => time() + $__lifetime,
-            'path'     => '/',
-            'secure'   => !empty($_SERVER['HTTPS']),
-            'httponly' => true,
-            'samesite' => 'Lax',
-        ]);
+        // Migrate older sessions that predate the weekly checkpoint.
+        if (empty($_SESSION['login_expires'])) {
+            $_SESSION['login_expires'] = loginExpiryTimestamp();
+        }
+        if (time() >= (int)$_SESSION['login_expires']) {
+            // Saturday checkpoint reached → force a fresh login + verification.
+            $_SESSION = [];
+        } else {
+            // Keep the browser cookie aligned with the expiry.
+            setcookie(session_name(), session_id(), [
+                'expires'  => (int)$_SESSION['login_expires'],
+                'path'     => '/',
+                'secure'   => !empty($_SERVER['HTTPS']),
+                'httponly' => true,
+                'samesite' => 'Lax',
+            ]);
+        }
     }
 }
 // Default language

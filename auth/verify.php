@@ -45,10 +45,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: /auth/login.php'); exit;
         } elseif ($entered !== '' && password_verify($entered, (string)$p['code_hash'])) {
             $role = $p['role'];
-            $_SESSION['user_id']   = $p['uid'];
-            $_SESSION['username']  = $p['username'];
-            $_SESSION['full_name'] = $p['full_name'];
-            $_SESSION['role']      = $role;
+            $_SESSION['user_id']       = $p['uid'];
+            $_SESSION['username']      = $p['username'];
+            $_SESSION['full_name']     = $p['full_name'];
+            $_SESSION['role']          = $role;
+            $_SESSION['login_expires'] = loginExpiryTimestamp();
             unset($_SESSION['pending_2fa']);
             session_regenerate_id(true); // prevent session fixation
             header('Location: ' . ($role === 'admin' ? '/dashboard.php' : '/sales/index.php'));

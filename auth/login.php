@@ -25,10 +25,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $require2fa = defined('LOGIN_2FA_ENABLED') && LOGIN_2FA_ENABLED;
 
             if (!$require2fa) {
-                $_SESSION['user_id']   = $user['id'];
-                $_SESSION['username']  = $user['username'];
-                $_SESSION['full_name'] = $user['full_name'];
-                $_SESSION['role']      = $user['role'];
+                $_SESSION['user_id']       = $user['id'];
+                $_SESSION['username']      = $user['username'];
+                $_SESSION['full_name']     = $user['full_name'];
+                $_SESSION['role']          = $user['role'];
+                $_SESSION['login_expires'] = loginExpiryTimestamp();
                 $redirect = $user['role'] === 'admin' ? '/dashboard.php' : '/sales/index.php';
                 header('Location: ' . $redirect);
                 exit;
