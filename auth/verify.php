@@ -14,7 +14,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? 'verify';
     $cfg    = tgConfig();
     $token  = (string)($cfg['bot_token'] ?? '');
-    $chat   = (string)($cfg['chat_id'] ?? '');
+    $chat   = (string)($p['chat'] ?? '') ?: (string)($cfg['chat_id'] ?? '');
 
     if ($action === 'resend') {
         if (time() - (int)($p['last_sent'] ?? 0) < 30) {
@@ -50,6 +50,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['full_name']     = $p['full_name'];
             $_SESSION['role']          = $role;
             $_SESSION['login_expires'] = loginExpiryTimestamp();
+            setDeviceTrust((int)$p['uid'], 7);
             unset($_SESSION['pending_2fa']);
             session_regenerate_id(true); // prevent session fixation
             header('Location: ' . ($role === 'admin' ? '/dashboard.php' : '/sales/index.php'));

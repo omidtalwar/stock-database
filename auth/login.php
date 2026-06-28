@@ -24,12 +24,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($user && password_verify($password, $user['password'])) {
             $require2fa = defined('LOGIN_2FA_ENABLED') && LOGIN_2FA_ENABLED;
 
-            if (!$require2fa) {
+            if (!$require2fa || deviceTrusted((int)$user['id'])) {
                 $_SESSION['user_id']       = $user['id'];
                 $_SESSION['username']      = $user['username'];
                 $_SESSION['full_name']     = $user['full_name'];
                 $_SESSION['role']          = $user['role'];
                 $_SESSION['login_expires'] = loginExpiryTimestamp();
+                session_regenerate_id(true);
                 $redirect = $user['role'] === 'admin' ? '/dashboard.php' : '/sales/index.php';
                 header('Location: ' . $redirect);
                 exit;
@@ -60,6 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'expires'   => time() + 600,
                         'attempts'  => 0,
                         'last_sent' => time(),
+                        'chat'      => $chat,
                     ];
                     header('Location: /auth/verify.php');
                     exit;

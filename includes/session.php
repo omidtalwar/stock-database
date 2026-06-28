@@ -8,6 +8,35 @@ function loginExpiryTimestamp(): int {
     return $ts ?: (time() + 7 * 24 * 60 * 60);
 }
 
+// ── Trusted device (skip Telegram verification for 7 days after a verify) ──
+function deviceTrustSecret(): string {
+    if (!defined('DB_PASS') || !defined('DB_USER')) {
+        @require_once __DIR__ . '/../config/secrets.php';
+    }
+    $base = (defined('DB_PASS') ? DB_PASS : '') . (defined('DB_USER') ? DB_USER : '');
+    return hash('sha256', $base . '|fzl-device-trust-v1');
+}
+function setDeviceTrust(int $userId, int $days = 7): void {
+    $exp     = time() + $days * 24 * 60 * 60;
+    $payload = $userId . '|' . $exp;
+    $sig     = hash_hmac('sha256', $payload, deviceTrustSecret());
+    setcookie('device_trust', $payload . '|' . $sig, [
+        'expires'  => $exp,
+        'path'     => '/',
+        'secure'   => !empty($_SERVER['HTTPS']),
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
+}
+function deviceTrusted(int $userId): bool {
+    $parts = explode('|', $_COOKIE['device_trust'] ?? '');
+    if (count($parts) !== 3) return false;
+    [$uid, $exp, $sig] = $parts;
+    if ((int)$uid !== $userId || (int)$exp < time()) return false;
+    $expected = hash_hmac('sha256', $uid . '|' . $exp, deviceTrustSecret());
+    return hash_equals($expected, $sig);
+}
+
 // Device/network lock — only approved IPs may open the management app.
 // Public pages (e.g. sales/share.php) do not include this file, so they stay open.
 require_once __DIR__ . '/ip_guard.php';
@@ -16,7 +45,17 @@ enforceIpAllowlist();
 if (session_status() === PHP_SESSION_NONE) {
     $__lifetime = 7 * 24 * 60 * 60; // up to a week
 
+    $__sessionDir = __DIR__ . '/../storage/sessions';
+    if (!is_dir($__sessionDir)) {
+        @mkdir($__sessionDir, 0700, true);
+    }
+    if (is_dir($__sessionDir) && is_writable($__sessionDir)) {
+        session_save_path($__sessionDir);
+    }
+
     ini_set('session.gc_maxlifetime', $__lifetime);
+    ini_set('session.gc_probability', '1');
+    ini_set('session.gc_divisor', '100');
 
     session_set_cookie_params([
         'lifetime' => $__lifetime,

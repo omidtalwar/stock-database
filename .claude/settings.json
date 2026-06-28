@@ -4,7 +4,10 @@
       "Bash(git commit -m ' *)",
       "Bash(git push *)",
       "Bash(php -l admin/settings.php)",
-      "PowerShell(& \"c:\\\\xampp\\\\php\\\\php.exe\" -l \"c:\\\\xampp\\\\htdocs\\\\fzl\\\\sales\\\\index.php\" 2>&1)"
+      "PowerShell(& \"c:\\\\xampp\\\\php\\\\php.exe\" -l \"c:\\\\xampp\\\\htdocs\\\\fzl\\\\sales\\\\index.php\" 2>&1)",
+      "PowerShell($php = \"C:\\\\xampp\\\\php\\\\php.exe\"; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\customers\\\\index.php)",
+      "PowerShell($php = \"C:\\\\xampp\\\\php\\\\php.exe\"; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\auth\\\\login.php; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\auth\\\\verify.php)",
+      "PowerShell($php = \"C:\\\\xampp\\\\php\\\\php.exe\"; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\includes\\\\session.php; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\auth\\\\login.php; & $php -l C:\\\\xampp\\\\htdocs\\\\fzl\\\\auth\\\\verify.php)"
     ]
   }
 }
