@@ -15,7 +15,10 @@ if (($_GET['action'] ?? '') === 'test') {
     if (!tgEnabled()) {
         $flash = ['warn', 'Bot is not fully configured/enabled yet (need token, chat_id, and enabled = true).'];
     } else {
-        $ok = tgSend($token, (string)$cfg['chat_id'], "✅ <b>FZL test message</b>\nYour Telegram alerts are working.");
+        $ok = false;
+        foreach (tgAllowedChatIds() as $cid) {
+            if (tgSend($token, $cid, "✅ <b>FZL test message</b>\nYour Telegram alerts are working.")) $ok = true;
+        }
         $flash = $ok ? ['ok', 'Test message sent. Check your Telegram.'] : ['err', 'Send failed — check token/chat_id and outbound connectivity.'];
     }
 }

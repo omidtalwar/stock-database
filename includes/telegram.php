@@ -118,7 +118,10 @@ function tgNotify(string $text, ?string $event = null): void {
         $c = tgConfig();
         if (!tgEnabled()) return;
         if ($event !== null && array_key_exists($event, $c['events'] ?? []) && !$c['events'][$event]) return;
-        tgSend((string)$c['bot_token'], (string)$c['chat_id'], $text);
+        // Broadcast to every authorised chat id (TELEGRAM_CHAT_ID may be a comma-separated list).
+        foreach (tgAllowedChatIds() as $chatId) {
+            tgSend((string)$c['bot_token'], $chatId, $text);
+        }
     } catch (\Throwable $e) {
         // never let a notification break the app
     }

@@ -39,7 +39,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Two-factor: send a one-time code via Telegram, then go to verify.php.
             $cfg   = tgConfig();
             $token = (string)($cfg['bot_token'] ?? '');
-            $chat  = (string)($user['telegram_chat_id'] ?? '') ?: (string)($cfg['chat_id'] ?? '');
+            // Fall back to the first authorised chat (the owner/gatekeeper); chat_id may be a comma list.
+            $chat  = (string)($user['telegram_chat_id'] ?? '') ?: (string)(tgAllowedChatIds()[0] ?? '');
 
             if ($token === '' || $chat === '') {
                 $error = 'Login verification is enabled but Telegram is not configured.';
