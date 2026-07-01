@@ -45,7 +45,7 @@ function toShamsi(int $gy, int $gm, int $gd): array {
         if ($j_d_no >= $j_mi) { $j_d_no -= $j_mi; $jm++; } else break;
     }
     $jd = $j_d_no + 1; $jm++;
-    return [$jy, $jm, $jd];
+    return ['y' => $jy, 'm' => $jm, 'd' => $jd];
 }
 
 // Auto-migrate guard
