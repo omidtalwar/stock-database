@@ -11,22 +11,47 @@ $pageTitle = __('nav_wholesale');
 // Optional location filter (drill-down from a location card)
 $filterLoc = trim($_GET['location'] ?? '');
 
+// ── Time-period filter (Shamsi) ──
+$period = $_GET['period'] ?? 'all';
+if (!in_array($period, ['all','today','week','month','year','custom'], true)) $period = 'all';
+[$rangeStart, $rangeEnd, $rangeLabel] = wsResolvePeriod($period, $_GET);
+
+// Date condition on entry_date (fallback to created_at). Two prefixes for the
+// aliased transactions query vs. the plain aggregate queries.
+$dateParams = [];
+$dateCond   = '';   // bare column names
+$dateCondW  = '';   // w.-prefixed
+if ($rangeStart && $rangeEnd) {
+    $dateCond   = "COALESCE(entry_date, DATE(created_at)) BETWEEN ? AND ?";
+    $dateCondW  = "COALESCE(w.entry_date, DATE(w.created_at)) BETWEEN ? AND ?";
+    $dateParams = [$rangeStart, $rangeEnd];
+}
+
+// Query-string of active filters to preserve across links (excludes page/location)
+$keep = ['period' => $period];
+if ($period === 'custom') {
+    foreach (['cf_y','cf_m','cf_d','ct_y','ct_m','ct_d'] as $k) if (isset($_GET[$k])) $keep[$k] = $_GET[$k];
+}
+$periodQS = http_build_query($keep);
+
 // ── Top dashboard totals (money) ──
-$totals = $pdo->query("
+$sqlTotals = "
     SELECT
         COALESCE(SUM(CASE WHEN type='in'  THEN total_value ELSE 0 END),0) AS money_in,
         COALESCE(SUM(CASE WHEN type='out' THEN total_value ELSE 0 END),0) AS money_out,
         COUNT(*) AS txn_count,
         COUNT(DISTINCT location) AS loc_count
-    FROM wholesale_logs
-")->fetch();
+    FROM wholesale_logs" . ($dateCond ? " WHERE $dateCond" : "");
+$stmt = $pdo->prepare($sqlTotals);
+$stmt->execute($dateParams);
+$totals = $stmt->fetch();
 
 $moneyIn   = (float)$totals['money_in'];
 $moneyOut  = (float)$totals['money_out'];
 $remaining = $moneyIn - $moneyOut;
 
 // ── Per-location breakdown (money) ──
-$locations = $pdo->query("
+$sqlLoc = "
     SELECT
         location,
         COALESCE(SUM(CASE WHEN type='in'  THEN total_value ELSE 0 END),0) AS in_amt,
@@ -34,17 +59,21 @@ $locations = $pdo->query("
         COUNT(*) AS txn_count,
         MAX(created_at) AS last_txn
     FROM wholesale_logs
-    WHERE location IS NOT NULL AND location != ''
+    WHERE location IS NOT NULL AND location != ''" . ($dateCond ? " AND $dateCond" : "") . "
     GROUP BY location
     ORDER BY (COALESCE(SUM(CASE WHEN type='in' THEN total_value ELSE 0 END),0)
             - COALESCE(SUM(CASE WHEN type='out' THEN total_value ELSE 0 END),0)) DESC,
-             last_txn DESC
-")->fetchAll();
+             last_txn DESC";
+$stmt = $pdo->prepare($sqlLoc);
+$stmt->execute($dateParams);
+$locations = $stmt->fetchAll();
 
-// ── Transactions (with optional location filter + pagination) ──
-$where  = '';
+// ── Transactions (with optional location + date filters + pagination) ──
+$conds  = [];
 $params = [];
-if ($filterLoc !== '') { $where = 'WHERE w.location = ?'; $params[] = $filterLoc; }
+if ($filterLoc !== '') { $conds[] = 'w.location = ?'; $params[] = $filterLoc; }
+if ($dateCondW)        { $conds[] = $dateCondW; foreach ($dateParams as $dp) $params[] = $dp; }
+$where = $conds ? 'WHERE ' . implode(' AND ', $conds) : '';
 
 $cnt = $pdo->prepare("SELECT COUNT(*) FROM wholesale_logs w $where");
 $cnt->execute($params);
@@ -66,6 +95,13 @@ $logsStmt = $pdo->prepare("
 ");
 $logsStmt->execute($params);
 $logs = $logsStmt->fetchAll();
+
+// Custom-range picker defaults (Shamsi)
+$todayShamsi = wsToShamsi((int)date('Y'), (int)date('n'), (int)date('j'));
+$jMonths     = ['۱ حمل','۲ ثور','۳ جوزا','۴ سرطان','۵ اسد','۶ سنبله',
+                '۷ میزان','۸ عقرب','۹ قوس','۱۰ جدی','۱۱ دلو','۱۲ حوت'];
+$cf = ['y' => (int)($_GET['cf_y'] ?? $todayShamsi['y']), 'm' => (int)($_GET['cf_m'] ?? $todayShamsi['m']), 'd' => (int)($_GET['cf_d'] ?? 1)];
+$ct = ['y' => (int)($_GET['ct_y'] ?? $todayShamsi['y']), 'm' => (int)($_GET['ct_m'] ?? $todayShamsi['m']), 'd' => (int)($_GET['ct_d'] ?? $todayShamsi['d'])];
 
 require_once '../includes/header.php';
 ?>
@@ -103,6 +139,18 @@ require_once '../includes/header.php';
 .loc-chip { display:inline-flex; align-items:center; gap:5px; font-size:.72rem; font-weight:700; padding:2px 9px; border-radius:20px; color:#fff; }
 
 @media (max-width:576px){ .ws-loc-grid { grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; } }
+
+/* Period filter */
+.ws-filter { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.ws-fbtn {
+    border:1px solid var(--w11-border); background:#fff; border-radius:20px;
+    padding:5px 14px; font-size:.8rem; font-weight:600; cursor:pointer; color:#555;
+    text-decoration:none; display:inline-flex; align-items:center; gap:5px; transition:all .15s; white-space:nowrap;
+}
+.ws-fbtn:hover { border-color:#14B8A6; color:#0d9488; }
+.ws-fbtn.active { background:#14B8A6; border-color:#14B8A6; color:#fff; }
+.ws-range-cap { font-size:.72rem; color:#888; }
+.ws-custom { background:rgba(20,184,166,0.05); border:1px solid rgba(20,184,166,0.2); border-radius:12px; }
 </style>
 
 <!-- Page header -->
@@ -118,6 +166,72 @@ require_once '../includes/header.php';
         <i class="bi bi-plus-square me-2"></i>New Entry
     </a>
 </div>
+
+<!-- Period filter (Shamsi) -->
+<?php
+$locQS = $filterLoc !== '' ? '&location=' . urlencode($filterLoc) : '';
+$pBtns = ['all' => 'All', 'today' => 'Today', 'week' => 'Week', 'month' => 'Month', 'year' => 'Year'];
+?>
+<div class="card mb-3" style="border:none;background:rgba(0,0,0,0.02);">
+    <div class="card-body py-2 px-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <div class="ws-filter">
+            <i class="bi bi-funnel" style="color:#14B8A6;"></i>
+            <?php foreach ($pBtns as $key => $lbl): ?>
+            <a href="?period=<?= $key ?><?= $locQS ?>" class="ws-fbtn <?= $period === $key ? 'active' : '' ?>"><?= $lbl ?></a>
+            <?php endforeach; ?>
+            <button type="button" class="ws-fbtn <?= $period === 'custom' ? 'active' : '' ?>" id="wsCustomToggle">
+                <i class="bi bi-calendar-range"></i>Custom
+            </button>
+        </div>
+        <span class="ws-range-cap">
+            <i class="bi bi-calendar3 me-1"></i><?= htmlspecialchars($rangeLabel) ?>
+            <?php if ($rangeStart && $rangeEnd): ?>
+                <?php $rs = wsToShamsi((int)date('Y',strtotime($rangeStart)),(int)date('n',strtotime($rangeStart)),(int)date('j',strtotime($rangeStart)));
+                      $re = wsToShamsi((int)date('Y',strtotime($rangeEnd)),(int)date('n',strtotime($rangeEnd)),(int)date('j',strtotime($rangeEnd))); ?>
+                — <?= $rs['y'] ?>/<?= str_pad((string)$rs['m'],2,'0',STR_PAD_LEFT) ?>/<?= str_pad((string)$rs['d'],2,'0',STR_PAD_LEFT) ?>
+                → <?= $re['y'] ?>/<?= str_pad((string)$re['m'],2,'0',STR_PAD_LEFT) ?>/<?= str_pad((string)$re['d'],2,'0',STR_PAD_LEFT) ?>
+            <?php endif; ?>
+        </span>
+    </div>
+    <!-- Custom Shamsi range -->
+    <div class="ws-custom mx-3 mb-3 px-3 py-3" id="wsCustomBox" style="display:<?= $period === 'custom' ? 'block' : 'none' ?>;">
+        <form method="GET" class="d-flex flex-wrap align-items-end gap-3">
+            <input type="hidden" name="period" value="custom">
+            <?php if ($filterLoc !== ''): ?><input type="hidden" name="location" value="<?= htmlspecialchars($filterLoc) ?>"><?php endif; ?>
+            <div>
+                <label class="form-label fw-semibold mb-1 small">From <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size:.55rem;">Shamsi</span></label>
+                <div class="d-flex align-items-center gap-1">
+                    <input type="number" name="cf_y" class="form-control form-control-sm text-center fw-semibold" value="<?= $cf['y'] ?>" min="1300" max="1600" style="width:66px;">
+                    <span class="text-muted">/</span>
+                    <select name="cf_m" class="form-select form-select-sm" style="width:112px;">
+                        <?php foreach ($jMonths as $i => $nm): ?><option value="<?= $i+1 ?>" <?= $cf['m'] === $i+1 ? 'selected' : '' ?>><?= $nm ?></option><?php endforeach; ?>
+                    </select>
+                    <span class="text-muted">/</span>
+                    <input type="number" name="cf_d" class="form-control form-control-sm text-center fw-semibold" value="<?= $cf['d'] ?>" min="1" max="31" style="width:54px;">
+                </div>
+            </div>
+            <div>
+                <label class="form-label fw-semibold mb-1 small">To <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size:.55rem;">Shamsi</span></label>
+                <div class="d-flex align-items-center gap-1">
+                    <input type="number" name="ct_y" class="form-control form-control-sm text-center fw-semibold" value="<?= $ct['y'] ?>" min="1300" max="1600" style="width:66px;">
+                    <span class="text-muted">/</span>
+                    <select name="ct_m" class="form-select form-select-sm" style="width:112px;">
+                        <?php foreach ($jMonths as $i => $nm): ?><option value="<?= $i+1 ?>" <?= $ct['m'] === $i+1 ? 'selected' : '' ?>><?= $nm ?></option><?php endforeach; ?>
+                    </select>
+                    <span class="text-muted">/</span>
+                    <input type="number" name="ct_d" class="form-control form-control-sm text-center fw-semibold" value="<?= $ct['d'] ?>" min="1" max="31" style="width:54px;">
+                </div>
+            </div>
+            <button type="submit" class="btn btn-sm fw-semibold" style="background:#14B8A6;color:#fff;"><i class="bi bi-check-lg me-1"></i>Apply</button>
+        </form>
+    </div>
+</div>
+<script>
+document.getElementById('wsCustomToggle')?.addEventListener('click', function () {
+    const box = document.getElementById('wsCustomBox');
+    box.style.display = box.style.display === 'none' ? 'block' : 'none';
+});
+</script>
 
 <!-- Top stats (money) -->
 <div class="row g-3 mb-4">
@@ -158,7 +272,7 @@ require_once '../includes/header.php';
         <i class="bi bi-geo-alt-fill" style="color:#14B8A6;"></i> By Location
     </h5>
     <?php if ($filterLoc !== ''): ?>
-    <a href="index.php" class="btn btn-sm btn-light">
+    <a href="index.php?<?= $periodQS ?>" class="btn btn-sm btn-light">
         <i class="bi bi-x-circle me-1"></i>Clear filter: <strong class="ms-1"><?= htmlspecialchars($filterLoc) ?></strong>
     </a>
     <?php endif; ?>
@@ -170,7 +284,7 @@ require_once '../includes/header.php';
         $active = ($filterLoc === $loc['location']);
     ?>
     <a class="ws-loc <?= $active ? 'active' : '' ?>" style="--lc:<?= $lc ?>;"
-       href="index.php?location=<?= urlencode($loc['location']) ?>">
+       href="index.php?location=<?= urlencode($loc['location']) ?>&<?= $periodQS ?>">
         <div class="d-flex align-items-start justify-content-between mb-2">
             <div class="ws-loc-name">
                 <span class="ws-loc-pin" style="background:<?= $lc ?>;"><i class="bi bi-geo-alt-fill"></i></span>
@@ -220,9 +334,16 @@ require_once '../includes/header.php';
             </thead>
             <tbody>
                 <?php if (empty($logs)): ?>
+                <?php $isFiltered = ($period !== 'all' || $filterLoc !== ''); ?>
                 <tr><td colspan="<?= isAdmin() ? 7 : 6 ?>" class="text-center text-muted py-5">
-                    <i class="bi bi-inbox fs-2 d-block mb-2 opacity-25"></i>No entries yet.
-                    <div class="mt-2"><a href="add.php" class="btn btn-sm" style="background:#14B8A6;color:#fff;"><i class="bi bi-plus-lg me-1"></i>Add the first one</a></div>
+                    <i class="bi bi-inbox fs-2 d-block mb-2 opacity-25"></i>
+                    <?php if ($isFiltered): ?>
+                        No entries for this filter.
+                        <div class="mt-2"><a href="index.php" class="btn btn-sm btn-light"><i class="bi bi-x-circle me-1"></i>Clear filters</a></div>
+                    <?php else: ?>
+                        No entries yet.
+                        <div class="mt-2"><a href="add.php" class="btn btn-sm" style="background:#14B8A6;color:#fff;"><i class="bi bi-plus-lg me-1"></i>Add the first one</a></div>
+                    <?php endif; ?>
                 </td></tr>
                 <?php else: foreach ($logs as $log):
                     $isIn   = $log['type'] === 'in';
