@@ -30,6 +30,10 @@ $pdo->exec("
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
 ");
 
+// Outgoing entries carry no location (deducted from the overall total),
+// so allow NULL on existing installs where the column was NOT NULL.
+try { $pdo->exec("ALTER TABLE wholesale_logs MODIFY location VARCHAR(120) NULL"); } catch (\PDOException $e) {}
+
 // Default suggested locations (user can type any custom place too)
 const WHOLESALE_DEFAULT_LOCATIONS = ['Kabul', 'China', 'Lahore', 'Gami'];
 

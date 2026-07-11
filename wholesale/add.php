@@ -24,23 +24,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $entryDate = trim($_POST['entry_date'] ?? '') ?: null;
     if ($entryDate && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $entryDate)) $entryDate = null;
 
-    $locs    = $_POST['location'] ?? [];
-    $amounts = $_POST['amount']   ?? [];
-
-    // One record per location row (location + amount)
     $rows = [];
-    for ($i = 0; $i < count($locs); $i++) {
-        $loc = trim($locs[$i] ?? '');
-        $amt = (float)($amounts[$i] ?? 0);
-        if ($loc === '' && $amt <= 0) continue;      // skip empty rows silently
-        if ($loc === '' || $amt <= 0) {
-            $errors[] = 'Each row needs both a location and an amount.';
-            continue;
-        }
-        $rows[] = ['loc' => $loc, 'amt' => $amt];
-    }
 
-    if (empty($rows) && empty($errors)) $errors[] = 'Add at least one location with an amount.';
+    if ($type === 'out') {
+        // Outgoing: no location — a single amount deducted from the overall total
+        $amt = (float)($_POST['out_amount'] ?? 0);
+        if ($amt <= 0) $errors[] = 'Enter the amount going out.';
+        else $rows[] = ['loc' => null, 'amt' => $amt];
+    } else {
+        // Incoming: one record per location row (location + amount)
+        $locs    = $_POST['location'] ?? [];
+        $amounts = $_POST['amount']   ?? [];
+        for ($i = 0; $i < count($locs); $i++) {
+            $loc = trim($locs[$i] ?? '');
+            $amt = (float)($amounts[$i] ?? 0);
+            if ($loc === '' && $amt <= 0) continue;      // skip empty rows silently
+            if ($loc === '' || $amt <= 0) {
+                $errors[] = 'Each row needs both a location and an amount.';
+                continue;
+            }
+            $rows[] = ['loc' => $loc, 'amt' => $amt];
+        }
+        if (empty($rows) && empty($errors)) $errors[] = 'Add at least one location with an amount.';
+    }
 
     if (empty($errors)) {
         $stmt = $pdo->prepare("
@@ -53,14 +59,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $grand += $r['amt'];
         }
 
-        $lines = array_map(fn($r) => tgEsc($r['loc']) . ': $ ' . tgEsc(number_format($r['amt'], 2)), $rows);
+        $lines = array_map(fn($r) => tgEsc($r['loc'] ?? 'Out') . ': $ ' . tgEsc(number_format($r['amt'], 2)), $rows);
         tgNotify(($type === 'in' ? "📦 <b>Wholesale IN</b>" : "📤 <b>Wholesale OUT</b>")
             . "\n" . implode("\n", $lines)
             . "\nTotal: <b>$ " . tgEsc(number_format($grand, 2)) . "</b>"
             . "\nBy: " . tgActor(), 'stock');
 
         $_SESSION['success'] = count($rows) . ' entr' . (count($rows) === 1 ? 'y' : 'ies') . ' saved.';
-        $backLoc = count($rows) === 1 ? '?location=' . urlencode($rows[0]['loc']) : '';
+        $backLoc = (count($rows) === 1 && !empty($rows[0]['loc'])) ? '?location=' . urlencode($rows[0]['loc']) : '';
         header('Location: index.php' . $backLoc); exit;
     }
 
@@ -123,23 +129,35 @@ require_once '../includes/header.php';
                         <label class="out" for="tOut"><i class="bi bi-box-arrow-up me-1"></i>Outgoing (Out)</label>
                     </div>
 
-                    <!-- Quick add -->
-                    <label class="form-label fw-semibold mb-1">Locations &amp; Amounts <span class="text-danger">*</span></label>
-                    <div class="loc-quick mb-3" id="locQuick">
-                        <?php foreach (WHOLESALE_DEFAULT_LOCATIONS as $l): ?>
-                        <button type="button" data-loc="<?= htmlspecialchars($l) ?>">
-                            <i class="bi bi-plus-circle" style="color:<?= wsLocationColor($l) ?>;"></i><?= htmlspecialchars($l) ?>
-                        </button>
-                        <?php endforeach; ?>
-                        <button type="button" data-loc="" style="border-style:dashed;"><i class="bi bi-plus-lg"></i>Custom</button>
+                    <!-- ── IN MODE: locations + amounts ── -->
+                    <div id="inMode">
+                        <label class="form-label fw-semibold mb-1">Locations &amp; Amounts <span class="text-danger">*</span></label>
+                        <div class="loc-quick mb-3" id="locQuick">
+                            <?php foreach (WHOLESALE_DEFAULT_LOCATIONS as $l): ?>
+                            <button type="button" data-loc="<?= htmlspecialchars($l) ?>">
+                                <i class="bi bi-plus-circle" style="color:<?= wsLocationColor($l) ?>;"></i><?= htmlspecialchars($l) ?>
+                            </button>
+                            <?php endforeach; ?>
+                            <button type="button" data-loc="" style="border-style:dashed;"><i class="bi bi-plus-lg"></i>Custom</button>
+                        </div>
+
+                        <!-- Rows -->
+                        <div id="wsRows"></div>
+
+                        <div class="grand-box d-flex align-items-center justify-content-between px-3 py-2 mt-2">
+                            <span class="fw-semibold">Grand Total</span>
+                            <span class="fw-bold fs-6" style="color:#0d9488;" id="grandDisplay">$ 0.00</span>
+                        </div>
                     </div>
 
-                    <!-- Rows -->
-                    <div id="wsRows"></div>
-
-                    <div class="grand-box d-flex align-items-center justify-content-between px-3 py-2 mt-2">
-                        <span class="fw-semibold">Grand Total</span>
-                        <span class="fw-bold fs-6" style="color:#0d9488;" id="grandDisplay">$ 0.00</span>
+                    <!-- ── OUT MODE: single amount, no location ── -->
+                    <div id="outMode" style="display:none;">
+                        <label class="form-label fw-semibold mb-1">Amount Out <span class="text-danger">*</span></label>
+                        <div class="input-group input-group-lg mb-2" style="max-width:320px;">
+                            <span class="input-group-text">$</span>
+                            <input type="number" name="out_amount" id="outAmount" class="form-control fw-bold" min="0" step="any" placeholder="0.00">
+                        </div>
+                        <div class="text-muted small"><i class="bi bi-info-circle me-1"></i>No location needed — this amount is deducted from the overall total.</div>
                     </div>
 
                     <!-- Date + Notes -->
@@ -258,6 +276,16 @@ document.querySelectorAll('#locQuick button').forEach(b => {
     });
 });
 
+// ── In/Out mode toggle ──
+function updateMode() {
+    const isOut = document.getElementById('tOut').checked;
+    document.getElementById('inMode').style.display  = isOut ? 'none' : '';
+    document.getElementById('outMode').style.display = isOut ? '' : 'none';
+    if (isOut) document.getElementById('outAmount').focus();
+}
+document.getElementById('tIn').addEventListener('change', updateMode);
+document.getElementById('tOut').addEventListener('change', updateMode);
+
 // Seed
 <?php if ($preLoc !== ''): ?>
 addRow(<?= json_encode($preLoc) ?>);
@@ -266,6 +294,7 @@ addRow();
 <?php endif; ?>
 syncWsShamsi();
 calcGrand();
+updateMode();
 
 document.getElementById('wsForm').addEventListener('submit', function () {
     const btn = this.querySelector('[type=submit]');

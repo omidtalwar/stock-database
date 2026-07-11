@@ -28,13 +28,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($entryDate && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $entryDate)) $entryDate = null;
 
     $errors = [];
-    if ($location === '') $errors[] = 'Location is required.';
+    if ($type === 'in' && $location === '') $errors[] = 'Location is required for incoming entries.';
     if ($amount <= 0)     $errors[] = 'Amount must be greater than 0.';
 
     if (empty($errors)) {
+        $storeLoc = $type === 'out' ? null : $location;   // outgoing carries no location
         $pdo->prepare("
             UPDATE wholesale_logs SET location=?, type=?, total_value=?, notes=?, entry_date=? WHERE id=?
-        ")->execute([$location, $type, $amount, $notes ?: null, $entryDate, $id]);
+        ")->execute([$storeLoc, $type, $amount, $notes ?: null, $entryDate, $id]);
         $_SESSION['success'] = 'Entry updated.';
         header('Location: index.php?location=' . urlencode($location)); exit;
     }
@@ -81,10 +82,10 @@ require_once '../includes/header.php';
         </div>
 
         <div class="row g-3">
-            <div class="col-sm-7">
+            <div class="col-sm-7" id="editLocWrap">
                 <label class="form-label fw-semibold mb-1">Location <span class="text-danger">*</span></label>
-                <input list="ws-loc-list" type="text" name="location" class="form-control" required autocomplete="off"
-                       value="<?= htmlspecialchars($row['location']) ?>">
+                <input list="ws-loc-list" type="text" name="location" id="editLoc" class="form-control" autocomplete="off"
+                       value="<?= htmlspecialchars($row['location'] ?? '') ?>">
                 <datalist id="ws-loc-list">
                     <?php foreach ($knownLocations as $l): ?><option value="<?= htmlspecialchars($l) ?>"></option><?php endforeach; ?>
                 </datalist>
@@ -152,6 +153,14 @@ function syncWsShamsi() {
     document.getElementById('wsDateHidden').value = g.y + '-' + String(g.m).padStart(2,'0') + '-' + String(g.d).padStart(2,'0');
     document.getElementById('wsGregBadge').textContent = '≡ ' + g.y + '/' + String(g.m).padStart(2,'0') + '/' + String(g.d).padStart(2,'0') + ' (Gregorian)';
 }
+function updateLocVis() {
+    const isOut = document.getElementById('tOut').checked;
+    document.getElementById('editLocWrap').style.display = isOut ? 'none' : '';
+    document.getElementById('editLoc').required = !isOut;
+}
+document.getElementById('tIn').addEventListener('change', updateLocVis);
+document.getElementById('tOut').addEventListener('change', updateLocVis);
+updateLocVis();
 syncWsShamsi();
 document.getElementById('wsForm').addEventListener('submit', function () {
     const btn = this.querySelector('[type=submit]');

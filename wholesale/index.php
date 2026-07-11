@@ -34,6 +34,7 @@ $locations = $pdo->query("
         COUNT(*) AS txn_count,
         MAX(created_at) AS last_txn
     FROM wholesale_logs
+    WHERE location IS NOT NULL AND location != ''
     GROUP BY location
     ORDER BY (COALESCE(SUM(CASE WHEN type='in' THEN total_value ELSE 0 END),0)
             - COALESCE(SUM(CASE WHEN type='out' THEN total_value ELSE 0 END),0)) DESC,
@@ -124,28 +125,28 @@ require_once '../includes/header.php';
         <div class="card ws-stat" style="background:rgba(16,124,16,0.07);">
             <i class="bi bi-box-arrow-in-down ic text-success"></i>
             <div class="v text-success">$ <?= number_format($moneyIn, 0) ?></div>
-            <div class="l" style="color:#107C10;">Total In</div>
+            <div class="l" style="color:#107C10;">Total In $</div>
         </div>
     </div>
     <div class="col-6 col-lg-3">
         <div class="card ws-stat" style="background:rgba(196,43,28,0.07);">
             <i class="bi bi-box-arrow-up ic text-danger"></i>
             <div class="v text-danger">$ <?= number_format($moneyOut, 0) ?></div>
-            <div class="l" style="color:#C42B1C;">Total Out</div>
+            <div class="l" style="color:#C42B1C;">Total Out $</div>
         </div>
     </div>
     <div class="col-6 col-lg-3">
         <div class="card ws-stat" style="background:rgba(20,184,166,0.1);">
             <i class="bi bi-cash-stack ic" style="color:#0d9488;"></i>
             <div class="v" style="color:<?= $remaining < 0 ? '#C42B1C' : '#0d9488' ?>;">$ <?= number_format($remaining, 0) ?></div>
-            <div class="l" style="color:#0d9488;">Remaining (Left)</div>
+            <div class="l" style="color:#0d9488;">Remaining (Left) $</div>
         </div>
     </div>
     <div class="col-6 col-lg-3">
         <div class="card ws-stat" style="background:rgba(0,103,192,0.07);">
             <i class="bi bi-geo-alt ic text-primary"></i>
             <div class="v text-primary"><?= number_format($totals['loc_count']) ?></div>
-            <div class="l" style="color:#0067C0;">Locations</div>
+            <div class="l" style="color:#0067C0;">Locations  +</div>
         </div>
     </div>
 </div>
@@ -166,7 +167,6 @@ require_once '../includes/header.php';
 <div class="ws-loc-grid mb-4">
     <?php foreach ($locations as $loc):
         $lc     = wsLocationColor($loc['location']);
-        $lRem   = (float)$loc['in_amt'] - (float)$loc['out_amt'];
         $active = ($filterLoc === $loc['location']);
     ?>
     <a class="ws-loc <?= $active ? 'active' : '' ?>" style="--lc:<?= $lc ?>;"
@@ -178,12 +178,11 @@ require_once '../includes/header.php';
             </div>
             <span class="text-muted" style="font-size:.68rem;"><?= number_format($loc['txn_count']) ?> txn</span>
         </div>
-        <div class="ws-remain" style="color:<?= $lRem < 0 ? '#C42B1C' : $lc ?>;">
-            $ <?= number_format($lRem, 0) ?> <small style="font-size:.6rem;font-weight:600;color:#888;">left</small>
+        <div class="ws-remain" style="color:<?= $lc ?>;">
+            $ <?= number_format($loc['in_amt'], 0) ?> <small style="font-size:.6rem;font-weight:600;color:#888;">in</small>
         </div>
         <div class="ws-io">
-            <div class="in"><span class="num">▼ $<?= number_format($loc['in_amt'], 0) ?></span>In</div>
-            <div class="out"><span class="num">▲ $<?= number_format($loc['out_amt'], 0) ?></span>Out</div>
+            <div class="in"><span class="num">▼ $<?= number_format($loc['in_amt'], 0) ?></span>Received</div>
         </div>
     </a>
     <?php endforeach; ?>
@@ -232,9 +231,13 @@ require_once '../includes/header.php';
                 ?>
                 <tr data-search="<?= htmlspecialchars($search) ?>">
                     <td>
+                        <?php if (!empty($log['location'])): ?>
                         <span class="loc-chip" style="background:<?= $lc ?>;">
                             <i class="bi bi-geo-alt-fill"></i><?= htmlspecialchars($log['location']) ?>
                         </span>
+                        <?php else: ?>
+                        <span class="text-muted" style="font-size:.72rem;"><i class="bi bi-dash-circle me-1"></i>No location</span>
+                        <?php endif; ?>
                     </td>
                     <td>
                         <span class="type-pill <?= $isIn ? 'in' : 'out' ?>">
