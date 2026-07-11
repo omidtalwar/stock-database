@@ -746,6 +746,7 @@ body.pin-locked .debtor-debt .s { filter: blur(7px); user-select: none; pointer-
         <a href="/payments/index.php"  class="nav-item"><i class="bi bi-cash-coin"></i> <?= __('nav_payments') ?></a>
         <a href="/stock/index.php"     class="nav-item"><i class="bi bi-archive"></i> <?= __('nav_stock') ?></a>
         <a href="/accessories/index.php" class="nav-item"><i class="bi bi-gem"></i> <?= __('nav_accessories') ?></a>
+        <a href="/wholesale/index.php" class="nav-item"><i class="bi bi-boxes"></i> <?= __('nav_wholesale') ?></a>
 
         <?php if (isAdmin()): ?>
         <div class="nav-section"><?= __('nav_admin') ?></div>
