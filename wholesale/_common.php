@@ -31,7 +31,7 @@ $pdo->exec("
 ");
 
 // Default suggested locations (user can type any custom place too)
-const WHOLESALE_DEFAULT_LOCATIONS = ['Kabul', 'China', 'Peshawar'];
+const WHOLESALE_DEFAULT_LOCATIONS = ['Kabul', 'China', 'Lahore', 'Gami'];
 
 // Gregorian → Solar Hijri (Shamsi). Returns ['y'=>, 'm'=>, 'd'=>].
 if (!function_exists('wsToShamsi')) {
@@ -77,7 +77,7 @@ if (!function_exists('wsKnownLocations')) {
 if (!function_exists('wsLocationColor')) {
     function wsLocationColor(string $location): string {
         $palette = ['#14B8A6','#0067C0','#C084FC','#FB923C','#F87171','#34D399','#FBBF24','#60A5FA','#F472B6','#A78BFA'];
-        $known = ['Kabul' => '#14B8A6', 'China' => '#F87171', 'Peshawar' => '#34D399'];
+        $known = ['Kabul' => '#14B8A6', 'China' => '#F87171', 'Lahore' => '#34D399', 'Gami' => '#FB923C'];
         if (isset($known[$location])) return $known[$location];
         $sum = 0; $len = strlen($location);
         for ($i = 0; $i < $len; $i++) $sum += ord($location[$i]);
