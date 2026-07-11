@@ -11,6 +11,9 @@ $pageTitle = __('nav_wholesale');
 // Optional location filter (drill-down from a location card)
 $filterLoc = trim($_GET['location'] ?? '');
 
+// Optional movement-type filter (e.g. view outgoing history)
+$filterType = in_array($_GET['type'] ?? '', ['in','out'], true) ? $_GET['type'] : '';
+
 // ── Time-period filter (Shamsi) ──
 $period = $_GET['period'] ?? 'all';
 if (!in_array($period, ['all','today','week','month','year','custom'], true)) $period = 'all';
@@ -71,8 +74,9 @@ $locations = $stmt->fetchAll();
 // ── Transactions (with optional location + date filters + pagination) ──
 $conds  = [];
 $params = [];
-if ($filterLoc !== '') { $conds[] = 'w.location = ?'; $params[] = $filterLoc; }
-if ($dateCondW)        { $conds[] = $dateCondW; foreach ($dateParams as $dp) $params[] = $dp; }
+if ($filterLoc !== '')  { $conds[] = 'w.location = ?'; $params[] = $filterLoc; }
+if ($filterType !== '') { $conds[] = 'w.type = ?';     $params[] = $filterType; }
+if ($dateCondW)         { $conds[] = $dateCondW; foreach ($dateParams as $dp) $params[] = $dp; }
 $where = $conds ? 'WHERE ' . implode(' AND ', $conds) : '';
 
 $cnt = $pdo->prepare("SELECT COUNT(*) FROM wholesale_logs w $where");
@@ -111,6 +115,9 @@ require_once '../includes/header.php';
 .ws-stat .v { font-size:1.4rem; font-weight:800; line-height:1.1; letter-spacing:-.5px; }
 .ws-stat .l { font-size:0.66rem; text-transform:uppercase; letter-spacing:.7px; font-weight:700; opacity:.7; margin-top:5px; }
 .ws-stat .ic { position:absolute; top:14px; inset-inline-end:16px; font-size:1.5rem; opacity:.18; }
+a.ws-stat-link { text-decoration:none; display:block; transition:transform .15s, box-shadow .2s; }
+a.ws-stat-link:hover { transform:translateY(-2px); box-shadow:var(--w11-shadow-md); }
+a.ws-stat-link.sel { outline:2px solid var(--sel,#14B8A6); outline-offset:-1px; }
 
 /* Location cards */
 .ws-loc-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:14px; }
@@ -236,18 +243,18 @@ document.getElementById('wsCustomToggle')?.addEventListener('click', function ()
 <!-- Top stats (money) -->
 <div class="row g-3 mb-4">
     <div class="col-6 col-lg-3">
-        <div class="card ws-stat" style="background:rgba(16,124,16,0.07);">
+        <a href="?type=in&<?= $periodQS ?>" class="card ws-stat ws-stat-link <?= $filterType === 'in' ? 'sel' : '' ?>" style="background:rgba(16,124,16,0.07);--sel:#107C10;">
             <i class="bi bi-box-arrow-in-down ic text-success"></i>
             <div class="v text-success">$ <?= number_format($moneyIn, 0) ?></div>
-            <div class="l" style="color:#107C10;">Total In $</div>
-        </div>
+            <div class="l" style="color:#107C10;">Total In $ <i class="bi bi-chevron-right" style="font-size:.6rem;"></i></div>
+        </a>
     </div>
     <div class="col-6 col-lg-3">
-        <div class="card ws-stat" style="background:rgba(196,43,28,0.07);">
+        <a href="?type=out&<?= $periodQS ?>" class="card ws-stat ws-stat-link <?= $filterType === 'out' ? 'sel' : '' ?>" style="background:rgba(196,43,28,0.07);--sel:#C42B1C;">
             <i class="bi bi-box-arrow-up ic text-danger"></i>
             <div class="v text-danger">$ <?= number_format($moneyOut, 0) ?></div>
-            <div class="l" style="color:#C42B1C;">Total Out $</div>
-        </div>
+            <div class="l" style="color:#C42B1C;">Total Out $ <i class="bi bi-chevron-right" style="font-size:.6rem;"></i></div>
+        </a>
     </div>
     <div class="col-6 col-lg-3">
         <div class="card ws-stat" style="background:rgba(20,184,166,0.1);">
@@ -306,9 +313,20 @@ document.getElementById('wsCustomToggle')?.addEventListener('click', function ()
 <!-- Transactions table -->
 <div class="card">
     <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
-        <span class="fw-semibold d-flex align-items-center gap-2">
+        <span class="fw-semibold d-flex align-items-center gap-2 flex-wrap">
             <i class="bi bi-list-ul" style="color:#14B8A6;"></i>
-            <?= $filterLoc !== '' ? htmlspecialchars($filterLoc).' — Transactions' : 'All Transactions' ?>
+            <?php
+            if ($filterType === 'in')       echo 'Incoming History';
+            elseif ($filterType === 'out')  echo 'Outgoing History';
+            elseif ($filterLoc !== '')      echo htmlspecialchars($filterLoc) . ' — Transactions';
+            else                            echo 'All Transactions';
+            ?>
+            <?php if ($filterType !== '' || $filterLoc !== ''): ?>
+            <a href="index.php?<?= $periodQS ?>" class="badge text-decoration-none"
+               style="background:rgba(0,0,0,0.06);color:#555;font-weight:600;">
+                <i class="bi bi-x-circle me-1"></i>Clear
+            </a>
+            <?php endif; ?>
         </span>
         <div class="d-flex align-items-center gap-2">
             <div class="input-group input-group-sm" style="max-width:230px;">
@@ -334,7 +352,7 @@ document.getElementById('wsCustomToggle')?.addEventListener('click', function ()
             </thead>
             <tbody>
                 <?php if (empty($logs)): ?>
-                <?php $isFiltered = ($period !== 'all' || $filterLoc !== ''); ?>
+                <?php $isFiltered = ($period !== 'all' || $filterLoc !== '' || $filterType !== ''); ?>
                 <tr><td colspan="<?= isAdmin() ? 7 : 6 ?>" class="text-center text-muted py-5">
                     <i class="bi bi-inbox fs-2 d-block mb-2 opacity-25"></i>
                     <?php if ($isFiltered): ?>
@@ -347,7 +365,7 @@ document.getElementById('wsCustomToggle')?.addEventListener('click', function ()
                 </td></tr>
                 <?php else: foreach ($logs as $log):
                     $isIn   = $log['type'] === 'in';
-                    $lc     = wsLocationColor($log['location']);
+                    $lc     = wsLocationColor($log['location'] ?? '');
                     $search = strtolower(($log['location'] ?? '').' '.($log['notes'] ?? ''));
                 ?>
                 <tr data-search="<?= htmlspecialchars($search) ?>">
@@ -366,7 +384,7 @@ document.getElementById('wsCustomToggle')?.addEventListener('click', function ()
                         </span>
                     </td>
                     <td class="text-end fw-bold text-nowrap <?= $isIn ? 'text-success' : 'text-danger' ?>">
-                        $ <?= number_format($log['total_value'], 2) ?>
+                        <?= $isIn ? '' : '−' ?>$ <?= number_format($log['total_value'], 2) ?>
                     </td>
                     <td class="text-muted" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
                         title="<?= htmlspecialchars($log['notes'] ?? '') ?>"><?= htmlspecialchars($log['notes'] ?: '—') ?></td>
