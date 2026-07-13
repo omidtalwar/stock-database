@@ -1,11 +1,13 @@
 <?php
 require_once '../includes/session.php';
 requireLogin();
-require_once '../includes/lang.php';
 require_once '../config/db.php';
 require_once '_common.php';
 
-$pageTitle = __('nav_warehouse');
+// ── Flash (from delete.php etc.) ──
+$flashSuccess = $_SESSION['success'] ?? '';
+$flashError   = $_SESSION['error'] ?? '';
+unset($_SESSION['success'], $_SESSION['error']);
 
 // ── Stock per category + top totals ──
 $stock = whStockByCategory($pdo);
@@ -61,445 +63,478 @@ foreach ($stock as $s) {
 $todayShamsi = whToShamsi((int)date('Y'), (int)date('n'), (int)date('j'));
 $jMonths = ['۱ حمل','۲ ثور','۳ جوزا','۴ سرطان','۵ اسد','۶ سنبله','۷ میزان','۸ عقرب','۹ قوس','۱۰ جدی','۱۱ دلو','۱۲ حوت'];
 $csrf = generateFormToken('warehouse');
-
-require_once '../includes/header.php';
 ?>
-
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cloths Warehouse · کالا ګدام</title>
+<link rel="icon" href="/favicon.svg">
+<script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Vazirmatn:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script>
+tailwind.config = {
+    theme: {
+        extend: {
+            fontFamily: {
+                sans: ['Inter', 'Vazirmatn', 'system-ui', 'sans-serif'],
+                pashto: ['Vazirmatn', 'sans-serif'],
+            },
+            colors: {
+                ink: '#0b1020',
+                brand: { 500: '#6366F1', 600: '#4f46e5' },
+            },
+            keyframes: {
+                floaty: { '0%,100%': { transform: 'translateY(0) scale(1)' }, '50%': { transform: 'translateY(-30px) scale(1.08)' } },
+                pop: { '0%': { transform: 'scale(.96)', opacity: 0 }, '100%': { transform: 'scale(1)', opacity: 1 } },
+                slideup: { '0%': { transform: 'translateY(18px)', opacity: 0 }, '100%': { transform: 'translateY(0)', opacity: 1 } },
+            },
+            animation: {
+                floaty: 'floaty 14s ease-in-out infinite',
+                pop: 'pop .18s ease-out',
+                slideup: 'slideup .5s cubic-bezier(.2,.8,.2,1) both',
+            },
+        },
+    },
+};
+</script>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&display=swap');
-.font-pashto { font-family:'Vazirmatn', 'Segoe UI', Tahoma, sans-serif; }
-.wh-accent { color:#6366F1; }
-.wh-stat { border-radius:14px; padding:18px 20px; border:none; position:relative; overflow:hidden; }
-.wh-stat .v { font-size:1.5rem; font-weight:800; line-height:1.1; letter-spacing:-.5px; }
-.wh-stat .l { font-size:.66rem; text-transform:uppercase; letter-spacing:.7px; font-weight:700; opacity:.7; margin-top:5px; }
-.wh-stat .ic { position:absolute; top:14px; inset-inline-end:16px; font-size:1.6rem; opacity:.16; }
-
-.wh-cat-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:14px; }
-.wh-cat {
-    border:1px solid var(--w11-border); border-radius:14px; background:#fff;
-    padding:15px 15px 12px; position:relative; overflow:hidden;
-    box-shadow:var(--w11-shadow-sm); transition:transform .15s, box-shadow .2s;
-}
-.wh-cat:hover { transform:translateY(-3px); box-shadow:var(--w11-shadow-md); }
-.wh-cat::before { content:''; position:absolute; inset-block:0; inset-inline-start:0; width:5px; background:var(--cc,#6366F1); }
-.wh-cat-name { font-weight:700; font-size:1.02rem; direction:rtl; text-align:start; margin-bottom:10px; min-height:1.5em; }
-.wh-cat-pin { width:30px; height:30px; border-radius:9px; display:flex; align-items:center; justify-content:center; color:#fff; font-size:.95rem; flex-shrink:0; }
-.wh-units { display:flex; align-items:flex-end; gap:14px; }
-.wh-units .num { font-size:1.5rem; font-weight:800; letter-spacing:-.5px; line-height:1; }
-.wh-units .u { font-size:.6rem; text-transform:uppercase; letter-spacing:.5px; color:#888; font-weight:700; margin-top:3px; }
-.wh-units .sep { width:1px; align-self:stretch; background:var(--w11-border); }
-.wh-distribute-btn {
-    margin-top:12px; width:100%; border:none; border-radius:9px; padding:7px;
-    font-size:.78rem; font-weight:700; background:rgba(99,102,241,.08); color:#4f46e5; transition:all .15s;
-}
-.wh-distribute-btn:hover { background:rgba(99,102,241,.16); }
-
-.type-pill { font-size:.7rem; font-weight:700; padding:2px 9px; border-radius:20px; display:inline-flex; align-items:center; gap:4px; }
-.type-pill.in  { background:rgba(16,124,16,0.1);  color:#107C10; }
-.type-pill.out { background:rgba(79,70,229,0.1);  color:#4f46e5; }
-.cat-chip { display:inline-flex; align-items:center; gap:6px; font-weight:600; direction:rtl; }
-.cat-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
-
-.wh-ftab {
-    border:1px solid var(--w11-border); background:#fff; border-radius:20px;
-    padding:4px 14px; font-size:.8rem; font-weight:600; cursor:pointer; color:#555;
-    text-decoration:none; transition:all .15s;
-}
-.wh-ftab:hover { border-color:#6366F1; color:#4f46e5; }
-.wh-ftab.active { background:#6366F1; border-color:#6366F1; color:#fff; }
-
-.bill-thumb { width:38px; height:38px; border-radius:8px; object-fit:cover; border:1px solid var(--w11-border); transition:transform .12s; }
-.bill-thumb:hover { transform:scale(1.06); }
-
-/* Collect / Distribute segmented control in modal */
-.mode-badge { font-size:.8rem; font-weight:700; padding:4px 12px; border-radius:20px; }
-.rec-btn { width:44px; height:44px; border-radius:50%; border:none; color:#fff; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-#whTable .page-link { color:#4f46e5; }
-.pagination .active .page-link { background:#6366F1 !important; border-color:#6366F1 !important; }
-@media (max-width:576px){ .wh-cat-grid { grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; } }
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Inter', 'Vazirmatn', sans-serif; }
+    .pashto, [dir="rtl"] { font-family: 'Vazirmatn', sans-serif; }
+    /* Animated aurora background */
+    .aurora { position: fixed; inset: 0; z-index: -2; overflow: hidden; background:
+        radial-gradient(1200px 600px at 10% -10%, #1e1b4b 0%, transparent 60%),
+        radial-gradient(1000px 500px at 110% 10%, #0f172a 0%, transparent 55%),
+        linear-gradient(160deg, #0b1020 0%, #111827 100%); }
+    .blob { position: absolute; border-radius: 50%; filter: blur(70px); opacity: .5; }
+    .grid-lines { position: fixed; inset: 0; z-index: -1; opacity: .05;
+        background-image: linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px);
+        background-size: 46px 46px; }
+    .glass { background: rgba(255,255,255,0.06); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.10); }
+    .glass-lite { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); }
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 8px; }
+    .modal-scroll::-webkit-scrollbar { width: 6px; }
+    input, select, textarea { color-scheme: dark; }
 </style>
+</head>
+<body class="text-slate-100 min-h-screen antialiased">
 
-<!-- Page header -->
-<div class="page-header d-flex align-items-center justify-content-between flex-wrap gap-2">
-    <div>
-        <h4 class="mb-1 d-flex align-items-center gap-2">
-            <i class="bi bi-basket3 wh-accent"></i> <?= __('nav_warehouse') ?>
-        </h4>
-        <p class="text-muted small mb-0 font-pashto">د کالا ذخیره — کتان او بخمل په تھان او ګز</p>
-    </div>
-    <div class="d-flex gap-2">
-        <button class="btn text-white fw-semibold" style="background:#10B981;border-color:#10B981;" onclick="openWhModal('collect')">
-            <i class="bi bi-plus-square me-2"></i>Collect
-        </button>
-        <button class="btn text-white fw-semibold" style="background:#6366F1;border-color:#6366F1;" onclick="openWhModal('distribute')">
-            <i class="bi bi-box-arrow-up me-2"></i>Distribute
-        </button>
-    </div>
+<!-- Animated background -->
+<div class="aurora">
+    <div class="blob animate-floaty" style="width:420px;height:420px;background:#6366F1;top:-80px;left:-60px;"></div>
+    <div class="blob animate-floaty" style="width:380px;height:380px;background:#EC4899;bottom:-100px;right:-40px;animation-delay:-4s;"></div>
+    <div class="blob animate-floaty" style="width:340px;height:340px;background:#06B6D4;top:40%;left:55%;animation-delay:-8s;"></div>
 </div>
+<div class="grid-lines"></div>
 
-<?= flashMessage() ?>
+<div class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
 
-<!-- Top stats -->
-<div class="row g-3 mb-4">
-    <div class="col-6 col-lg-3">
-        <div class="card wh-stat" style="background:rgba(99,102,241,0.08);">
-            <i class="bi bi-layers ic" style="color:#6366F1;"></i>
-            <div class="v" style="color:#4f46e5;"><?= whNum($totalTan) ?> <small style="font-size:.7rem;color:#888;">Tan</small></div>
-            <div class="l" style="color:#4f46e5;">In Stock · تھان</div>
-        </div>
-    </div>
-    <div class="col-6 col-lg-3">
-        <div class="card wh-stat" style="background:rgba(236,72,153,0.08);">
-            <i class="bi bi-rulers ic" style="color:#EC4899;"></i>
-            <div class="v" style="color:#db2777;"><?= whNum($totalGaz) ?> <small style="font-size:.7rem;color:#888;">Gaz</small></div>
-            <div class="l" style="color:#db2777;">In Stock · ګز</div>
-        </div>
-    </div>
-    <div class="col-6 col-lg-3">
-        <div class="card wh-stat" style="background:rgba(6,182,212,0.08);">
-            <i class="bi bi-grid ic" style="color:#06B6D4;"></i>
-            <div class="v" style="color:#0891b2;"><?= $activeCats ?> <small style="font-size:.7rem;color:#888;">/ <?= count($stock) ?></small></div>
-            <div class="l" style="color:#0891b2;">Categories</div>
-        </div>
-    </div>
-    <div class="col-6 col-lg-3">
-        <div class="card wh-stat" style="background:rgba(16,124,16,0.07);">
-            <i class="bi bi-arrow-left-right ic text-success"></i>
-            <div class="v text-success"><?= (int)$counts['all_c'] ?></div>
-            <div class="l text-success"><?= (int)$counts['in_c'] ?> in · <?= (int)$counts['out_c'] ?> out</div>
-        </div>
-    </div>
-</div>
-
-<!-- Charts -->
-<div class="row g-3 mb-4">
-    <div class="col-lg-8">
-        <div class="card h-100">
-            <div class="card-header fw-semibold d-flex align-items-center gap-2">
-                <i class="bi bi-bar-chart-fill wh-accent"></i> Stock by Category
+    <!-- Header -->
+    <header class="flex flex-wrap items-center justify-between gap-4 mb-8 animate-slideup">
+        <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-2xl grid place-items-center shadow-lg shadow-indigo-900/40"
+                 style="background:linear-gradient(135deg,#6366F1,#EC4899);">
+                <svg class="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/></svg>
             </div>
-            <div class="card-body"><div style="height:280px;"><canvas id="barChart"></canvas></div></div>
-        </div>
-    </div>
-    <div class="col-lg-4">
-        <div class="card h-100">
-            <div class="card-header fw-semibold d-flex align-items-center gap-2">
-                <i class="bi bi-pie-chart-fill" style="color:#EC4899;"></i> Gaz Share
-            </div>
-            <div class="card-body d-flex align-items-center justify-content-center"><div style="height:280px;width:100%;"><canvas id="doughnutChart"></canvas></div></div>
-        </div>
-    </div>
-</div>
-
-<!-- Category stock cards -->
-<h5 class="mb-2 fw-semibold d-flex align-items-center gap-2">
-    <i class="bi bi-boxes wh-accent"></i> Warehouse Stock
-</h5>
-<div class="wh-cat-grid mb-4">
-    <?php foreach ($stock as $s): $c = whCategoryColor($s['category']); $empty = ((float)$s['tan'] <= 0 && (float)$s['gaz'] <= 0); ?>
-    <div class="wh-cat" style="--cc:<?= $c ?>;">
-        <div class="d-flex align-items-start justify-content-between mb-2">
-            <span class="wh-cat-pin" style="background:<?= $c ?>;"><i class="bi bi-basket3"></i></span>
-            <span class="text-muted" style="font-size:.68rem;"><?= (int)$s['txn_count'] ?> txn</span>
-        </div>
-        <div class="wh-cat-name font-pashto"><?= htmlspecialchars($s['category']) ?></div>
-        <div class="wh-units">
             <div>
-                <div class="num" style="color:<?= $empty ? '#9ca3af' : $c ?>;"><?= whNum($s['tan']) ?></div>
-                <div class="u">Tan</div>
-            </div>
-            <div class="sep"></div>
-            <div>
-                <div class="num" style="color:<?= $empty ? '#9ca3af' : $c ?>;"><?= whNum($s['gaz']) ?></div>
-                <div class="u">Gaz</div>
+                <h1 class="text-xl sm:text-2xl font-extrabold tracking-tight leading-none">Cloths Warehouse</h1>
+                <p class="text-sm text-slate-400 font-pashto">کالا ګدام — د کتان او بخمل ذخیره</p>
             </div>
         </div>
-        <button class="wh-distribute-btn" onclick='openWhModal("distribute", <?= json_encode($s['category'], JSON_UNESCAPED_UNICODE) ?>)'>
-            <i class="bi bi-box-arrow-up me-1"></i>Distribute
-        </button>
-    </div>
-    <?php endforeach; ?>
-</div>
-
-<!-- Movement history -->
-<div class="card">
-    <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
-        <span class="fw-semibold d-flex align-items-center gap-2">
-            <i class="bi bi-clock-history wh-accent"></i> Movement History
-        </span>
-        <div class="d-flex align-items-center gap-2 flex-wrap">
-            <div class="d-flex gap-1">
-                <a href="?" class="wh-ftab <?= $filterType===''?'active':'' ?>">All</a>
-                <a href="?type=in" class="wh-ftab <?= $filterType==='in'?'active':'' ?>">In</a>
-                <a href="?type=out" class="wh-ftab <?= $filterType==='out'?'active':'' ?>">Out</a>
-            </div>
-            <div class="input-group input-group-sm" style="max-width:220px;">
-                <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search" style="font-size:.78rem;"></i></span>
-                <input type="text" id="whSearch" class="form-control border-start-0 ps-0" placeholder="Search…" oninput="filterWh()">
-            </div>
+        <div class="flex items-center gap-2">
+            <a href="/dashboard.php" class="glass-lite hover:bg-white/10 transition text-sm font-medium rounded-xl px-4 py-2.5 flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5"/></svg>
+                Dashboard
+            </a>
+            <button onclick="openModal('collect')" class="rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-900/30 transition hover:brightness-110 flex items-center gap-2" style="background:linear-gradient(135deg,#10B981,#059669);">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+                Collect
+            </button>
+            <button onclick="openModal('distribute')" class="rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-900/30 transition hover:brightness-110 flex items-center gap-2" style="background:linear-gradient(135deg,#6366F1,#4f46e5);">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 3h18v4H3zM6 7v13h12V7M9 11h6"/></svg>
+                Distribute
+            </button>
         </div>
-    </div>
-    <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0" id="whTable" style="font-size:.82rem;">
-            <thead class="table-light">
-                <tr>
-                    <th>Type</th>
-                    <th>Category</th>
-                    <th class="text-end">Tan</th>
-                    <th class="text-end">Gaz</th>
-                    <th>Name</th>
-                    <th>Bill</th>
-                    <th>Voice</th>
-                    <th><?= __('field_date') ?? 'Date' ?></th>
-                    <th>By</th>
-                    <?php if (isAdmin()): ?><th></th><?php endif; ?>
-                </tr>
-            </thead>
-            <tbody>
-                <?php if (empty($logs)): ?>
-                <tr><td colspan="<?= isAdmin()?10:9 ?>" class="text-center text-muted py-5">
-                    <i class="bi bi-inbox fs-2 d-block mb-2 opacity-25"></i>No movements yet.
-                    <div class="mt-2"><button class="btn btn-sm text-white" style="background:#10B981;" onclick="openWhModal('collect')"><i class="bi bi-plus-lg me-1"></i>Collect the first cloths</button></div>
-                </td></tr>
-                <?php else: foreach ($logs as $l):
-                    $isIn = $l['type'] === 'in';
-                    $c = whCategoryColor($l['category']);
-                    $hay = strtolower($l['category'].' '.($l['party_name']??'').' '.($l['bill_number']??'').' '.($l['notes']??''));
-                ?>
-                <tr data-search="<?= htmlspecialchars($hay) ?>">
-                    <td>
-                        <span class="type-pill <?= $isIn?'in':'out' ?>">
-                            <i class="bi bi-arrow-<?= $isIn?'down':'up' ?>-circle"></i><?= $isIn?'In':'Out' ?>
-                        </span>
-                    </td>
-                    <td>
-                        <span class="cat-chip font-pashto"><span class="cat-dot" style="background:<?= $c ?>;"></span><?= htmlspecialchars($l['category']) ?></span>
-                    </td>
-                    <td class="text-end fw-bold text-nowrap <?= $isIn?'text-success':'' ?>" style="<?= $isIn?'':'color:#4f46e5;' ?>">
-                        <?= (float)$l['tan']>0 ? ($isIn?'+':'−').whNum($l['tan']) : '<span class="text-muted">—</span>' ?>
-                    </td>
-                    <td class="text-end fw-bold text-nowrap <?= $isIn?'text-success':'' ?>" style="<?= $isIn?'':'color:#4f46e5;' ?>">
-                        <?= (float)$l['gaz']>0 ? ($isIn?'+':'−').whNum($l['gaz']) : '<span class="text-muted">—</span>' ?>
-                    </td>
-                    <td class="text-muted" style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="<?= htmlspecialchars($l['party_name'] ?? '') ?>">
-                        <?= $l['party_name'] ? htmlspecialchars($l['party_name']) : '—' ?>
-                    </td>
-                    <td>
-                        <?php if (!empty($l['bill_image'])): ?>
-                        <a href="/uploads/warehouse-bills/<?= rawurlencode($l['bill_image']) ?>" target="_blank">
-                            <img src="/uploads/warehouse-bills/<?= rawurlencode($l['bill_image']) ?>" class="bill-thumb" alt="bill">
-                        </a>
-                        <?php if (!empty($l['bill_number'])): ?><div class="text-muted" style="font-size:.66rem;">#<?= htmlspecialchars($l['bill_number']) ?></div><?php endif; ?>
-                        <?php elseif (!empty($l['bill_number'])): ?>
-                        <span class="text-muted" style="font-size:.75rem;">#<?= htmlspecialchars($l['bill_number']) ?></span>
-                        <?php else: ?><span class="text-muted">—</span><?php endif; ?>
-                    </td>
-                    <td>
-                        <?php if (!empty($l['voice_note'])): ?>
-                        <audio controls preload="none" style="height:32px;width:150px;"><source src="/uploads/warehouse-voice/<?= rawurlencode($l['voice_note']) ?>"></audio>
-                        <?php else: ?><span class="text-muted">—</span><?php endif; ?>
-                    </td>
-                    <td class="text-muted text-nowrap" style="font-size:.74rem;">
-                        <div class="font-pashto"><?= whShamsiText($l['entry_date'] ?: $l['created_at']) ?></div>
-                        <div style="font-size:.66rem;color:#bbb;"><?= date('d M Y', strtotime($l['entry_date'] ?: $l['created_at'])) ?></div>
-                    </td>
-                    <td class="text-muted text-nowrap" style="font-size:.74rem;"><?= htmlspecialchars($l['by_name'] ?? '—') ?></td>
-                    <?php if (isAdmin()): ?>
-                    <td class="text-nowrap">
-                        <a href="delete.php?id=<?= $l['id'] ?>" class="btn btn-sm btn-outline-danger" title="Delete"
-                           onclick="return confirm('Delete this entry?')"><i class="bi bi-trash"></i></a>
-                    </td>
-                    <?php endif; ?>
-                </tr>
-                <?php endforeach; endif; ?>
-                <tr id="whNoResults" style="display:none;"><td colspan="<?= isAdmin()?10:9 ?>" class="text-center text-muted py-4 small"><i class="bi bi-search me-1"></i>No rows match your search.</td></tr>
-            </tbody>
-        </table>
-    </div>
-    <?php if ($totalPages > 1): ?>
-    <div class="card-footer d-flex align-items-center justify-content-between gap-2 flex-wrap py-2">
-        <span class="text-muted small"><?= $totalRows ?> records — Showing <?= $offset+1 ?>–<?= min($offset+$perPage,$totalRows) ?></span>
-        <?php $qs = $filterType ? "type=$filterType&" : ''; ?>
-        <nav><ul class="pagination pagination-sm mb-0">
-            <li class="page-item <?= $page<=1?'disabled':'' ?>"><a class="page-link" href="?<?= $qs ?>page=<?= $page-1 ?>">&#8249;</a></li>
-            <?php $st=max(1,$page-2); $en=min($totalPages,$page+2);
-            if ($st>1) echo '<li class="page-item disabled"><span class="page-link">…</span></li>';
-            for ($i=$st;$i<=$en;$i++): ?>
-            <li class="page-item <?= $i===$page?'active':'' ?>"><a class="page-link" href="?<?= $qs ?>page=<?= $i ?>"><?= $i ?></a></li>
-            <?php endfor;
-            if ($en<$totalPages) echo '<li class="page-item disabled"><span class="page-link">…</span></li>'; ?>
-            <li class="page-item <?= $page>=$totalPages?'disabled':'' ?>"><a class="page-link" href="?<?= $qs ?>page=<?= $page+1 ?>">&#8250;</a></li>
-        </ul></nav>
-    </div>
-    <?php endif; ?>
-</div>
+    </header>
 
-<!-- ══════════════ Collect / Distribute Modal ══════════════ -->
-<div class="modal fade" id="whModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
-    <div class="modal-content" style="border-radius:16px;">
-      <form id="whForm">
-        <input type="hidden" name="entry_date" id="f_entry_date" value="<?= date('Y-m-d') ?>">
-        <div class="modal-header">
-            <h5 class="modal-title d-flex align-items-center gap-2" id="whModalTitle"></h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+    <!-- Stat cards -->
+    <section class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div class="glass rounded-2xl p-5 animate-slideup" style="animation-delay:.05s;">
+            <div class="flex items-center justify-between">
+                <span class="text-xs uppercase tracking-wider text-slate-400 font-semibold">In Stock · Tan</span>
+                <span class="w-9 h-9 rounded-xl grid place-items-center" style="background:rgba(99,102,241,.18);color:#a5b4fc;">🧵</span>
+            </div>
+            <div class="mt-3 text-3xl font-extrabold tracking-tight"><?= whNum($totalTan) ?><span class="text-base font-semibold text-slate-400 ml-1">Tan</span></div>
         </div>
-        <div class="modal-body">
-            <!-- Category -->
-            <label class="form-label fw-semibold mb-1">Category · <span class="font-pashto">کټګورۍ</span></label>
-            <select id="f_category_select" class="form-select font-pashto" dir="rtl" onchange="onCatChange()">
-                <?php foreach ($knownCategories as $c): ?>
-                <option value="<?= htmlspecialchars($c) ?>"><?= htmlspecialchars($c) ?></option>
-                <?php endforeach; ?>
-                <option value="__custom__" dir="ltr">＋ Custom / نوی…</option>
-            </select>
-            <input type="text" id="f_category" class="form-control mt-2 d-none font-pashto" dir="rtl" placeholder="Type category name…">
-            <div id="availHint" class="d-none mt-2 small rounded px-2 py-1"></div>
+        <div class="glass rounded-2xl p-5 animate-slideup" style="animation-delay:.1s;">
+            <div class="flex items-center justify-between">
+                <span class="text-xs uppercase tracking-wider text-slate-400 font-semibold">In Stock · Gaz</span>
+                <span class="w-9 h-9 rounded-xl grid place-items-center" style="background:rgba(236,72,153,.18);color:#f9a8d4;">📏</span>
+            </div>
+            <div class="mt-3 text-3xl font-extrabold tracking-tight"><?= whNum($totalGaz) ?><span class="text-base font-semibold text-slate-400 ml-1">Gaz</span></div>
+        </div>
+        <div class="glass rounded-2xl p-5 animate-slideup" style="animation-delay:.15s;">
+            <div class="flex items-center justify-between">
+                <span class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Categories</span>
+                <span class="w-9 h-9 rounded-xl grid place-items-center" style="background:rgba(6,182,212,.18);color:#67e8f9;">🗂️</span>
+            </div>
+            <div class="mt-3 text-3xl font-extrabold tracking-tight"><?= $activeCats ?><span class="text-base font-semibold text-slate-400 ml-1">/ <?= count($stock) ?></span></div>
+        </div>
+        <div class="glass rounded-2xl p-5 animate-slideup" style="animation-delay:.2s;">
+            <div class="flex items-center justify-between">
+                <span class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Movements</span>
+                <span class="w-9 h-9 rounded-xl grid place-items-center" style="background:rgba(16,185,129,.18);color:#6ee7b7;">🔁</span>
+            </div>
+            <div class="mt-3 text-3xl font-extrabold tracking-tight"><?= (int)$counts['all_c'] ?></div>
+            <div class="text-xs text-slate-400 mt-1"><?= (int)$counts['in_c'] ?> in · <?= (int)$counts['out_c'] ?> out</div>
+        </div>
+    </section>
 
-            <!-- Tan / Gaz -->
-            <div class="row g-2 mt-1">
-                <div class="col-6">
-                    <label class="form-label fw-semibold mb-1">Tan · <span class="font-pashto">تھان</span></label>
-                    <input type="number" id="f_tan" class="form-control form-control-lg fw-bold" min="0" step="any" value="0" oninput="checkAvail()">
+    <!-- Charts -->
+    <section class="grid lg:grid-cols-3 gap-4 mb-8">
+        <div class="glass rounded-2xl p-5 lg:col-span-2 animate-slideup">
+            <h2 class="text-sm font-semibold text-slate-300 mb-4 flex items-center gap-2">
+                <span class="w-1.5 h-4 rounded bg-indigo-400"></span> Stock by Category
+            </h2>
+            <div class="h-64"><canvas id="barChart"></canvas></div>
+        </div>
+        <div class="glass rounded-2xl p-5 animate-slideup" style="animation-delay:.1s;">
+            <h2 class="text-sm font-semibold text-slate-300 mb-4 flex items-center gap-2">
+                <span class="w-1.5 h-4 rounded bg-pink-400"></span> Gaz Share
+            </h2>
+            <div class="h-64 grid place-items-center"><canvas id="doughnutChart"></canvas></div>
+        </div>
+    </section>
+
+    <!-- Category stock grid -->
+    <section class="mb-8">
+        <h2 class="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
+            <span class="w-1.5 h-4 rounded bg-cyan-400"></span> Warehouse Stock
+        </h2>
+        <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
+            <?php foreach ($stock as $s): $c = whCategoryColor($s['category']); $low = ((float)$s['tan'] <= 0 && (float)$s['gaz'] <= 0); ?>
+            <div class="glass rounded-2xl p-4 relative overflow-hidden transition hover:-translate-y-1 hover:bg-white/10 group">
+                <span class="absolute top-0 left-0 h-full w-1.5" style="background:<?= $c ?>;"></span>
+                <div class="flex items-start justify-between mb-3">
+                    <span class="w-9 h-9 rounded-xl grid place-items-center text-white shrink-0" style="background:<?= $c ?>;">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/></svg>
+                    </span>
+                    <span class="text-[10px] text-slate-500"><?= (int)$s['txn_count'] ?> txn</span>
                 </div>
-                <div class="col-6">
-                    <label class="form-label fw-semibold mb-1">Gaz · <span class="font-pashto">ګز</span></label>
-                    <input type="number" id="f_gaz" class="form-control form-control-lg fw-bold" min="0" step="any" value="0" oninput="checkAvail()">
-                </div>
-            </div>
-
-            <!-- Name -->
-            <div class="mt-3">
-                <label class="form-label fw-semibold mb-1" id="nameLabel">Name</label>
-                <input type="text" id="f_party_name" class="form-control" placeholder="Name…">
-            </div>
-
-            <!-- Date (Shamsi) -->
-            <div class="mt-3">
-                <label class="form-label fw-semibold mb-1">Date · <span class="font-pashto">نیټه</span>
-                    <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size:.55rem;">Shamsi</span></label>
-                <div class="d-flex align-items-center gap-1">
-                    <input type="number" id="d_y" class="form-control form-control-sm text-center fw-semibold" value="<?= $todayShamsi['y'] ?>" min="1300" max="1600" style="width:70px;" oninput="syncDate()">
-                    <span class="text-muted">/</span>
-                    <select id="d_m" class="form-select form-select-sm font-pashto" style="width:118px;" onchange="syncDate()">
-                        <?php foreach ($jMonths as $i=>$nm): ?><option value="<?= $i+1 ?>" <?= $todayShamsi['m']===$i+1?'selected':'' ?>><?= $nm ?></option><?php endforeach; ?>
-                    </select>
-                    <span class="text-muted">/</span>
-                    <input type="number" id="d_d" class="form-control form-control-sm text-center fw-semibold" value="<?= $todayShamsi['d'] ?>" min="1" max="31" style="width:56px;" oninput="syncDate()">
-                </div>
-                <div id="gregHint" class="text-muted mt-1" style="font-size:.71rem;"></div>
-            </div>
-
-            <!-- Bill number -->
-            <div class="mt-3">
-                <label class="form-label fw-semibold mb-1">Bill Number · <span class="font-pashto">بل نمبر</span></label>
-                <input type="text" id="f_bill_number" class="form-control" placeholder="e.g. 1042">
-            </div>
-
-            <!-- Bill image -->
-            <div class="mt-3">
-                <label class="form-label fw-semibold mb-1">Bill Image · <span class="font-pashto">د بل انځور</span></label>
-                <input type="file" id="f_bill_image" class="form-control" accept="image/*" onchange="previewBill(this)">
-                <img id="billPreview" class="d-none mt-2 rounded" style="max-height:160px;border:1px solid var(--w11-border);" alt="preview">
-            </div>
-
-            <!-- Voice note -->
-            <div class="mt-3">
-                <label class="form-label fw-semibold mb-1">Voice Note · <span class="font-pashto">غږیز یادښت</span></label>
-                <div class="border rounded p-2" style="background:var(--w11-bg);">
-                    <div class="d-flex align-items-center gap-2">
-                        <button type="button" id="recBtn" class="rec-btn" style="background:#EF4444;" onclick="toggleRec()"><i class="bi bi-mic-fill"></i></button>
-                        <div class="flex-grow-1">
-                            <div id="recStatus" class="small fw-semibold">Tap to record</div>
-                            <div id="recTimer" class="text-muted font-monospace d-none" style="font-size:.72rem;">0:00</div>
-                        </div>
-                        <button type="button" id="recClear" class="btn btn-sm btn-link text-danger text-decoration-none d-none" onclick="clearRec()">Clear</button>
+                <div class="font-pashto text-base font-bold leading-tight mb-2" dir="rtl"><?= htmlspecialchars($s['category']) ?></div>
+                <div class="flex items-end gap-3">
+                    <div>
+                        <div class="text-2xl font-extrabold leading-none" style="color:<?= $low ? '#64748b' : $c ?>;"><?= whNum($s['tan']) ?></div>
+                        <div class="text-[10px] uppercase tracking-wider text-slate-500 mt-0.5">Tan</div>
                     </div>
-                    <audio id="recPlayback" controls class="d-none w-100 mt-2" style="height:34px;"></audio>
-                    <div class="text-muted mt-2" style="font-size:.72rem;">Or upload an audio file:
-                        <input type="file" id="f_voice_file" accept="audio/*" class="form-control form-control-sm mt-1" onchange="onVoiceFile(this)"></div>
+                    <div class="w-px h-8 bg-white/10"></div>
+                    <div>
+                        <div class="text-2xl font-extrabold leading-none" style="color:<?= $low ? '#64748b' : $c ?>;"><?= whNum($s['gaz']) ?></div>
+                        <div class="text-[10px] uppercase tracking-wider text-slate-500 mt-0.5">Gaz</div>
+                    </div>
+                </div>
+                <button onclick='openModal("distribute", <?= json_encode($s['category'], JSON_UNESCAPED_UNICODE) ?>)'
+                        class="mt-3 w-full text-xs font-semibold rounded-lg py-1.5 bg-white/5 hover:bg-white/15 transition text-slate-300 group-hover:text-white">
+                    Distribute →
+                </button>
+            </div>
+            <?php endforeach; ?>
+        </div>
+    </section>
+
+    <!-- Transactions -->
+    <section class="glass rounded-2xl overflow-hidden animate-slideup">
+        <div class="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-white/10">
+            <h2 class="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                <span class="w-1.5 h-4 rounded bg-emerald-400"></span> Movement History
+            </h2>
+            <div class="flex items-center gap-2">
+                <div class="flex rounded-xl overflow-hidden glass-lite text-xs font-semibold">
+                    <a href="?" class="px-3 py-1.5 transition <?= $filterType===''?'bg-white/15 text-white':'text-slate-400 hover:text-white' ?>">All</a>
+                    <a href="?type=in" class="px-3 py-1.5 transition <?= $filterType==='in'?'bg-emerald-500/25 text-emerald-300':'text-slate-400 hover:text-white' ?>">In</a>
+                    <a href="?type=out" class="px-3 py-1.5 transition <?= $filterType==='out'?'bg-indigo-500/25 text-indigo-300':'text-slate-400 hover:text-white' ?>">Out</a>
+                </div>
+                <div class="relative">
+                    <input id="search" oninput="filterRows()" placeholder="Search…"
+                           class="glass-lite rounded-xl pl-8 pr-3 py-1.5 text-sm w-40 focus:w-52 transition-all outline-none focus:ring-2 focus:ring-indigo-400/50 placeholder-slate-500">
+                    <svg class="w-4 h-4 absolute left-2.5 top-2 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-4.3-4.3M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z"/></svg>
                 </div>
             </div>
-
-            <!-- Notes -->
-            <div class="mt-3">
-                <label class="form-label fw-semibold mb-1">Notes</label>
-                <textarea id="f_notes" class="form-control" rows="2" placeholder="Optional remarks…"></textarea>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm" id="txTable">
+                <thead>
+                    <tr class="text-left text-[11px] uppercase tracking-wider text-slate-500 border-b border-white/10">
+                        <th class="px-4 py-3 font-semibold">Type</th>
+                        <th class="px-4 py-3 font-semibold">Category</th>
+                        <th class="px-4 py-3 font-semibold text-right">Tan</th>
+                        <th class="px-4 py-3 font-semibold text-right">Gaz</th>
+                        <th class="px-4 py-3 font-semibold">Name</th>
+                        <th class="px-4 py-3 font-semibold">Bill</th>
+                        <th class="px-4 py-3 font-semibold">Voice</th>
+                        <th class="px-4 py-3 font-semibold">Date</th>
+                        <th class="px-4 py-3 font-semibold">By</th>
+                        <?php if (isAdmin()): ?><th class="px-4 py-3"></th><?php endif; ?>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    <?php if (empty($logs)): ?>
+                    <tr><td colspan="<?= isAdmin()?10:9 ?>" class="text-center text-slate-500 py-14">
+                        <div class="text-4xl mb-2 opacity-40">📭</div>No movements yet.
+                    </td></tr>
+                    <?php else: foreach ($logs as $l):
+                        $isIn = $l['type'] === 'in';
+                        $c = whCategoryColor($l['category']);
+                        $hay = strtolower($l['category'].' '.($l['party_name']??'').' '.($l['bill_number']??'').' '.($l['notes']??''));
+                    ?>
+                    <tr class="hover:bg-white/5 transition" data-hay="<?= htmlspecialchars($hay) ?>">
+                        <td class="px-4 py-3">
+                            <?php if ($isIn): ?>
+                            <span class="inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg" style="background:rgba(16,185,129,.15);color:#6ee7b7;">▼ In</span>
+                            <?php else: ?>
+                            <span class="inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg" style="background:rgba(99,102,241,.15);color:#a5b4fc;">▲ Out</span>
+                            <?php endif; ?>
+                        </td>
+                        <td class="px-4 py-3">
+                            <span class="inline-flex items-center gap-2 font-pashto font-semibold" dir="rtl">
+                                <span class="w-2 h-2 rounded-full" style="background:<?= $c ?>;"></span><?= htmlspecialchars($l['category']) ?>
+                            </span>
+                        </td>
+                        <td class="px-4 py-3 text-right font-bold <?= $isIn?'text-emerald-300':'text-indigo-300' ?>"><?= $l['tan']>0 ? ($isIn?'+':'−').whNum($l['tan']) : '<span class="text-slate-600">—</span>' ?></td>
+                        <td class="px-4 py-3 text-right font-bold <?= $isIn?'text-emerald-300':'text-indigo-300' ?>"><?= $l['gaz']>0 ? ($isIn?'+':'−').whNum($l['gaz']) : '<span class="text-slate-600">—</span>' ?></td>
+                        <td class="px-4 py-3 text-slate-300"><?= $l['party_name'] ? htmlspecialchars($l['party_name']) : '<span class="text-slate-600">—</span>' ?></td>
+                        <td class="px-4 py-3">
+                            <?php if (!empty($l['bill_image'])): ?>
+                            <a href="/uploads/warehouse-bills/<?= rawurlencode($l['bill_image']) ?>" target="_blank" class="inline-block">
+                                <img src="/uploads/warehouse-bills/<?= rawurlencode($l['bill_image']) ?>" class="w-9 h-9 rounded-lg object-cover ring-1 ring-white/20 hover:ring-indigo-400 transition" alt="bill">
+                            </a>
+                            <?php elseif (!empty($l['bill_number'])): ?>
+                            <span class="text-xs text-slate-400">#<?= htmlspecialchars($l['bill_number']) ?></span>
+                            <?php else: ?><span class="text-slate-600">—</span><?php endif; ?>
+                            <?php if (!empty($l['bill_image']) && !empty($l['bill_number'])): ?><div class="text-[10px] text-slate-500 mt-0.5">#<?= htmlspecialchars($l['bill_number']) ?></div><?php endif; ?>
+                        </td>
+                        <td class="px-4 py-3">
+                            <?php if (!empty($l['voice_note'])): ?>
+                            <audio controls preload="none" class="h-8" style="width:150px;"><source src="/uploads/warehouse-voice/<?= rawurlencode($l['voice_note']) ?>"></audio>
+                            <?php else: ?><span class="text-slate-600">—</span><?php endif; ?>
+                        </td>
+                        <td class="px-4 py-3 text-slate-400 whitespace-nowrap text-xs">
+                            <div class="font-pashto"><?= whShamsiText($l['entry_date'] ?: $l['created_at']) ?></div>
+                            <div class="text-slate-600"><?= date('d M Y', strtotime($l['entry_date'] ?: $l['created_at'])) ?></div>
+                        </td>
+                        <td class="px-4 py-3 text-slate-400 text-xs whitespace-nowrap"><?= htmlspecialchars($l['by_name'] ?? '—') ?></td>
+                        <?php if (isAdmin()): ?>
+                        <td class="px-4 py-3 text-right">
+                            <a href="delete.php?id=<?= $l['id'] ?>" onclick="return confirm('Delete this entry?')" class="text-slate-500 hover:text-red-400 transition" title="Delete">
+                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.34 9m-4.8 0L9.26 9M18.9 6l-.84 12.2a2 2 0 0 1-2 1.8H7.94a2 2 0 0 1-2-1.8L5.1 6m2.9 0V3.5a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1V6M3.75 6h16.5"/></svg>
+                            </a>
+                        </td>
+                        <?php endif; ?>
+                    </tr>
+                    <?php endforeach; endif; ?>
+                    <tr id="noResults" class="hidden"><td colspan="<?= isAdmin()?10:9 ?>" class="text-center text-slate-500 py-8 text-sm">No rows match your search.</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <?php if ($totalPages > 1): ?>
+        <div class="flex items-center justify-between gap-2 p-4 border-t border-white/10 text-xs text-slate-400">
+            <span><?= $totalRows ?> records · showing <?= $offset+1 ?>–<?= min($offset+$perPage,$totalRows) ?></span>
+            <div class="flex items-center gap-1">
+                <?php $qs = $filterType ? "type=$filterType&" : ''; ?>
+                <a href="?<?= $qs ?>page=<?= max(1,$page-1) ?>" class="px-3 py-1.5 rounded-lg glass-lite hover:bg-white/10 <?= $page<=1?'pointer-events-none opacity-40':'' ?>">‹</a>
+                <span class="px-3 py-1.5">Page <?= $page ?> / <?= $totalPages ?></span>
+                <a href="?<?= $qs ?>page=<?= min($totalPages,$page+1) ?>" class="px-3 py-1.5 rounded-lg glass-lite hover:bg-white/10 <?= $page>=$totalPages?'pointer-events-none opacity-40':'' ?>">›</a>
             </div>
+        </div>
+        <?php endif; ?>
+    </section>
 
-            <div id="formError" class="alert alert-danger d-none mt-3 mb-0 py-2 small"></div>
+    <footer class="text-center text-xs text-slate-600 mt-8 pb-4">
+        Cloths Warehouse · direct-link module · <span class="font-pashto">کالا ګدام</span>
+    </footer>
+</div>
+
+<!-- ══════════════ MODAL (Collect / Distribute) ══════════════ -->
+<div id="modal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="closeModal()"></div>
+    <div class="relative min-h-full flex items-start sm:items-center justify-center p-4">
+        <div class="glass rounded-3xl w-full max-w-lg max-h-[92vh] overflow-y-auto modal-scroll animate-pop shadow-2xl">
+            <form id="whForm" class="p-6">
+                <input type="hidden" name="_form_token" value="<?= htmlspecialchars($csrf) ?>">
+                <input type="hidden" name="action" id="f_action" value="collect">
+                <input type="hidden" name="entry_date" id="f_entry_date" value="<?= date('Y-m-d') ?>">
+
+                <div class="flex items-center justify-between mb-5">
+                    <h3 id="modalTitle" class="text-lg font-bold flex items-center gap-2"></h3>
+                    <button type="button" onclick="closeModal()" class="w-8 h-8 grid place-items-center rounded-lg hover:bg-white/10 transition">
+                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+
+                <!-- Category -->
+                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Category · کټګورۍ</label>
+                <select id="f_category_select" onchange="onCategoryChange()" class="w-full glass-lite rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-indigo-400/50 font-pashto" dir="rtl">
+                    <?php foreach ($knownCategories as $c): ?>
+                    <option value="<?= htmlspecialchars($c) ?>"><?= htmlspecialchars($c) ?></option>
+                    <?php endforeach; ?>
+                    <option value="__custom__" dir="ltr">＋ Custom / نوی…</option>
+                </select>
+                <input type="text" name="category" id="f_category" class="hidden w-full glass-lite rounded-xl px-3 py-2.5 mt-2 outline-none focus:ring-2 focus:ring-indigo-400/50 font-pashto" dir="rtl" placeholder="Type category name…">
+
+                <!-- Availability hint (distribute) -->
+                <div id="availHint" class="hidden mt-2 text-xs rounded-lg px-3 py-2" style="background:rgba(99,102,241,.12);color:#c7d2fe;"></div>
+
+                <!-- Tan / Gaz -->
+                <div class="grid grid-cols-2 gap-3 mt-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Tan · تھان</label>
+                        <input type="number" name="tan" id="f_tan" min="0" step="any" value="0" oninput="checkAvail()"
+                               class="w-full glass-lite rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-indigo-400/50 font-semibold text-lg">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Gaz · ګز</label>
+                        <input type="number" name="gaz" id="f_gaz" min="0" step="any" value="0" oninput="checkAvail()"
+                               class="w-full glass-lite rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-indigo-400/50 font-semibold text-lg">
+                    </div>
+                </div>
+
+                <!-- Name -->
+                <div class="mt-4">
+                    <label id="nameLabel" class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Name</label>
+                    <input type="text" name="party_name" id="f_party_name" class="w-full glass-lite rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-indigo-400/50" placeholder="Name…">
+                </div>
+
+                <!-- Date (Shamsi) -->
+                <div class="mt-4">
+                    <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Date · نیټه <span class="text-emerald-400 normal-case">(Shamsi)</span></label>
+                    <div class="flex items-center gap-2">
+                        <input type="number" id="d_y" value="<?= $todayShamsi['y'] ?>" min="1300" max="1600" oninput="syncDate()" class="glass-lite rounded-xl px-2 py-2.5 w-20 text-center outline-none focus:ring-2 focus:ring-indigo-400/50 font-semibold">
+                        <span class="text-slate-500">/</span>
+                        <select id="d_m" onchange="syncDate()" class="glass-lite rounded-xl px-2 py-2.5 flex-1 outline-none focus:ring-2 focus:ring-indigo-400/50 font-pashto">
+                            <?php foreach ($jMonths as $i => $nm): ?><option value="<?= $i+1 ?>" <?= $todayShamsi['m']===$i+1?'selected':'' ?>><?= $nm ?></option><?php endforeach; ?>
+                        </select>
+                        <span class="text-slate-500">/</span>
+                        <input type="number" id="d_d" value="<?= $todayShamsi['d'] ?>" min="1" max="31" oninput="syncDate()" class="glass-lite rounded-xl px-2 py-2.5 w-16 text-center outline-none focus:ring-2 focus:ring-indigo-400/50 font-semibold">
+                    </div>
+                    <div id="gregHint" class="text-[11px] text-slate-500 mt-1"></div>
+                </div>
+
+                <!-- Bill number -->
+                <div class="mt-4">
+                    <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Bill Number · بل نمبر</label>
+                    <input type="text" name="bill_number" id="f_bill_number" class="w-full glass-lite rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-indigo-400/50" placeholder="e.g. 1042">
+                </div>
+
+                <!-- Bill image -->
+                <div class="mt-4">
+                    <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Bill Image · د بل انځور</label>
+                    <label class="flex items-center gap-3 glass-lite rounded-xl px-3 py-3 cursor-pointer hover:bg-white/10 transition">
+                        <span class="w-10 h-10 rounded-lg grid place-items-center shrink-0" style="background:rgba(236,72,153,.15);color:#f9a8d4;">
+                            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="m2.25 15.75 5.16-5.16a2.25 2.25 0 0 1 3.18 0l5.16 5.16m-1.5-1.5 1.16-1.16a2.25 2.25 0 0 1 3.18 0l2.16 2.16M2.25 18V6a2.25 2.25 0 0 1 2.25-2.25h15A2.25 2.25 0 0 1 21.75 6v12a2.25 2.25 0 0 1-2.25 2.25h-15A2.25 2.25 0 0 1 2.25 18Z"/></svg>
+                        </span>
+                        <span class="text-sm text-slate-400" id="billText">Tap to choose or take a photo</span>
+                        <input type="file" name="bill_image" id="f_bill_image" accept="image/*" class="hidden" onchange="previewBill(this)">
+                    </label>
+                    <img id="billPreview" class="hidden mt-2 rounded-xl max-h-40 ring-1 ring-white/15" alt="preview">
+                </div>
+
+                <!-- Voice note -->
+                <div class="mt-4">
+                    <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Voice Note · غږیز یادښت</label>
+                    <div class="glass-lite rounded-xl p-3">
+                        <div class="flex items-center gap-3">
+                            <button type="button" id="recBtn" onclick="toggleRec()" class="w-11 h-11 rounded-full grid place-items-center text-white shrink-0 transition" style="background:linear-gradient(135deg,#EF4444,#dc2626);">
+                                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Z"/><path d="M19 11a1 1 0 1 0-2 0 5 5 0 0 1-10 0 1 1 0 1 0-2 0 7 7 0 0 0 6 6.92V21a1 1 0 1 0 2 0v-3.08A7 7 0 0 0 19 11Z"/></svg>
+                            </button>
+                            <div class="flex-1">
+                                <div id="recStatus" class="text-sm text-slate-300">Tap to record</div>
+                                <div id="recTimer" class="text-xs text-slate-500 font-mono hidden">0:00</div>
+                            </div>
+                            <button type="button" id="recClear" onclick="clearRec()" class="hidden text-slate-500 hover:text-red-400 transition text-sm">Clear</button>
+                        </div>
+                        <audio id="recPlayback" controls class="hidden w-full mt-2 h-9"></audio>
+                        <div class="text-[11px] text-slate-600 mt-2">Or upload an audio file:
+                            <input type="file" id="f_voice_file" accept="audio/*" class="text-[11px] mt-1" onchange="onVoiceFile(this)"></div>
+                    </div>
+                </div>
+
+                <!-- Notes -->
+                <div class="mt-4">
+                    <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Notes</label>
+                    <textarea name="notes" id="f_notes" rows="2" class="w-full glass-lite rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-indigo-400/50 resize-none" placeholder="Optional remarks…"></textarea>
+                </div>
+
+                <div id="formError" class="hidden mt-4 text-sm rounded-xl px-3 py-2.5" style="background:rgba(239,68,68,.15);color:#fca5a5;"></div>
+
+                <button type="submit" id="submitBtn" class="w-full mt-6 rounded-xl py-3 font-bold text-white shadow-lg transition hover:brightness-110">
+                    Save
+                </button>
+            </form>
         </div>
-        <div class="modal-footer">
-            <button type="button" class="btn btn-light" data-bs-dismiss="modal"><?= __('btn_cancel') ?? 'Cancel' ?></button>
-            <button type="submit" class="btn text-white fw-semibold" id="whSubmit"><i class="bi bi-check-circle me-1"></i>Save</button>
-        </div>
-      </form>
     </div>
-  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] hidden">
+    <div id="toastInner" class="glass rounded-xl px-5 py-3 text-sm font-semibold shadow-2xl flex items-center gap-2"></div>
 </div>
 
 <script>
 // ── Data from PHP ──
 const AVAIL = <?= json_encode($availMap, JSON_UNESCAPED_UNICODE) ?>;
+
+// ── Charts ──
 const chartLabels = <?= json_encode($chartLabels, JSON_UNESCAPED_UNICODE) ?>;
 const chartTan    = <?= json_encode($chartTan) ?>;
 const chartGaz    = <?= json_encode($chartGaz) ?>;
 const chartColors = <?= json_encode($chartColors) ?>;
+Chart.defaults.color = '#94a3b8';
+Chart.defaults.font.family = 'Inter, Vazirmatn, sans-serif';
 
-let whMode = 'collect';
-function whModalEl(){ return document.getElementById('whModal'); }
-
-function openWhModal(mode, presetCat) {
-    whMode = mode;
-    const isDist = mode === 'distribute';
-    document.getElementById('whModalTitle').innerHTML = isDist
-        ? '<i class="bi bi-box-arrow-up" style="color:#4f46e5;"></i> Distribute from Warehouse'
-        : '<i class="bi bi-plus-square text-success"></i> Collect into Warehouse';
-    const btn = document.getElementById('whSubmit');
-    btn.style.background = isDist ? '#6366F1' : '#10B981';
-    btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>' + (isDist ? 'Distribute' : 'Collect');
-    document.getElementById('nameLabel').innerHTML = isDist
-        ? 'Recipient Name · <span class="font-pashto">نوم</span> <span class="text-danger">*</span>'
-        : 'From / Supplier · <span class="font-pashto">نوم</span> <span class="text-muted small">(optional)</span>';
-    document.getElementById('f_party_name').placeholder = isDist ? 'Who is it going to?' : 'Where did it come from?';
-
-    if (presetCat) {
-        const sel = document.getElementById('f_category_select');
-        if ([...sel.options].some(o => o.value === presetCat)) sel.value = presetCat;
-    }
-    onCatChange();
-    checkAvail();
-    document.getElementById('formError').classList.add('d-none');
-    bootstrap.Modal.getOrCreateInstance(whModalEl()).show();
+if (chartLabels.length) {
+    new Chart(document.getElementById('barChart'), {
+        type: 'bar',
+        data: { labels: chartLabels, datasets: [
+            { label: 'Tan', data: chartTan, backgroundColor: chartColors.map(c=>c+'cc'), borderRadius: 8, borderSkipped: false },
+            { label: 'Gaz', data: chartGaz, backgroundColor: chartColors.map(c=>c+'55'), borderRadius: 8, borderSkipped: false },
+        ]},
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, boxHeight: 12, usePointStyle: true } } },
+            scales: {
+                x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+                y: { grid: { color: 'rgba(255,255,255,.06)' }, beginAtZero: true },
+            },
+        },
+    });
+    new Chart(document.getElementById('doughnutChart'), {
+        type: 'doughnut',
+        data: { labels: chartLabels, datasets: [{ data: chartGaz, backgroundColor: chartColors, borderColor: 'rgba(0,0,0,.2)', borderWidth: 2 }] },
+        options: { responsive: true, maintainAspectRatio: false, cutout: '62%',
+            plugins: { legend: { display: false } } },
+    });
+} else {
+    document.getElementById('barChart').parentElement.innerHTML = '<div class="h-full grid place-items-center text-slate-600 text-sm">No stock to chart yet</div>';
+    document.getElementById('doughnutChart').parentElement.innerHTML = '<div class="text-slate-600 text-sm">—</div>';
 }
 
-function currentCategory() {
-    const sel = document.getElementById('f_category_select');
-    return sel.value === '__custom__' ? document.getElementById('f_category').value.trim() : sel.value;
+// ── Search filter ──
+function filterRows() {
+    const q = document.getElementById('search').value.trim().toLowerCase();
+    let vis = 0;
+    document.querySelectorAll('#txTable tbody tr[data-hay]').forEach(r => {
+        const show = !q || r.dataset.hay.includes(q);
+        r.classList.toggle('hidden', !show);
+        if (show) vis++;
+    });
+    document.getElementById('noResults').classList.toggle('hidden', !(q && vis === 0));
 }
-function onCatChange() {
-    const sel = document.getElementById('f_category_select');
-    const custom = document.getElementById('f_category');
-    if (sel.value === '__custom__') { custom.classList.remove('d-none'); custom.focus(); }
-    else { custom.classList.add('d-none'); custom.value = sel.value; }
-    checkAvail();
-}
-function checkAvail() {
-    const hint = document.getElementById('availHint');
-    if (whMode !== 'distribute') { hint.classList.add('d-none'); return; }
-    const a = AVAIL[currentCategory()];
-    if (!a) { hint.classList.add('d-none'); return; }
-    const tan = +document.getElementById('f_tan').value||0, gaz = +document.getElementById('f_gaz').value||0;
-    const over = tan > a.tan + 1e-9 || gaz > a.gaz + 1e-9;
-    hint.classList.remove('d-none');
-    hint.style.background = over ? 'rgba(196,43,28,.09)' : 'rgba(99,102,241,.08)';
-    hint.style.color = over ? '#C42B1C' : '#4f46e5';
-    hint.innerHTML = (over ? '<i class="bi bi-exclamation-triangle me-1"></i>Not enough in stock. ' : '<i class="bi bi-box-seam me-1"></i>')
-        + 'Available: <b>' + fmt(a.tan) + '</b> Tan · <b>' + fmt(a.gaz) + '</b> Gaz';
-}
-function fmt(n){ return (Math.round(n*100)/100).toLocaleString('en-US'); }
 
 // ── Shamsi → Gregorian ──
 function shamsiToGregorian(jy, jm, jd) {
@@ -526,26 +561,91 @@ function syncDate() {
     document.getElementById('gregHint').textContent = '≡ ' + iso + ' (Gregorian)';
 }
 
+// ── Modal ──
+let mode = 'collect';
+function openModal(m, presetCat) {
+    mode = m;
+    document.getElementById('f_action').value = m;
+    const isDist = m === 'distribute';
+    document.getElementById('modalTitle').innerHTML = isDist
+        ? '<span style="color:#a5b4fc;">📤</span> Distribute from Warehouse'
+        : '<span style="color:#6ee7b7;">🧵</span> Collect into Warehouse';
+    const btn = document.getElementById('submitBtn');
+    btn.textContent = isDist ? 'Distribute' : 'Collect';
+    btn.style.background = isDist ? 'linear-gradient(135deg,#6366F1,#4f46e5)' : 'linear-gradient(135deg,#10B981,#059669)';
+    document.getElementById('nameLabel').innerHTML = isDist
+        ? 'Recipient Name · نوم <span class="text-red-400 normal-case">*</span>'
+        : 'From / Supplier · نوم <span class="text-slate-500 normal-case">(optional)</span>';
+    document.getElementById('f_party_name').placeholder = isDist ? 'Who is it going to?' : 'Where did it come from?';
+
+    if (presetCat) {
+        const sel = document.getElementById('f_category_select');
+        [...sel.options].some(o => o.value === presetCat) ? (sel.value = presetCat) : null;
+        onCategoryChange();
+    }
+    onCategoryChange();
+    checkAvail();
+    document.getElementById('formError').classList.add('hidden');
+    document.getElementById('modal').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+}
+function closeModal() {
+    document.getElementById('modal').classList.add('hidden');
+    document.body.style.overflow = '';
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+function currentCategory() {
+    const sel = document.getElementById('f_category_select');
+    return sel.value === '__custom__' ? document.getElementById('f_category').value.trim() : sel.value;
+}
+function onCategoryChange() {
+    const sel = document.getElementById('f_category_select');
+    const custom = document.getElementById('f_category');
+    if (sel.value === '__custom__') { custom.classList.remove('hidden'); custom.focus(); }
+    else { custom.classList.add('hidden'); custom.value = sel.value; }
+    checkAvail();
+}
+function checkAvail() {
+    const hint = document.getElementById('availHint');
+    if (mode !== 'distribute') { hint.classList.add('hidden'); return; }
+    const cat = currentCategory();
+    const a = AVAIL[cat];
+    if (!a) { hint.classList.add('hidden'); return; }
+    const tan = +document.getElementById('f_tan').value||0, gaz = +document.getElementById('f_gaz').value||0;
+    const over = tan > a.tan + 1e-9 || gaz > a.gaz + 1e-9;
+    hint.classList.remove('hidden');
+    hint.style.background = over ? 'rgba(239,68,68,.15)' : 'rgba(99,102,241,.12)';
+    hint.style.color = over ? '#fca5a5' : '#c7d2fe';
+    hint.innerHTML = (over ? '⚠ Not enough in stock. ' : '📦 ') + 'Available: <b>' + fmt(a.tan) + '</b> Tan · <b>' + fmt(a.gaz) + '</b> Gaz';
+}
+function fmt(n){ return (Math.round(n*100)/100).toLocaleString('en-US'); }
+
 // ── Bill preview ──
 function previewBill(input) {
     const f = input.files[0];
+    document.getElementById('billText').textContent = f ? f.name : 'Tap to choose or take a photo';
     const img = document.getElementById('billPreview');
-    if (f) { img.src = URL.createObjectURL(f); img.classList.remove('d-none'); }
-    else img.classList.add('d-none');
+    if (f) { img.src = URL.createObjectURL(f); img.classList.remove('hidden'); }
+    else img.classList.add('hidden');
 }
 
 // ── Voice recording ──
 let mediaRecorder, chunks = [], recBlob = null, recTimerInt, recSeconds = 0;
 function onVoiceFile(input) {
-    const f = input.files[0]; if (!f) return;
+    const f = input.files[0];
+    if (!f) return;
     recBlob = f;
     const pb = document.getElementById('recPlayback');
-    pb.src = URL.createObjectURL(f); pb.classList.remove('d-none');
+    pb.src = URL.createObjectURL(f); pb.classList.remove('hidden');
     document.getElementById('recStatus').textContent = 'Audio file selected';
-    document.getElementById('recClear').classList.remove('d-none');
+    document.getElementById('recClear').classList.remove('hidden');
 }
 async function toggleRec() {
-    if (mediaRecorder && mediaRecorder.state === 'recording') { mediaRecorder.stop(); return; }
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+        return;
+    }
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         mediaRecorder = new MediaRecorder(stream);
@@ -554,49 +654,59 @@ async function toggleRec() {
         mediaRecorder.onstop = () => {
             recBlob = new Blob(chunks, { type: mediaRecorder.mimeType || 'audio/webm' });
             const pb = document.getElementById('recPlayback');
-            pb.src = URL.createObjectURL(recBlob); pb.classList.remove('d-none');
+            pb.src = URL.createObjectURL(recBlob); pb.classList.remove('hidden');
             stream.getTracks().forEach(t => t.stop());
             clearInterval(recTimerInt);
             document.getElementById('recStatus').textContent = 'Recording ready';
-            document.getElementById('recClear').classList.remove('d-none');
-            recUI(false);
+            document.getElementById('recClear').classList.remove('hidden');
+            setRecUI(false);
             document.getElementById('f_voice_file').value = '';
         };
         mediaRecorder.start();
         recSeconds = 0;
-        const t = document.getElementById('recTimer'); t.classList.remove('d-none'); t.textContent = '0:00';
-        recTimerInt = setInterval(() => { recSeconds++; t.textContent = Math.floor(recSeconds/60)+':'+String(recSeconds%60).padStart(2,'0'); }, 1000);
+        document.getElementById('recTimer').classList.remove('hidden');
+        document.getElementById('recTimer').textContent = '0:00';
+        recTimerInt = setInterval(() => {
+            recSeconds++;
+            document.getElementById('recTimer').textContent = Math.floor(recSeconds/60)+':'+String(recSeconds%60).padStart(2,'0');
+        }, 1000);
         document.getElementById('recStatus').textContent = 'Recording… tap to stop';
-        recUI(true);
-    } catch (err) { alert('Microphone not available.'); }
+        setRecUI(true);
+    } catch (err) {
+        toast('Microphone not available', false);
+    }
 }
-function recUI(on) {
-    const b = document.getElementById('recBtn');
-    b.style.background = on ? '#6b7280' : '#EF4444';
-    b.innerHTML = on ? '<i class="bi bi-stop-fill"></i>' : '<i class="bi bi-mic-fill"></i>';
+function setRecUI(recording) {
+    const btn = document.getElementById('recBtn');
+    btn.style.background = recording ? 'linear-gradient(135deg,#64748b,#475569)' : 'linear-gradient(135deg,#EF4444,#dc2626)';
+    btn.classList.toggle('animate-pulse', recording);
 }
 function clearRec() {
     recBlob = null;
-    const pb = document.getElementById('recPlayback'); pb.src=''; pb.classList.add('d-none');
+    const pb = document.getElementById('recPlayback');
+    pb.src = ''; pb.classList.add('hidden');
     document.getElementById('recStatus').textContent = 'Tap to record';
-    document.getElementById('recTimer').classList.add('d-none');
-    document.getElementById('recClear').classList.add('d-none');
+    document.getElementById('recTimer').classList.add('hidden');
+    document.getElementById('recClear').classList.add('hidden');
     document.getElementById('f_voice_file').value = '';
 }
 
-// ── Submit via fetch (multipart) ──
+// ── Submit via fetch ──
 document.getElementById('whForm').addEventListener('submit', async function (e) {
     e.preventDefault();
-    const err = document.getElementById('formError'); err.classList.add('d-none');
+    const err = document.getElementById('formError');
+    err.classList.add('hidden');
+
     const cat = currentCategory();
     const tan = +document.getElementById('f_tan').value||0, gaz = +document.getElementById('f_gaz').value||0;
     if (!cat) return showErr('Please choose or type a category.');
     if (tan <= 0 && gaz <= 0) return showErr('Enter a Tan and/or Gaz amount.');
-    if (whMode === 'distribute' && !document.getElementById('f_party_name').value.trim())
+    if (mode === 'distribute' && !document.getElementById('f_party_name').value.trim())
         return showErr('Recipient name is required for distribution.');
 
     const fd = new FormData();
-    fd.append('action', whMode);
+    fd.append('_form_token', this._form_token.value);
+    fd.append('action', mode);
     fd.append('category', cat);
     fd.append('tan', tan);
     fd.append('gaz', gaz);
@@ -608,61 +718,39 @@ document.getElementById('whForm').addEventListener('submit', async function (e) 
     if (billFile) fd.append('bill_image', billFile);
     if (recBlob) fd.append('voice_note', recBlob, 'voice.webm');
 
-    const btn = document.getElementById('whSubmit'); const html = btn.innerHTML;
-    btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Saving…';
+    const btn = document.getElementById('submitBtn');
+    const label = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Saving…'; btn.style.opacity = .7;
     try {
         const res = await fetch('process.php', { method: 'POST', body: fd });
         const data = await res.json();
         if (!res.ok || !data.success) throw new Error(data.error || 'Save failed.');
-        location.reload();
+        toast(data.message || 'Saved', true);
+        setTimeout(() => location.reload(), 700);
     } catch (ex) {
         showErr(ex.message);
-        btn.disabled = false; btn.innerHTML = html;
+        btn.disabled = false; btn.textContent = label; btn.style.opacity = 1;
     }
 });
 function showErr(msg) {
     const err = document.getElementById('formError');
-    err.textContent = msg; err.classList.remove('d-none');
+    err.textContent = msg; err.classList.remove('hidden');
+    err.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
-// ── Search ──
-function filterWh() {
-    const q = document.getElementById('whSearch').value.trim().toLowerCase();
-    let vis = 0;
-    document.querySelectorAll('#whTable tbody tr[data-search]').forEach(r => {
-        const show = !q || r.dataset.search.includes(q);
-        r.style.display = show ? '' : 'none'; if (show) vis++;
-    });
-    document.getElementById('whNoResults').style.display = (q && vis===0) ? '' : 'none';
+// ── Toast ──
+function toast(msg, ok) {
+    const t = document.getElementById('toast'), inner = document.getElementById('toastInner');
+    inner.innerHTML = (ok ? '✅ ' : '⚠️ ') + msg;
+    inner.style.color = ok ? '#6ee7b7' : '#fca5a5';
+    t.classList.remove('hidden');
+    setTimeout(() => t.classList.add('hidden'), 3000);
 }
 
-// ── Charts (after DOM + Chart.js parsed) ──
-window.addEventListener('DOMContentLoaded', function () {
-    syncDate();
-    if (typeof Chart === 'undefined' || !chartLabels.length) {
-        document.getElementById('barChart').closest('.card-body').innerHTML = '<div class="text-center text-muted py-5"><i class="bi bi-bar-chart fs-3 d-block mb-2 opacity-25"></i>No stock to chart yet</div>';
-        document.getElementById('doughnutChart').closest('.card-body').innerHTML = '<div class="text-center text-muted py-5">—</div>';
-        return;
-    }
-    Chart.defaults.color = '#605E5C';
-    Chart.defaults.font.family = 'inherit';
-    new Chart(document.getElementById('barChart'), {
-        type: 'bar',
-        data: { labels: chartLabels, datasets: [
-            { label:'Tan', data: chartTan, backgroundColor: chartColors.map(c=>c+'dd'), borderRadius:8, borderSkipped:false },
-            { label:'Gaz', data: chartGaz, backgroundColor: chartColors.map(c=>c+'55'), borderRadius:8, borderSkipped:false },
-        ]},
-        options: { responsive:true, maintainAspectRatio:false,
-            plugins:{ legend:{ position:'bottom', labels:{ usePointStyle:true, boxWidth:10 } } },
-            scales:{ x:{ grid:{ display:false } }, y:{ beginAtZero:true, grid:{ color:'rgba(0,0,0,.05)' } } } },
-    });
-    new Chart(document.getElementById('doughnutChart'), {
-        type: 'doughnut',
-        data: { labels: chartLabels, datasets:[{ data: chartGaz, backgroundColor: chartColors, borderColor:'#fff', borderWidth:2 }] },
-        options: { responsive:true, maintainAspectRatio:false, cutout:'60%',
-            plugins:{ legend:{ position:'bottom', labels:{ usePointStyle:true, boxWidth:10, font:{ size:10 } } } } },
-    });
-});
+// ── Init ──
+syncDate();
+<?php if ($flashSuccess): ?>toast(<?= json_encode($flashSuccess) ?>, true);<?php endif; ?>
+<?php if ($flashError): ?>toast(<?= json_encode($flashError) ?>, false);<?php endif; ?>
 </script>
-
-<?php require_once '../includes/footer.php'; ?>
+</body>
+</html>
