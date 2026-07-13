@@ -11,7 +11,8 @@
       "Bash(php -l includes/telegram.php)",
       "Bash(php -l auth/login.php)",
       "Bash(php -l telegram/setup.php)",
-      "PowerShell($php = \\(Get-Command php -ErrorAction SilentlyContinue\\); if \\($php\\) { & $php.Source -l includes/telegram.php; & $php.Source -l auth/login.php; & $php.Source -l telegram/setup.php } elseif \\(Test-Path 'C:\\\\xampp\\\\php\\\\php.exe'\\) { & 'C:\\\\xampp\\\\php\\\\php.exe' -l includes/telegram.php; & 'C:\\\\xampp\\\\php\\\\php.exe' -l auth/login.php; & 'C:\\\\xampp\\\\php\\\\php.exe' -l telegram/setup.php } else { 'php not found' })"
+      "PowerShell($php = \\(Get-Command php -ErrorAction SilentlyContinue\\); if \\($php\\) { & $php.Source -l includes/telegram.php; & $php.Source -l auth/login.php; & $php.Source -l telegram/setup.php } elseif \\(Test-Path 'C:\\\\xampp\\\\php\\\\php.exe'\\) { & 'C:\\\\xampp\\\\php\\\\php.exe' -l includes/telegram.php; & 'C:\\\\xampp\\\\php\\\\php.exe' -l auth/login.php; & 'C:\\\\xampp\\\\php\\\\php.exe' -l telegram/setup.php } else { 'php not found' })",
+      "Bash(grep -iE 'shamsi|todayShamsi|\\\\$sh')"
     ]
   }
 }

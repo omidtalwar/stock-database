@@ -247,17 +247,17 @@ tailwind.config = {
     <section class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <div class="glass rounded-2xl p-5 animate-slideup" style="animation-delay:.05s;">
             <div class="flex items-center justify-between">
-                <span class="text-xs uppercase tracking-wider text-slate-400 font-semibold">In Stock · Tan</span>
+                <span class="text-xs uppercase tracking-wider text-slate-400 font-semibold">In Stock · تان</span>
                 <span class="w-9 h-9 rounded-xl grid place-items-center" style="background:rgba(99,102,241,.18);color:#a5b4fc;">🧵</span>
             </div>
-            <div class="mt-3 text-3xl font-extrabold tracking-tight"><?= whNum($totalTan) ?><span class="text-base font-semibold text-slate-400 ml-1">Tan</span></div>
+            <div class="mt-3 text-3xl font-extrabold tracking-tight"><?= whNum($totalTan) ?><span class="text-base font-semibold text-slate-400 ml-1 font-pashto">تان</span></div>
         </div>
         <div class="glass rounded-2xl p-5 animate-slideup" style="animation-delay:.1s;">
             <div class="flex items-center justify-between">
-                <span class="text-xs uppercase tracking-wider text-slate-400 font-semibold">In Stock · Gaz</span>
+                <span class="text-xs uppercase tracking-wider text-slate-400 font-semibold">In Stock · ګز</span>
                 <span class="w-9 h-9 rounded-xl grid place-items-center" style="background:rgba(236,72,153,.18);color:#f9a8d4;">📏</span>
             </div>
-            <div class="mt-3 text-3xl font-extrabold tracking-tight"><?= whNum($totalGaz) ?><span class="text-base font-semibold text-slate-400 ml-1">Gaz</span></div>
+            <div class="mt-3 text-3xl font-extrabold tracking-tight"><?= whNum($totalGaz) ?><span class="text-base font-semibold text-slate-400 ml-1 font-pashto">ګز</span></div>
         </div>
         <div class="glass rounded-2xl p-5 animate-slideup" style="animation-delay:.15s;">
             <div class="flex items-center justify-between">
@@ -286,7 +286,7 @@ tailwind.config = {
         </div>
         <div class="glass rounded-2xl p-5 animate-slideup" style="animation-delay:.1s;">
             <h2 class="text-sm font-semibold text-slate-300 mb-4 flex items-center gap-2">
-                <span class="w-1.5 h-4 rounded bg-pink-400"></span> Gaz Share
+                <span class="w-1.5 h-4 rounded bg-pink-400"></span> <span class="font-pashto">د ګز ونډه</span>
             </h2>
             <div class="h-64 grid place-items-center"><canvas id="doughnutChart"></canvas></div>
         </div>
@@ -311,12 +311,12 @@ tailwind.config = {
                 <div class="flex items-end gap-3">
                     <div>
                         <div class="text-2xl font-extrabold leading-none" style="color:<?= $low ? '#64748b' : $c ?>;"><?= whNum($s['tan']) ?></div>
-                        <div class="text-[10px] uppercase tracking-wider text-slate-500 mt-0.5">Tan</div>
+                        <div class="text-[10px] uppercase tracking-wider text-slate-500 mt-0.5 font-pashto">تان</div>
                     </div>
                     <div class="w-px h-8 bg-white/10"></div>
                     <div>
                         <div class="text-2xl font-extrabold leading-none" style="color:<?= $low ? '#64748b' : $c ?>;"><?= whNum($s['gaz']) ?></div>
-                        <div class="text-[10px] uppercase tracking-wider text-slate-500 mt-0.5">Gaz</div>
+                        <div class="text-[10px] uppercase tracking-wider text-slate-500 mt-0.5 font-pashto">ګز</div>
                     </div>
                 </div>
                 <button onclick='openModal("distribute", <?= json_encode($s['category'], JSON_UNESCAPED_UNICODE) ?>)'
@@ -353,8 +353,8 @@ tailwind.config = {
                     <tr class="text-left text-[11px] uppercase tracking-wider text-slate-500 border-b border-white/10">
                         <th class="px-4 py-3 font-semibold">Type</th>
                         <th class="px-4 py-3 font-semibold">Category</th>
-                        <th class="px-4 py-3 font-semibold text-right">Tan</th>
-                        <th class="px-4 py-3 font-semibold text-right">Gaz</th>
+                        <th class="px-4 py-3 font-semibold text-right font-pashto">تان</th>
+                        <th class="px-4 py-3 font-semibold text-right font-pashto">ګز</th>
                         <th class="px-4 py-3 font-semibold">Name</th>
                         <th class="px-4 py-3 font-semibold">Bill</th>
                         <th class="px-4 py-3 font-semibold">Voice</th>
@@ -475,12 +475,12 @@ tailwind.config = {
                 <!-- Tan / Gaz -->
                 <div class="grid grid-cols-2 gap-3 mt-4">
                     <div>
-                        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Tan · تھان</label>
+                        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5 font-pashto">تان</label>
                         <input type="number" name="tan" id="f_tan" min="0" step="any" value="0" oninput="checkAvail()"
                                class="w-full glass-lite rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-indigo-400/50 font-semibold text-lg">
                     </div>
                     <div>
-                        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Gaz · ګز</label>
+                        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5 font-pashto">ګز</label>
                         <input type="number" name="gaz" id="f_gaz" min="0" step="any" value="0" oninput="checkAvail()"
                                class="w-full glass-lite rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-indigo-400/50 font-semibold text-lg">
                     </div>
@@ -583,8 +583,8 @@ if (chartLabels.length) {
     new Chart(document.getElementById('barChart'), {
         type: 'bar',
         data: { labels: chartLabels, datasets: [
-            { label: 'Tan', data: chartTan, backgroundColor: chartColors.map(c=>c+'cc'), borderRadius: 8, borderSkipped: false },
-            { label: 'Gaz', data: chartGaz, backgroundColor: chartColors.map(c=>c+'55'), borderRadius: 8, borderSkipped: false },
+            { label: 'تان', data: chartTan, backgroundColor: chartColors.map(c=>c+'cc'), borderRadius: 8, borderSkipped: false },
+            { label: 'ګز', data: chartGaz, backgroundColor: chartColors.map(c=>c+'55'), borderRadius: 8, borderSkipped: false },
         ]},
         options: {
             responsive: true, maintainAspectRatio: false,
@@ -699,7 +699,7 @@ function checkAvail() {
     hint.classList.remove('hidden');
     hint.style.background = over ? 'rgba(239,68,68,.15)' : 'rgba(99,102,241,.12)';
     hint.style.color = over ? '#fca5a5' : '#c7d2fe';
-    hint.innerHTML = (over ? '⚠ Not enough in stock. ' : '📦 ') + 'Available: <b>' + fmt(a.tan) + '</b> Tan · <b>' + fmt(a.gaz) + '</b> Gaz';
+    hint.innerHTML = (over ? '⚠ Not enough in stock. ' : '📦 ') + 'Available: <b>' + fmt(a.tan) + '</b> تان · <b>' + fmt(a.gaz) + '</b> ګز';
 }
 function fmt(n){ return (Math.round(n*100)/100).toLocaleString('en-US'); }
 
@@ -782,7 +782,7 @@ document.getElementById('whForm').addEventListener('submit', async function (e) 
     const cat = currentCategory();
     const tan = +document.getElementById('f_tan').value||0, gaz = +document.getElementById('f_gaz').value||0;
     if (!cat) return showErr('Please choose or type a category.');
-    if (tan <= 0 && gaz <= 0) return showErr('Enter a Tan and/or Gaz amount.');
+    if (tan <= 0 && gaz <= 0) return showErr('Enter a تان and/or ګز amount.');
     if (mode === 'distribute' && !document.getElementById('f_party_name').value.trim())
         return showErr('Recipient name is required for distribution.');
 

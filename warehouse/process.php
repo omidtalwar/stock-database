@@ -31,8 +31,8 @@ if (mb_strlen($category) > 160)      fail('Category name is too long.');
 
 $tan = (float)($_POST['tan'] ?? 0);
 $gaz = (float)($_POST['gaz'] ?? 0);
-if ($tan < 0 || $gaz < 0)            fail('Tan and Gaz cannot be negative.');
-if ($tan <= 0 && $gaz <= 0)          fail('Enter a Tan and/or Gaz amount.');
+if ($tan < 0 || $gaz < 0)            fail('تان and ګز cannot be negative.');
+if ($tan <= 0 && $gaz <= 0)          fail('Enter a تان and/or ګز amount.');
 
 $partyName   = trim($_POST['party_name'] ?? '');
 $billNumber  = trim($_POST['bill_number'] ?? '');
@@ -46,10 +46,10 @@ if ($action === 'distribute') {
     if ($partyName === '') fail('Recipient name is required for distribution.');
     $avail = whAvailable($pdo, $category);
     if ($tan > $avail['tan'] + 1e-9) {
-        fail('Not enough Tan in stock for "' . $category . '". Available: ' . whNum($avail['tan']) . ' Tan.');
+        fail('Not enough تان in stock for "' . $category . '". Available: ' . whNum($avail['tan']) . ' تان.');
     }
     if ($gaz > $avail['gaz'] + 1e-9) {
-        fail('Not enough Gaz in stock for "' . $category . '". Available: ' . whNum($avail['gaz']) . ' Gaz.');
+        fail('Not enough ګز in stock for "' . $category . '". Available: ' . whNum($avail['gaz']) . ' ګز.');
     }
 }
 
@@ -95,7 +95,7 @@ $stmt->execute([
 $id = (int)$pdo->lastInsertId();
 
 // ── Telegram alert (best-effort) ──
-$unit = trim(($tan > 0 ? whNum($tan) . ' Tan' : '') . ($tan > 0 && $gaz > 0 ? ' + ' : '') . ($gaz > 0 ? whNum($gaz) . ' Gaz' : ''));
+$unit = trim(($tan > 0 ? whNum($tan) . ' تان' : '') . ($tan > 0 && $gaz > 0 ? ' + ' : '') . ($gaz > 0 ? whNum($gaz) . ' ګز' : ''));
 tgNotify(
     ($action === 'collect' ? "🧵 <b>Warehouse — Collected</b>" : "📤 <b>Warehouse — Distributed</b>")
     . "\nCategory: <b>" . tgEsc($category) . "</b>"
