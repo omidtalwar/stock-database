@@ -476,6 +476,7 @@ if (!empty($_SESSION['error'])) {
         <?= navItem('/stock/index.php',     'archive',     __('nav_stock'),     $currentDir === 'stock',     '#22D3EE') ?>
         <?= navItem('/accessories/index.php', 'gem',        __('nav_accessories'), $currentDir === 'accessories', '#A78BFA') ?>
         <?= navItem('/wholesale/index.php', 'boxes',       __('nav_wholesale'), $currentDir === 'wholesale', '#14B8A6') ?>
+        <?= navItem('/warehouse/index.php', 'basket3',     __('nav_warehouse'), $currentDir === 'warehouse', '#6366F1') ?>
 
         <?php if (isAdmin()): ?>
         <div class="nav-section"><?= __('nav_admin') ?></div>

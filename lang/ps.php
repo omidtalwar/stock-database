@@ -28,6 +28,7 @@ return [
     'nav_stock'         => 'حساب - کابل',
     'nav_accessories'   => 'Accessories',
     'nav_wholesale'     => 'د مال عمده پلور',
+    'nav_warehouse'     => 'د کالا ګدام',
     'nav_users'         => 'د کاربرانو مدیریت',
     'nav_reports'       => 'راپورونه',
     'nav_exchange'      => 'د بدلون نرخ',
