@@ -2,7 +2,25 @@
 require_once '../includes/session.php';
 requireLogin();
 require_once '../config/db.php';
+require_once '../includes/lang.php';
 require_once '_common.php';
+
+// Sidebar data (mirrors the app's shared navigation)
+require_once '../includes/reminders.php';
+$reminderCount = function_exists('overdueCount') ? overdueCount($pdo) : 0;
+$whIsAdmin     = isAdmin();
+$whUser        = currentUser();
+
+// One dark-themed sidebar nav link
+function whNav(string $href, string $icon, string $label, bool $active, string $clr): string {
+    $base = 'flex items-center gap-3 rounded-xl px-3 py-2.5 font-medium transition';
+    if ($active) {
+        return "<a href=\"$href\" class=\"$base text-white\" style=\"background:rgba(255,255,255,.10);box-shadow:inset 3px 0 0 $clr;\">"
+             . "<i class=\"bi bi-$icon\" style=\"color:$clr;font-size:1.05rem;\"></i><span>" . htmlspecialchars($label) . "</span></a>";
+    }
+    return "<a href=\"$href\" class=\"$base text-slate-400 hover:bg-white/5 hover:text-white\">"
+         . "<i class=\"bi bi-$icon\" style=\"color:$clr;font-size:1.05rem;\"></i><span>" . htmlspecialchars($label) . "</span></a>";
+}
 
 // ── Flash (from delete.php etc.) ──
 $flashSuccess = $_SESSION['success'] ?? '';
@@ -73,6 +91,7 @@ $csrf = generateFormToken('warehouse');
 <link rel="icon" href="/favicon.svg">
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Vazirmatn:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -133,11 +152,74 @@ tailwind.config = {
 </div>
 <div class="grid-lines"></div>
 
-<div class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+<!-- Mobile sidebar backdrop -->
+<div id="sidebarBackdrop" onclick="toggleSidebar(false)" class="fixed inset-0 bg-black/60 z-40 hidden lg:hidden"></div>
+
+<div class="flex">
+
+    <!-- ══════════ Sidebar ══════════ -->
+    <aside id="sidebar" class="fixed lg:sticky top-0 left-0 z-50 h-screen w-64 shrink-0 flex flex-col glass border-r border-white/10 -translate-x-full lg:translate-x-0 transition-transform duration-300">
+        <div class="p-4 flex items-center gap-3 border-b border-white/10">
+            <div class="w-10 h-10 rounded-xl grid place-items-center text-white font-extrabold text-sm shadow-lg" style="background:linear-gradient(135deg,#6366F1,#EC4899);">FZL</div>
+            <div class="min-w-0">
+                <div class="font-bold leading-none truncate">FZL System</div>
+                <div class="text-xs text-slate-400 truncate"><?= __('management_system') ?></div>
+            </div>
+            <button onclick="toggleSidebar(false)" class="ml-auto lg:hidden w-8 h-8 grid place-items-center rounded-lg hover:bg-white/10 text-slate-300">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+        <nav class="flex-1 overflow-y-auto p-3 space-y-1 text-sm">
+            <?php if ($whIsAdmin): ?>
+            <div class="px-3 pt-1 pb-2 text-[11px] uppercase tracking-wider text-slate-500 font-semibold"><?= __('nav_main') ?></div>
+            <?= whNav('/dashboard.php', 'grid-1x2', __('nav_dashboard'), false, '#818CF8') ?>
+            <?php endif; ?>
+
+            <div class="px-3 pt-3 pb-2 text-[11px] uppercase tracking-wider text-slate-500 font-semibold"><?= __('nav_business') ?></div>
+            <?= whNav('/customers/index.php', 'people', __('nav_customers'), false, '#C084FC') ?>
+            <a href="/reminders/index.php" class="flex items-center gap-3 rounded-xl px-3 py-2.5 font-medium transition text-slate-400 hover:bg-white/5 hover:text-white">
+                <i class="bi bi-bell" style="color:#F87171;font-size:1.05rem;"></i><span>Reminders</span>
+                <?php if ($reminderCount > 0): ?><span class="ml-auto text-[11px] font-bold text-white bg-red-500 rounded-full px-2 py-0.5"><?= $reminderCount ?></span><?php endif; ?>
+            </a>
+            <?= whNav('/products/index.php', 'box-seam', __('nav_products'), false, '#34D399') ?>
+            <?= whNav('/sales/index.php', 'receipt', __('nav_sales'), false, '#FB923C') ?>
+            <?= whNav('/payments/index.php', 'cash-coin', __('nav_payments'), false, '#4ADE80') ?>
+            <?= whNav('/stock/index.php', 'archive', __('nav_stock'), false, '#22D3EE') ?>
+            <?= whNav('/accessories/index.php', 'gem', __('nav_accessories'), false, '#A78BFA') ?>
+            <?= whNav('/wholesale/index.php', 'boxes', __('nav_wholesale'), false, '#14B8A6') ?>
+            <?= whNav('/warehouse/index.php', 'basket3', __('nav_warehouse'), true, '#6366F1') ?>
+
+            <?php if ($whIsAdmin): ?>
+            <div class="px-3 pt-3 pb-2 text-[11px] uppercase tracking-wider text-slate-500 font-semibold"><?= __('nav_admin') ?></div>
+            <?= whNav('/admin/users.php', 'person-gear', __('nav_users'), false, '#F87171') ?>
+            <?= whNav('/admin/reports.php', 'bar-chart', __('nav_reports'), false, '#60A5FA') ?>
+            <?= whNav('/admin/settings.php', 'currency-exchange', __('nav_exchange'), false, '#FBBF24') ?>
+            <?php endif; ?>
+        </nav>
+        <div class="p-3 border-t border-white/10 flex items-center gap-3">
+            <div class="w-9 h-9 rounded-full grid place-items-center text-white font-bold shrink-0" style="background:linear-gradient(135deg,#6366F1,#4f46e5);">
+                <?= strtoupper(substr($whUser['full_name'] ?: 'U', 0, 1)) ?>
+            </div>
+            <div class="min-w-0 flex-1">
+                <div class="text-sm font-semibold truncate"><?= htmlspecialchars($whUser['full_name']) ?></div>
+                <div class="text-xs text-slate-400 truncate"><?= ucfirst($whUser['role']) ?></div>
+            </div>
+            <a href="/auth/logout.php" title="<?= __('sign_out') ?>" class="w-8 h-8 grid place-items-center rounded-lg hover:bg-red-500/20 text-slate-400 hover:text-red-300 transition">
+                <i class="bi bi-box-arrow-right"></i>
+            </a>
+        </div>
+    </aside>
+
+    <!-- ══════════ Main ══════════ -->
+    <div class="flex-1 min-w-0">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
 
     <!-- Header -->
     <header class="flex flex-wrap items-center justify-between gap-4 mb-8 animate-slideup">
         <div class="flex items-center gap-3">
+            <button onclick="toggleSidebar(true)" class="lg:hidden w-11 h-11 rounded-xl grid place-items-center glass-lite hover:bg-white/10 transition shrink-0">
+                <i class="bi bi-list text-xl"></i>
+            </button>
             <div class="w-12 h-12 rounded-2xl grid place-items-center shadow-lg shadow-indigo-900/40"
                  style="background:linear-gradient(135deg,#6366F1,#EC4899);">
                 <svg class="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/></svg>
@@ -148,10 +230,6 @@ tailwind.config = {
             </div>
         </div>
         <div class="flex items-center gap-2">
-            <a href="/dashboard.php" class="glass-lite hover:bg-white/10 transition text-sm font-medium rounded-xl px-4 py-2.5 flex items-center gap-2">
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5"/></svg>
-                Dashboard
-            </a>
             <button onclick="openModal('collect')" class="rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-900/30 transition hover:brightness-110 flex items-center gap-2" style="background:linear-gradient(135deg,#10B981,#059669);">
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
                 Collect
@@ -356,9 +434,11 @@ tailwind.config = {
     </section>
 
     <footer class="text-center text-xs text-slate-600 mt-8 pb-4">
-        Cloths Warehouse · direct-link module · <span class="font-pashto">کالا ګدام</span>
+        Cloths Warehouse · <span class="font-pashto">کالا ګدام</span>
     </footer>
-</div>
+    </div><!-- /.max-w-7xl -->
+    </div><!-- /.flex-1 -->
+</div><!-- /.flex -->
 
 <!-- ══════════════ MODAL (Collect / Distribute) ══════════════ -->
 <div id="modal" class="fixed inset-0 z-50 hidden">
@@ -745,6 +825,14 @@ function toast(msg, ok) {
     inner.style.color = ok ? '#6ee7b7' : '#fca5a5';
     t.classList.remove('hidden');
     setTimeout(() => t.classList.add('hidden'), 3000);
+}
+
+// ── Sidebar (mobile) ──
+function toggleSidebar(open) {
+    const sb = document.getElementById('sidebar');
+    const bd = document.getElementById('sidebarBackdrop');
+    if (open) { sb.classList.remove('-translate-x-full'); bd.classList.remove('hidden'); }
+    else      { sb.classList.add('-translate-x-full');    bd.classList.add('hidden'); }
 }
 
 // ── Init ──
