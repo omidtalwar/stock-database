@@ -140,6 +140,8 @@ tailwind.config = {
     ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 8px; }
     .modal-scroll::-webkit-scrollbar { width: 6px; }
     input, select, textarea { color-scheme: dark; }
+    /* Native <select> dropdown list — keep it dark so options aren't white-on-white */
+    select option, select optgroup { background-color: #1e293b; color: #f1f5f9; }
 </style>
 </head>
 <body class="text-slate-100 min-h-screen antialiased">
