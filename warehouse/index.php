@@ -400,7 +400,7 @@ tailwind.config = {
                         <th class="px-4 py-3 font-semibold text-right font-pashto">ګز</th>
                         <th class="px-4 py-3 font-semibold">Name</th>
                         <th class="px-4 py-3 font-semibold">Bill</th>
-                        <th class="px-4 py-3 font-semibold">Voice</th>
+                        <th class="px-4 py-3 font-semibold">Note</th>
                         <th class="px-4 py-3 font-semibold">Date</th>
                         <th class="px-4 py-3 font-semibold">By</th>
                         <?php if (isAdmin()): ?><th class="px-4 py-3"></th><?php endif; ?>
@@ -442,9 +442,9 @@ tailwind.config = {
                             <?php else: ?><span class="text-slate-600">—</span><?php endif; ?>
                             <?php if (!empty($l['bill_image']) && !empty($l['bill_number'])): ?><div class="text-[10px] text-slate-500 mt-0.5">#<?= htmlspecialchars($l['bill_number']) ?></div><?php endif; ?>
                         </td>
-                        <td class="px-4 py-3">
-                            <?php if (!empty($l['voice_note'])): ?>
-                            <audio controls preload="none" class="h-8" style="width:150px;"><source src="/uploads/warehouse-voice/<?= rawurlencode($l['voice_note']) ?>"></audio>
+                        <td class="px-4 py-3 text-slate-300 max-w-[220px]">
+                            <?php if (!empty($l['notes'])): ?>
+                            <span class="text-xs" title="<?= htmlspecialchars($l['notes']) ?>"><?= nl2br(htmlspecialchars($l['notes'])) ?></span>
                             <?php else: ?><span class="text-slate-600">—</span><?php endif; ?>
                         </td>
                         <td class="px-4 py-3 text-slate-400 whitespace-nowrap text-xs">
