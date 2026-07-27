@@ -4,6 +4,7 @@ requireLogin();
 require_once '../includes/lang.php';
 require_once '../config/db.php';
 require_once '../includes/telegram.php';
+require_once '../includes/period.php';
 require_once 'helpers.php';
 
 ensureAccessoriesTables($pdo);
@@ -253,10 +254,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+// ── Time-period filter (Today / Week / Month / All / Custom) ──
+// Scopes this owner's bills, stock-ins and payments to the selected period.
+$pf          = periodResolve();                                                 // default: All Time
+$condEntries = periodCond("COALESCE(entry_date, DATE(created_at))", $pf);        // bills
+$condIns     = periodCond("COALESCE(in_date, DATE(created_at))",    $pf);        // stock-ins
+$condPay     = periodCond("COALESCE(entry_date, DATE(created_at))", $pf);        // payments
+
 $entriesStmt = $pdo->prepare("
     SELECT *
     FROM accessory_stock_entries
-    WHERE owner_id = ?
+    WHERE owner_id = ? AND ($condEntries)
     ORDER BY COALESCE(entry_date, DATE(created_at)) DESC, id DESC
 ");
 $entriesStmt->execute([$id]);
@@ -303,7 +311,7 @@ $avgRate = $totals['meterage'] > 0 ? $totals['amount'] / $totals['meterage'] : 0
 $addStmt = $pdo->prepare("
     SELECT category, COALESCE(SUM(quantity), 0) AS added
     FROM accessory_stock_ins
-    WHERE owner_id = ?
+    WHERE owner_id = ? AND ($condIns)
     GROUP BY category
 ");
 $addStmt->execute([$id]);
@@ -315,7 +323,7 @@ foreach ($addStmt->fetchAll() as $row) {
 // Detailed stock-in history grouped by category (for the per-category history modals).
 $stockInRowsStmt = $pdo->prepare("
     SELECT * FROM accessory_stock_ins
-    WHERE owner_id = ?
+    WHERE owner_id = ? AND ($condIns)
     ORDER BY COALESCE(in_date, DATE(created_at)) DESC, id DESC
 ");
 $stockInRowsStmt->execute([$id]);
@@ -346,7 +354,7 @@ $jMonths      = accessoryShamsiMonths();
 // Money ledger: bills generate amount owed; charges add previous owed; payments reduce it.
 $payStmt = $pdo->prepare("
     SELECT * FROM accessory_payments
-    WHERE owner_id = ?
+    WHERE owner_id = ? AND ($condPay)
     ORDER BY COALESCE(entry_date, DATE(created_at)) DESC, id DESC
 ");
 $payStmt->execute([$id]);
@@ -390,6 +398,9 @@ require_once '../includes/header.php';
         </a>
     </div>
 </div>
+
+<!-- Time-period filter -->
+<?= periodBar($pf, ['id' => $id]) ?>
 
 <div class="row g-3 mb-4">
     <div class="col-6 col-lg">
