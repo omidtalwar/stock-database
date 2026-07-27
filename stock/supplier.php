@@ -32,19 +32,16 @@ $pinVerified = !$pinEnabled || !empty($_SESSION['pin_verified']);
 $bodyClass   = ($pinEnabled && !$pinVerified) ? 'pin-locked' : '';
 
 function toShamsi(int $gy, int $gm, int $gd): array {
-    $g_d_no = 365*$gy + (int)(($gy+3)/4) - (int)(($gy+99)/100) + (int)(($gy+399)/400);
-    for ($i=0;$i<$gm-1;$i++) $g_d_no += [0,31,28,31,30,31,30,31,31,30,31,30,31][$i+1];
-    if ($gm>2 && (($gy%4==0&&$gy%100!=0)||$gy%400==0)) $g_d_no++;
-    $j_d_no = $g_d_no - 79;
-    $j_np   = (int)($j_d_no / 12053); $j_d_no %= 12053;
-    $jy     = 979 + 33*$j_np + 4*(int)($j_d_no/1461); $j_d_no %= 1461;
-    if ($j_d_no >= 366) { $jy += (int)(($j_d_no-1)/365); $j_d_no = ($j_d_no-1) % 365; }
-    $jm = 0; $jd = 0;
-    for ($i=0; $i<11; $i++) {
-        $j_mi = $i<6 ? 31 : 30;
-        if ($j_d_no >= $j_mi) { $j_d_no -= $j_mi; $jm++; } else break;
-    }
-    $jd = $j_d_no + 1; $jm++;
+    $g_d_m = [0,31,59,90,120,151,181,212,243,273,304,334];
+    if ($gy > 1600) { $jy = 979; $gy -= 1600; } else { $jy = 0; $gy -= 621; }
+    $gy2  = $gm > 2 ? $gy + 1 : $gy;
+    $days = 365*$gy + intdiv($gy2+3,4) - intdiv($gy2+99,100) + intdiv($gy2+399,400)
+            - 80 + $gd + $g_d_m[$gm - 1];
+    $jy  += 33 * intdiv($days, 12053); $days %= 12053;
+    $jy  +=  4 * intdiv($days,  1461); $days %= 1461;
+    if ($days > 365) { $jy += intdiv($days-1, 365); $days = ($days-1) % 365; }
+    $jm = $days < 186 ? 1 + intdiv($days, 31) : 7 + intdiv($days - 186, 30);
+    $jd = 1 + ($days < 186 ? $days % 31 : ($days - 186) % 30);
     return ['y' => $jy, 'm' => $jm, 'd' => $jd];
 }
 
