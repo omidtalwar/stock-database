@@ -3,6 +3,7 @@ require_once '../includes/session.php';
 requireLogin();
 require_once '../config/db.php';
 require_once '../includes/lang.php';
+require_once '../includes/period.php';
 require_once '_common.php';
 
 // Sidebar data (mirrors the app's shared navigation)
@@ -27,8 +28,14 @@ $flashSuccess = $_SESSION['success'] ?? '';
 $flashError   = $_SESSION['error'] ?? '';
 unset($_SESSION['success'], $_SESSION['error']);
 
+// ── Time-period filter (Today / Week / Month / All / Custom) ──
+// Scopes every figure on the page — stock cards, KPIs and the movement list.
+$pf        = periodResolve();                                              // default: All Time
+$whCond    = periodCond("COALESCE(entry_date, DATE(created_at))", $pf);    // bare column form
+$whCondW   = periodCond("COALESCE(w.entry_date, DATE(w.created_at))", $pf); // aliased (w.) form
+
 // ── Stock per category + top totals ──
-$stock = whStockByCategory($pdo);
+$stock = whStockByCategory($pdo, $whCond);
 
 $totalTan = 0.0; $totalGaz = 0.0; $activeCats = 0;
 foreach ($stock as $s) {
@@ -40,11 +47,18 @@ foreach ($stock as $s) {
 $counts = $pdo->query("
     SELECT COALESCE(SUM(type='in'),0) AS in_c, COALESCE(SUM(type='out'),0) AS out_c, COUNT(*) AS all_c
     FROM warehouse_logs
+    WHERE $whCond
 ")->fetch(PDO::FETCH_ASSOC);
 
-// ── Transactions (type filter + pagination) ──
+// ── Transactions (type filter + period + pagination) ──
 $filterType = in_array($_GET['type'] ?? '', ['in','out'], true) ? $_GET['type'] : '';
-$where = $filterType ? "WHERE w.type = " . ($filterType === 'in' ? "'in'" : "'out'") : '';
+$conds = ["($whCondW)"];
+if ($filterType) $conds[] = "w.type = " . ($filterType === 'in' ? "'in'" : "'out'");
+$where = 'WHERE ' . implode(' AND ', $conds);
+
+// Query-string piece that carries the selected period across other links.
+$periodQS = 'period=' . $pf['period']
+    . ($pf['period'] === 'custom' ? '&date_from=' . $pf['from'] . '&date_to=' . $pf['to'] : '');
 
 $totalRows  = (int)$pdo->query("SELECT COUNT(*) FROM warehouse_logs w $where")->fetchColumn();
 $perPage    = 15;
@@ -243,6 +257,35 @@ tailwind.config = {
         </div>
     </header>
 
+    <!-- Time-period filter -->
+    <?php $typeKeep = $filterType ? '&type=' . $filterType : ''; ?>
+    <section class="mb-6 flex flex-wrap items-center gap-2">
+        <div class="flex flex-wrap rounded-xl overflow-hidden glass-lite text-xs font-semibold">
+            <?php foreach (periodLabelList() as $pk => $pl):
+                $isActive = $pf['period'] === $pk;
+                $extra = ($pk === 'custom' && $pf['period'] === 'custom')
+                    ? '&date_from=' . $pf['from'] . '&date_to=' . $pf['to'] : '';
+            ?>
+            <a href="?period=<?= $pk ?><?= $extra ?><?= $typeKeep ?>"
+               class="px-3.5 py-2 transition flex items-center gap-1.5 <?= $isActive ? 'bg-indigo-500/30 text-indigo-200' : 'text-slate-400 hover:text-white hover:bg-white/5' ?>">
+                <i class="bi <?= $pl[0] ?>"></i><?= htmlspecialchars($pl[1]) ?>
+            </a>
+            <?php endforeach; ?>
+        </div>
+        <?php if ($pf['period'] === 'custom'): ?>
+        <form method="GET" class="flex flex-wrap items-center gap-2">
+            <input type="hidden" name="period" value="custom">
+            <?php if ($filterType): ?><input type="hidden" name="type" value="<?= htmlspecialchars($filterType) ?>"><?php endif; ?>
+            <input type="date" name="date_from" value="<?= htmlspecialchars($pf['from']) ?>" required
+                   class="glass-lite rounded-lg px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-indigo-400/50">
+            <span class="text-slate-500 text-xs">→</span>
+            <input type="date" name="date_to" value="<?= htmlspecialchars($pf['to']) ?>" required
+                   class="glass-lite rounded-lg px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-indigo-400/50">
+            <button class="rounded-lg px-3 py-1.5 text-sm font-semibold text-white" style="background:linear-gradient(135deg,#6366F1,#4f46e5);">Apply</button>
+        </form>
+        <?php endif; ?>
+    </section>
+
     <!-- Stat cards -->
     <section class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <div class="glass rounded-2xl p-5 animate-slideup" style="animation-delay:.05s;">
@@ -336,9 +379,9 @@ tailwind.config = {
             </h2>
             <div class="flex items-center gap-2">
                 <div class="flex rounded-xl overflow-hidden glass-lite text-xs font-semibold">
-                    <a href="?" class="px-3 py-1.5 transition <?= $filterType===''?'bg-white/15 text-white':'text-slate-400 hover:text-white' ?>">All</a>
-                    <a href="?type=in" class="px-3 py-1.5 transition <?= $filterType==='in'?'bg-emerald-500/25 text-emerald-300':'text-slate-400 hover:text-white' ?>">In</a>
-                    <a href="?type=out" class="px-3 py-1.5 transition <?= $filterType==='out'?'bg-indigo-500/25 text-indigo-300':'text-slate-400 hover:text-white' ?>">Out</a>
+                    <a href="?<?= $periodQS ?>" class="px-3 py-1.5 transition <?= $filterType===''?'bg-white/15 text-white':'text-slate-400 hover:text-white' ?>">All</a>
+                    <a href="?type=in&<?= $periodQS ?>" class="px-3 py-1.5 transition <?= $filterType==='in'?'bg-emerald-500/25 text-emerald-300':'text-slate-400 hover:text-white' ?>">In</a>
+                    <a href="?type=out&<?= $periodQS ?>" class="px-3 py-1.5 transition <?= $filterType==='out'?'bg-indigo-500/25 text-indigo-300':'text-slate-400 hover:text-white' ?>">Out</a>
                 </div>
                 <div class="relative">
                     <input id="search" oninput="filterRows()" placeholder="Search…"
@@ -426,7 +469,7 @@ tailwind.config = {
         <div class="flex items-center justify-between gap-2 p-4 border-t border-white/10 text-xs text-slate-400">
             <span><?= $totalRows ?> records · showing <?= $offset+1 ?>–<?= min($offset+$perPage,$totalRows) ?></span>
             <div class="flex items-center gap-1">
-                <?php $qs = $filterType ? "type=$filterType&" : ''; ?>
+                <?php $qs = ($filterType ? "type=$filterType&" : '') . $periodQS . '&'; ?>
                 <a href="?<?= $qs ?>page=<?= max(1,$page-1) ?>" class="px-3 py-1.5 rounded-lg glass-lite hover:bg-white/10 <?= $page<=1?'pointer-events-none opacity-40':'' ?>">‹</a>
                 <span class="px-3 py-1.5">Page <?= $page ?> / <?= $totalPages ?></span>
                 <a href="?<?= $qs ?>page=<?= min($totalPages,$page+1) ?>" class="px-3 py-1.5 rounded-lg glass-lite hover:bg-white/10 <?= $page>=$totalPages?'pointer-events-none opacity-40':'' ?>">›</a>

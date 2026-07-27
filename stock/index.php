@@ -4,6 +4,7 @@ requireLogin();
 require_once '../includes/lang.php';
 require_once '../config/db.php';
 require_once '../includes/currency.php';
+require_once '../includes/period.php';
 
 $pageTitle = __('stock_title');
 
@@ -39,6 +40,10 @@ foreach ([
 
 $rates = getAllRates($pdo);
 
+// ── Time-period filter (Today / Week / Month / All / Custom) ──
+$pf         = periodResolve();                                              // default: All Time
+$stockCond  = periodCond("COALESCE(entry_date, DATE(created_at))", $pf);    // stock movement date
+
 // ── PIN guard (same session as dashboard) ──────────────────────────────────
 if (isset($_GET['lock'])) {
     unset($_SESSION['pin_verified'], $_SESSION['pin_verified_at']);
@@ -67,6 +72,7 @@ $stats = $pdo->query("
         COALESCE(SUM(CASE WHEN type='in' THEN balance      ELSE 0 END), 0)         AS total_unpaid,
         COUNT(DISTINCT CASE WHEN supplier IS NOT NULL AND supplier != '' THEN supplier END) AS total_suppliers
     FROM stock_logs
+    WHERE $stockCond
 ")->fetch();
 
 // Supplier summary
@@ -80,7 +86,7 @@ $supplierStats = $pdo->query("
         SUM(balance)      AS total_unpaid,
         MAX(created_at)   AS last_txn
     FROM stock_logs
-    WHERE supplier IS NOT NULL AND supplier != ''
+    WHERE supplier IS NOT NULL AND supplier != '' AND ($stockCond)
     GROUP BY supplier
     ORDER BY total_unpaid DESC, last_txn DESC
 ")->fetchAll();
@@ -171,6 +177,9 @@ body.pin-locked .sup-fin { filter: blur(7px); user-select: none; pointer-events:
         <a href="add.php" class="btn btn-primary"><i class="bi bi-plus-square me-2"></i><?= __('stock_in_btn') ?></a>
     </div>
 </div>
+
+<!-- Time-period filter -->
+<?= periodBar($pf) ?>
 
 <!-- Dashboard stats -->
 <div class="row g-3 mb-2">

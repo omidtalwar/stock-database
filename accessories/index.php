@@ -4,6 +4,7 @@ requireLogin();
 require_once '../includes/lang.php';
 require_once '../config/db.php';
 require_once '../includes/telegram.php';
+require_once '../includes/period.php';
 require_once 'helpers.php';
 
 ensureAccessoriesTables($pdo);
@@ -77,6 +78,14 @@ if ($q !== '') {
     $params = ['%' . $q . '%', '%' . $q . '%'];
 }
 
+// ── Time-period filter (Today / Week / Month / All / Custom) ──
+// Each transactional source is scoped by its own date column, so every figure
+// (issued, added, charged, paid, remaining) reflects only the selected period.
+$pf       = periodResolve();                                 // default: All Time
+$condE    = periodCond("e.entry_date",  $pf);                // stock entries (issued)
+$condSi   = periodCond("in_date",        $pf);               // stock-ins (added)
+$condPm   = periodCond("entry_date",     $pf);               // payments / charges
+
 $ownersStmt = $pdo->prepare("
     SELECT o.*,
            COUNT(e.id) AS entry_count,
@@ -93,7 +102,7 @@ $ownersStmt = $pdo->prepare("
            COALESCE(MAX(pm.paid), 0)    AS pay_paid,
            MAX(e.entry_date) AS last_entry_date
     FROM accessory_owners o
-    LEFT JOIN accessory_stock_entries e ON e.owner_id = o.id
+    LEFT JOIN accessory_stock_entries e ON e.owner_id = o.id AND ($condE)
     LEFT JOIN (
         SELECT owner_id,
                SUM(CASE WHEN category='original' THEN quantity ELSE 0 END) AS added_original,
@@ -101,6 +110,7 @@ $ownersStmt = $pdo->prepare("
                SUM(CASE WHEN category='pes'       THEN quantity ELSE 0 END) AS added_pes,
                SUM(CASE WHEN category='plastic'   THEN quantity ELSE 0 END) AS added_plastic
         FROM accessory_stock_ins
+        WHERE ($condSi)
         GROUP BY owner_id
     ) si ON si.owner_id = o.id
     LEFT JOIN (
@@ -108,6 +118,7 @@ $ownersStmt = $pdo->prepare("
                SUM(CASE WHEN kind='charge'  THEN amount ELSE 0 END) AS charged,
                SUM(CASE WHEN kind='payment' THEN amount ELSE 0 END) AS paid
         FROM accessory_payments
+        WHERE ($condPm)
         GROUP BY owner_id
     ) pm ON pm.owner_id = o.id
     $where
@@ -151,6 +162,9 @@ require_once '../includes/header.php';
         <i class="bi bi-person-plus me-2"></i>Add Owner
     </button>
 </div>
+
+<!-- Time-period filter -->
+<?= periodBar($pf, ['q' => $q]) ?>
 
 <div class="row g-3 mb-4">
     <div class="col-6 col-lg-4">

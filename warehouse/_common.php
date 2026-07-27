@@ -126,8 +126,9 @@ if (!function_exists('whCategoryColor')) {
 }
 
 // Current stock per category (tan & gaz), including categories with zero movement.
+// $cond = optional SQL boolean (e.g. a period filter) applied to the movements.
 if (!function_exists('whStockByCategory')) {
-    function whStockByCategory(PDO $pdo): array {
+    function whStockByCategory(PDO $pdo, string $cond = '1=1'): array {
         $rows = $pdo->query("
             SELECT category,
                    COALESCE(SUM(CASE WHEN type='in'  THEN tan ELSE 0 END),0) AS in_tan,
@@ -137,6 +138,7 @@ if (!function_exists('whStockByCategory')) {
                    COUNT(*) AS txn_count,
                    MAX(created_at) AS last_txn
             FROM warehouse_logs
+            WHERE $cond
             GROUP BY category
         ")->fetchAll(PDO::FETCH_ASSOC);
 
