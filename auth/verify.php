@@ -14,16 +14,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? 'verify';
     $cfg    = tgConfig();
     $token  = (string)($cfg['bot_token'] ?? '');
-    $chat   = (string)($p['chat'] ?? '') ?: (string)($cfg['chat_id'] ?? '');
+    $chats  = tgAllowedChatIds();
 
     if ($action === 'resend') {
         if (time() - (int)($p['last_sent'] ?? 0) < 30) {
             $error = 'Please wait a few seconds before requesting a new code.';
-        } elseif ($token === '' || $chat === '') {
+        } elseif ($token === '' || empty($chats)) {
             $error = 'Telegram is not configured.';
         } else {
             $code = str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-            $sent = tgSend($token, $chat,
+            // Broadcast to every chat connected to the bot, like the initial send.
+            $sent = tgBroadcast(
                 "🔐 <b>New login code:</b> <code>{$code}</code>\nUser: " . tgEsc($p['username']) . "\nExpires in 10 minutes.");
             if ($sent) {
                 $p['code_hash'] = password_hash($code, PASSWORD_DEFAULT);

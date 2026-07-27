@@ -76,6 +76,24 @@ function tgReply(string $chatId, string $text): bool {
     return tgSend((string)$c['bot_token'], $chatId, $text);
 }
 
+/**
+ * Send the same message to EVERY chat connected to the bot (the whole
+ * comma-separated chat_id list). Used for login/verification codes so all
+ * authorised people receive them, not just the first chat. Ignores the
+ * per-event 'enabled' switch — only needs a token and at least one chat.
+ * Returns true if delivered to at least one chat.
+ */
+function tgBroadcast(string $text): bool {
+    $c     = tgConfig();
+    $token = (string)($c['bot_token'] ?? '');
+    if ($token === '') return false;
+    $ok = false;
+    foreach (tgAllowedChatIds() as $chatId) {
+        if (tgSend($token, $chatId, $text)) $ok = true;
+    }
+    return $ok;
+}
+
 /** Secret token used to authenticate incoming webhook requests from Telegram. */
 function tgWebhookSecret(): string {
     $c = tgConfig();

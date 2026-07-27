@@ -37,16 +37,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             // Two-factor: send a one-time code via Telegram, then go to verify.php.
+            // Broadcast the code to EVERY chat connected to the bot so all
+            // authorised people receive it (chat_id may be a comma list).
             $cfg   = tgConfig();
             $token = (string)($cfg['bot_token'] ?? '');
-            // Fall back to the first authorised chat (the owner/gatekeeper); chat_id may be a comma list.
-            $chat  = (string)($user['telegram_chat_id'] ?? '') ?: (string)(tgAllowedChatIds()[0] ?? '');
+            $chats = tgAllowedChatIds();
 
-            if ($token === '' || $chat === '') {
+            if ($token === '' || empty($chats)) {
                 $error = 'Login verification is enabled but Telegram is not configured.';
             } else {
                 $code = str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-                $sent = tgSend($token, $chat,
+                $sent = tgBroadcast(
                     "🔐 <b>Login code:</b> <code>{$code}</code>\n"
                     . "User: " . tgEsc($user['username']) . "\n"
                     . "Expires in 10 minutes.\nIf this wasn't you, change your password.");
@@ -62,7 +63,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'expires'   => time() + 600,
                         'attempts'  => 0,
                         'last_sent' => time(),
-                        'chat'      => $chat,
                     ];
                     header('Location: /auth/verify.php');
                     exit;
