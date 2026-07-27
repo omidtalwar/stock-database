@@ -8,15 +8,25 @@ require_once '../includes/currency.php';
 $pageTitle = __('pay_title');
 
 // ── Period filter ──
-$period = in_array($_GET['period'] ?? '', ['today','week','month','all'])
+$period = in_array($_GET['period'] ?? '', ['today','week','month','all','custom'])
     ? $_GET['period'] : 'all';
 
+// Custom range dates (validated to Y-m-d; default = this month → today).
+$dateFrom = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['date_from'] ?? '') ? $_GET['date_from'] : date('Y-m-01');
+$dateTo   = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['date_to']   ?? '') ? $_GET['date_to']   : date('Y-m-d');
+
+// Filter on the effective payment date so backdated payments land correctly.
+$_pEx = "COALESCE(p.payment_date, DATE(p.created_at))";
 $periodWhere = match($period) {
-    'today' => "AND DATE(p.created_at) = CURDATE()",
-    'week'  => "AND YEARWEEK(p.created_at, 1) = YEARWEEK(CURDATE(), 1)",
-    'month' => "AND DATE_FORMAT(p.created_at, '%Y-%m') = DATE_FORMAT(CURDATE(), '%Y-%m')",
-    default => "",
+    'today'  => "AND $_pEx = CURDATE()",
+    'week'   => "AND YEARWEEK($_pEx, 1) = YEARWEEK(CURDATE(), 1)",
+    'month'  => "AND DATE_FORMAT($_pEx, '%Y-%m') = DATE_FORMAT(CURDATE(), '%Y-%m')",
+    'custom' => "AND $_pEx BETWEEN '$dateFrom' AND '$dateTo'",
+    default  => "",
 };
+
+// Query-string tail that carries the custom range across links.
+$rangeQS = $period === 'custom' ? '&date_from=' . urlencode($dateFrom) . '&date_to=' . urlencode($dateTo) : '';
 
 $search      = trim($_GET['search'] ?? '');
 $searchWhere = '';
@@ -102,16 +112,21 @@ require_once '../includes/header.php';
 <!-- Period filter bar -->
 <?php
 $payPeriodLabels = [
-    'all'   => __('period_all'),
-    'today' => __('period_today'),
-    'week'  => __('period_week'),
-    'month' => __('period_month'),
+    'all'    => __('period_all'),
+    'today'  => __('period_today'),
+    'week'   => __('period_week'),
+    'month'  => __('period_month'),
+    'custom' => 'Custom',
 ];
 ?>
 <div class="card">
     <div class="card-header py-3">
         <form method="GET" class="d-flex align-items-center gap-2 justify-content-between flex-wrap">
             <input type="hidden" name="period" value="<?= htmlspecialchars($period) ?>">
+            <?php if ($period === 'custom'): ?>
+            <input type="hidden" name="date_from" value="<?= htmlspecialchars($dateFrom) ?>">
+            <input type="hidden" name="date_to" value="<?= htmlspecialchars($dateTo) ?>">
+            <?php endif; ?>
             <!-- Search -->
             <div class="input-group" style="max-width:340px;">
                 <span class="input-group-text bg-white border-end-0 text-muted">
@@ -121,7 +136,7 @@ $payPeriodLabels = [
                        placeholder="Search customer or shop…"
                        value="<?= htmlspecialchars($search) ?>">
                 <?php if ($search): ?>
-                <a href="?period=<?= $period ?>" class="btn btn-outline-secondary border-start-0" title="Clear">
+                <a href="?period=<?= $period ?><?= $rangeQS ?>" class="btn btn-outline-secondary border-start-0" title="Clear">
                     <i class="bi bi-x"></i>
                 </a>
                 <?php else: ?>
@@ -133,11 +148,12 @@ $payPeriodLabels = [
             <!-- Period pills -->
             <div class="d-flex gap-1 flex-wrap">
                 <?php
-                $icons = ['all'=>'infinity','today'=>'sun','week'=>'calendar-week','month'=>'calendar-month'];
+                $icons = ['all'=>'infinity','today'=>'sun','week'=>'calendar-week','month'=>'calendar-month','custom'=>'calendar-range'];
                 foreach ($payPeriodLabels as $pk => $pl):
                     $active = $period === $pk;
+                    $carry  = ($search ? '&search='.urlencode($search) : '') . ($pk === 'custom' ? $rangeQS : '');
                 ?>
-                <a href="?period=<?= $pk ?><?= $search ? '&search='.urlencode($search) : '' ?>"
+                <a href="?period=<?= $pk ?><?= $carry ?>"
                    class="btn btn-sm <?= $active ? 'btn-primary' : 'btn-light' ?>"
                    style="border-radius:20px;font-size:.78rem;">
                     <i class="bi bi-<?= $icons[$pk] ?> me-1"></i><?= $pl ?>
@@ -147,6 +163,23 @@ $payPeriodLabels = [
             <!-- Count -->
             <span class="text-muted small ms-auto"><?= $totalRows ?> payments</span>
         </form>
+        <?php if ($period === 'custom'): ?>
+        <!-- Custom date range -->
+        <form method="GET" class="d-flex align-items-center gap-2 flex-wrap mt-2 pt-2 border-top">
+            <input type="hidden" name="period" value="custom">
+            <?php if ($search): ?><input type="hidden" name="search" value="<?= htmlspecialchars($search) ?>"><?php endif; ?>
+            <label class="small fw-semibold text-muted mb-0">From</label>
+            <input type="date" name="date_from" value="<?= htmlspecialchars($dateFrom) ?>"
+                   class="form-control form-control-sm" style="width:150px;" required>
+            <label class="small fw-semibold text-muted mb-0">To</label>
+            <input type="date" name="date_to" value="<?= htmlspecialchars($dateTo) ?>"
+                   class="form-control form-control-sm" style="width:150px;" required>
+            <button class="btn btn-sm btn-primary"><i class="bi bi-arrow-right me-1"></i>Apply</button>
+            <span class="text-muted small ms-2">
+                <?= date('d M Y', strtotime($dateFrom)) ?> — <?= date('d M Y', strtotime($dateTo)) ?>
+            </span>
+        </form>
+        <?php endif; ?>
     </div>
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
