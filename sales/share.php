@@ -2,6 +2,8 @@
 require_once '../config/db.php';
 require_once '../includes/currency.php';
 
+ensureSaleRates($pdo); // freeze invoices to their sale-time rate
+
 $id   = (int)($_GET['id'] ?? 0);
 $stmt = $pdo->prepare("
     SELECT s.*, c.name AS customer_name, c.shop_name, c.phone
@@ -23,7 +25,8 @@ $items = $stmt2->fetchAll();
 
 $allRates   = getAllRates($pdo);
 $saleCur    = $sale['currency'] ?? 'AFN';
-$saleCurRate = $allRates[$saleCur] ?? 1.0;
+// Use the rate stored on the sale (frozen at creation); fall back to live only if missing.
+$saleCurRate = !empty($sale['exchange_rate']) ? (float)$sale['exchange_rate'] : ($allRates[$saleCur] ?? 1.0);
 
 // Format an AFN-stored amount in the sale's original currency
 function fmtSale(float $afn): string {

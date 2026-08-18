@@ -14,6 +14,7 @@ foreach ([
     "ALTER TABLE sales ADD COLUMN sale_date     DATE         NULL AFTER bill_no",
     "ALTER TABLE sales ADD COLUMN images        TEXT         NULL",
     "ALTER TABLE sales ADD COLUMN currency      VARCHAR(10)  NULL DEFAULT 'AFN'",
+    "ALTER TABLE sales ADD COLUMN exchange_rate DECIMAL(12,4) NULL AFTER currency",
     "ALTER TABLE sale_items ADD COLUMN custom_name VARCHAR(255) NULL",
     "ALTER TABLE sale_items MODIFY product_id   INT          NULL",
     "ALTER TABLE sale_items MODIFY quantity     DECIMAL(10,3) NOT NULL DEFAULT 1",
@@ -101,13 +102,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($lineItems) && empty($errors)) $errors[] = __('sale_click_add');
 
     if (empty($errors)) {
-        $balance = max(0, $total - $paid_amount);
+        $balance  = max(0, $total - $paid_amount);
+        $saleRate = $allRates[$sale_currency]; // freeze this sale to today's rate
         $pdo->beginTransaction();
         try {
             $pdo->prepare("
-                INSERT INTO sales (bill_no, sale_date, customer_id, total_amount, paid_amount, balance, notes, images, currency, created_by)
-                VALUES (?,?,?,?,?,?,?,?,?,?)
-            ")->execute([$bill_no ?: null, $sale_date, $customer_id, $total, $paid_amount, $balance, $notes, $images_json, $sale_currency, $_SESSION['user_id']]);
+                INSERT INTO sales (bill_no, sale_date, customer_id, total_amount, paid_amount, balance, notes, images, currency, exchange_rate, created_by)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)
+            ")->execute([$bill_no ?: null, $sale_date, $customer_id, $total, $paid_amount, $balance, $notes, $images_json, $sale_currency, $saleRate, $_SESSION['user_id']]);
             $saleId = $pdo->lastInsertId();
 
             foreach ($lineItems as $li) {

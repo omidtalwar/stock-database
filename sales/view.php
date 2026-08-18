@@ -13,6 +13,8 @@ require_once '../includes/lang.php';
 require_once '../config/db.php';
 require_once '../includes/currency.php';
 
+ensureSaleRates($pdo); // freeze invoices to their sale-time rate
+
 $id = (int)($_GET['id'] ?? 0);
 $sale = $pdo->prepare("
     SELECT s.*, c.name AS customer_name, c.shop_name, c.phone, c.id AS customer_id,
@@ -36,7 +38,8 @@ $items = $items->fetchAll();
 
 $allRates    = getAllRates($pdo);
 $saleCur     = $sale['currency'] ?? 'AFN';
-$saleCurRate = $allRates[$saleCur] ?? 1.0;
+// Use the rate stored on the sale (frozen at creation); fall back to live only if missing.
+$saleCurRate = !empty($sale['exchange_rate']) ? (float)$sale['exchange_rate'] : ($allRates[$saleCur] ?? 1.0);
 
 // Payments linked to this specific invoice
 $linkedPayments = $pdo->prepare("

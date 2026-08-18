@@ -18,6 +18,8 @@ foreach ([
     "ALTER TABLE sale_items MODIFY product_id INT NULL",
 ] as $_sql) { try { $pdo->exec($_sql); } catch (\PDOException $e) {} }
 
+ensureSaleRates($pdo); // freeze invoices to their sale-time rate
+
 // ── Period filter ──
 $period = in_array($_GET['period'] ?? '', ['today','week','month','all','custom'])
     ? $_GET['period'] : 'all';
@@ -64,7 +66,7 @@ $offset     = ($page - 1) * $perPage;
 
 $sales = $pdo->prepare("
     SELECT s.id, s.bill_no, s.total_amount, s.paid_amount, s.balance, s.created_at, s.sale_date, s.notes,
-           s.currency,
+           s.currency, s.exchange_rate,
            c.name AS customer_name, c.shop_name,
            u.full_name AS created_by
     FROM sales s
@@ -202,7 +204,8 @@ $salePeriodLabels = [
                     $sItems  = $itemsBySale[$s['id']] ?? [];
                     $nItems  = count($sItems);
                     $cur     = $s['currency'] ?? 'AFN';
-                    $curRate = $rates[$cur] ?? 1;
+                    // Frozen rate from the sale; fall back to live only if missing.
+                    $curRate = !empty($s['exchange_rate']) ? (float)$s['exchange_rate'] : ($rates[$cur] ?? 1);
                 ?>
                 <tr style="cursor:pointer;" onclick="toggleItems(<?= $s['id'] ?>)">
                     <td>
