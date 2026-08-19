@@ -63,6 +63,8 @@ $rates   = getAllRates($pdo);
 $rateUSD = $rates['USD'];
 $ratePKR = $rates['PKR'];
 
+ensureSaleRates($pdo); // freeze invoices to their sale-time rate
+
 $sales = $pdo->prepare("
     SELECT s.*, u.full_name AS created_by
     FROM sales s JOIN users u ON u.id = s.created_by
@@ -92,7 +94,8 @@ $debtByCur  = ['AFN'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0],'USD'=>['orig'=>0.0,'afn
 foreach ($sales as $s) {
     $sCur  = $s['currency'] ?? 'AFN';
     $sAfn  = (float)$s['total_amount'];
-    $sRate = $rates[$sCur] ?? 1.0;
+    // Frozen rate from the sale; fall back to live only if missing.
+    $sRate = !empty($s['exchange_rate']) ? (float)$s['exchange_rate'] : ($rates[$sCur] ?? 1.0);
     $sOrig = $sCur === 'AFN' ? $sAfn : fromAFN($sAfn, $sRate);
     if (isset($salesByCur[$sCur])) {
         $salesByCur[$sCur]['orig'] += $sOrig;
@@ -312,7 +315,8 @@ $cvCurMeta = [
                         <?php else: ?>
                         <?php foreach ($sales as $s):
                             $sCur     = $s['currency'] ?? 'AFN';
-                            $sCurRate = $rates[$sCur] ?? 1.0;
+                            // Frozen rate from the sale; fall back to live only if missing.
+                            $sCurRate = !empty($s['exchange_rate']) ? (float)$s['exchange_rate'] : ($rates[$sCur] ?? 1.0);
                             $sTotal   = (float)$s['total_amount'];
                             $sBalance = max(0, $sTotal - (float)$s['paid_amount']);
                             $curColors = ['USD'=>'#0067C0','PKR'=>'#7719AA'];

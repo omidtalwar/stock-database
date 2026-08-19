@@ -48,6 +48,8 @@ $rates   = getAllRates($pdo);
 $rateUSD = $rates['USD'];
 $ratePKR = $rates['PKR'];
 
+ensureSaleRates($pdo); // freeze invoices to their sale-time rate
+
 // ── Period filter ──
 $period = in_array($_GET['period'] ?? '', ['today','week','month','all','custom'])
     ? $_GET['period'] : 'today';
@@ -148,7 +150,7 @@ foreach ($collByCur as $_r) {
 }
 
 $recentSales = $pdo->query("
-    SELECT s.id, s.total_amount, s.balance, s.created_at,
+    SELECT s.id, s.total_amount, s.balance, s.created_at, s.exchange_rate,
            COALESCE(s.currency,'AFN') AS currency,
            c.name AS customer_name, c.shop_name
     FROM sales s
@@ -994,7 +996,8 @@ body.pin-locked .debtor-debt .s { filter: blur(7px); user-select: none; pointer-
                                 </td>
                                 <?php
                                 $sCur  = $s['currency'] ?: 'AFN';
-                                $sRate = $rates[$sCur] ?? 1.0;
+                                // Frozen rate from the sale; fall back to live only if missing.
+                                $sRate = !empty($s['exchange_rate']) ? (float)$s['exchange_rate'] : ($rates[$sCur] ?? 1.0);
                                 $sTotalOrig = $sCur === 'AFN' ? $s['total_amount'] : fromAFN($s['total_amount'], $sRate);
                                 $sBalOrig   = $sCur === 'AFN' ? $s['balance']      : fromAFN($s['balance'],      $sRate);
                                 ?>
