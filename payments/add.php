@@ -11,6 +11,8 @@ $pageTitle = __('pay_add');
 // Migrations
 try { $pdo->exec("ALTER TABLE payments ADD COLUMN payment_date DATE NULL AFTER notes"); } catch (\PDOException $e) {}
 try { $pdo->exec("ALTER TABLE payments ADD COLUMN sale_id INT NULL AFTER customer_id"); } catch (\PDOException $e) {}
+// Flag: payment made with borrowed/loan money (for loan-in reporting)
+try { $pdo->exec("ALTER TABLE payments ADD COLUMN is_loan TINYINT(1) NOT NULL DEFAULT 0 AFTER notes"); } catch (\PDOException $e) {}
 
 $allRates    = getAllRates($pdo);
 $settings    = getSettings($pdo);
@@ -99,6 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $amount       = (float)($_POST['amount']    ?? 0);
     $currency     = strtoupper(trim($_POST['currency'] ?? 'AFN'));
     $notes        = trim($_POST['notes'] ?? '');
+    $isLoan       = !empty($_POST['is_loan']) ? 1 : 0;
     $payment_date = $_POST['payment_date'] ?? date('Y-m-d');
     if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $payment_date)) $payment_date = date('Y-m-d');
     if (!array_key_exists($currency, CURRENCIES)) $currency = 'AFN';
@@ -134,9 +137,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->beginTransaction();
         try {
             $pdo->prepare("
-                INSERT INTO payments (customer_id, sale_id, amount, currency, exchange_rate, amount_afn, notes, payment_date, created_by)
-                VALUES (?,?,?,?,?,?,?,?,?)
-            ")->execute([$customer_id, $sale_id, $amount, $currency, $usedRate, $amountAfn, $notes ?: null, $payment_date, $_SESSION['user_id']]);
+                INSERT INTO payments (customer_id, sale_id, amount, currency, exchange_rate, amount_afn, notes, is_loan, payment_date, created_by)
+                VALUES (?,?,?,?,?,?,?,?,?,?)
+            ")->execute([$customer_id, $sale_id, $amount, $currency, $usedRate, $amountAfn, $notes ?: null, $isLoan, $payment_date, $_SESSION['user_id']]);
 
             // Reduce customer total debt
             $pdo->prepare("UPDATE customers SET total_debt = GREATEST(0, total_debt - ?) WHERE id = ?")
@@ -336,6 +339,18 @@ require_once '../includes/header.php';
                         <input type="text" name="notes" class="form-control"
                                placeholder="<?= __('pay_notes_hint') ?>"
                                value="<?= htmlspecialchars($_POST['notes'] ?? '') ?>">
+                    </div>
+
+                    <!-- Loan money flag -->
+                    <div class="mb-3">
+                        <div class="form-check p-3 rounded" style="background:rgba(255,193,7,0.06);border:1px solid rgba(255,193,7,0.35);">
+                            <input class="form-check-input" type="checkbox" name="is_loan" value="1" id="isLoanCheck"
+                                   <?= !empty($_POST['is_loan']) ? 'checked' : '' ?>>
+                            <label class="form-check-label fw-semibold" for="isLoanCheck">
+                                <i class="bi bi-cash-stack text-warning me-1"></i>This money is from a loan (قرض)
+                            </label>
+                            <div class="form-text mb-0">Tick only if the customer paid using borrowed / loan money. Leave off for normal payments. Used to report how much loan money came in over a date range.</div>
+                        </div>
                     </div>
 
                     <!-- Shamsi date picker -->
