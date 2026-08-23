@@ -99,6 +99,88 @@ if (!empty($sales)) {
     }
 }
 
+// ── Monthly paid-money grid (payments received, by Shamsi month) ──────────────
+if (!function_exists('salesToShamsi')) {
+    function salesToShamsi(int $gy, int $gm, int $gd): array {
+        $g_d_m = [0,31,59,90,120,151,181,212,243,273,304,334];
+        if ($gy > 1600) { $jy = 979; $gy -= 1600; } else { $jy = 0; $gy -= 621; }
+        $gy2  = $gm > 2 ? $gy + 1 : $gy;
+        $days = 365*$gy + intdiv($gy2+3,4) - intdiv($gy2+99,100) + intdiv($gy2+399,400)
+                - 80 + $gd + $g_d_m[$gm - 1];
+        $jy  += 33 * intdiv($days, 12053); $days %= 12053;
+        $jy  +=  4 * intdiv($days,  1461); $days %= 1461;
+        if ($days > 365) { $jy += intdiv($days-1, 365); $days = ($days-1) % 365; }
+        $jm = $days < 186 ? 1 + intdiv($days, 31) : 7 + intdiv($days - 186, 30);
+        $jd = 1 + ($days < 186 ? $days % 31 : ($days - 186) % 30);
+        return ['y' => $jy, 'm' => $jm, 'd' => $jd];
+    }
+}
+if (!function_exists('salesShamsiToGregorian')) {
+    function salesShamsiToGregorian(int $jy, int $jm, int $jd): string {
+        $breaks = [-61,9,38,199,426,686,756,818,1111,1181,1210,1635,2060,2097,2192,2262,2324,2394,2456,3178];
+        $gy = $jy + 621; $leapJ = -14; $jp = $breaks[0]; $jump = 0;
+        for ($i = 1; $i < 20; $i++) {
+            $jm2 = $breaks[$i]; $jump = $jm2 - $jp;
+            if ($jy < $jm2) break;
+            $leapJ += intdiv($jump,33)*8 + intdiv($jump%33,4);
+            $jp = $jm2;
+        }
+        $n = $jy - $jp;
+        $leapJ += intdiv($n,33)*8 + intdiv($n%33+3,4);
+        if (($jump % 33) === 4 && ($jump - $n) === 4) $leapJ++;
+        $leapG = intdiv($gy,4) - intdiv((intdiv($gy,100)+1)*3,4) - 150;
+        $march = 20 + $leapJ - $leapG;
+        $dayOfYear = $jm <= 6 ? ($jm-1)*31 + $jd : 186 + ($jm-7)*30 + $jd;
+        $gDay = $march + $dayOfYear - 1; $gMon = 3; $gYr = $gy;
+        $dim = function (int $m, int $y): int {
+            if ($m === 2) return (($y%4===0 && $y%100!==0) || $y%400===0) ? 29 : 28;
+            return [0,31,28,31,30,31,30,31,31,30,31,30,31][$m];
+        };
+        while ($gDay > $dim($gMon,$gYr)) { $gDay -= $dim($gMon,$gYr); if (++$gMon > 12) { $gMon = 1; $gYr++; } }
+        return sprintf('%04d-%02d-%02d', $gYr, $gMon, $gDay);
+    }
+}
+
+$_todayJ   = salesToShamsi((int)date('Y'), (int)date('n'), (int)date('j'));
+$gridYear  = (int)($_GET['grid_year'] ?? $_todayJ['y']);
+if ($gridYear < 1300 || $gridYear > 1600) $gridYear = $_todayJ['y'];
+
+$jMonthNames = ['حمل','ثور','جوزا','سرطان','اسد','سنبله','میزان','عقرب','قوس','جدی','دلو','حوت'];
+
+// Gregorian [start, end) span for each Shamsi month of $gridYear
+$monthRanges = [];
+for ($m = 1; $m <= 12; $m++) {
+    $start = salesShamsiToGregorian($gridYear, $m, 1);
+    $end   = $m < 12 ? salesShamsiToGregorian($gridYear, $m + 1, 1)
+                     : salesShamsiToGregorian($gridYear + 1, 1, 1);
+    $monthRanges[$m] = [$start, $end];
+}
+$yearStart = $monthRanges[1][0];
+$yearEnd   = $monthRanges[12][1];
+
+// Payments received within the year, bucketed into Shamsi months (AFN).
+$grid = array_fill(1, 12, ['paid' => 0.0, 'cnt' => 0]);
+$gStmt = $pdo->prepare("
+    SELECT COALESCE(payment_date, DATE(created_at)) AS d,
+           CASE WHEN amount_afn > 0 THEN amount_afn ELSE amount END AS afn
+    FROM payments
+    WHERE COALESCE(payment_date, DATE(created_at)) >= ?
+      AND COALESCE(payment_date, DATE(created_at)) <  ?
+");
+$gStmt->execute([$yearStart, $yearEnd]);
+foreach ($gStmt->fetchAll() as $r) {
+    for ($m = 1; $m <= 12; $m++) {
+        if ($r['d'] >= $monthRanges[$m][0] && $r['d'] < $monthRanges[$m][1]) {
+            $grid[$m]['paid'] += (float)$r['afn'];
+            $grid[$m]['cnt']++;
+            break;
+        }
+    }
+}
+$gridYearTotal = array_sum(array_column($grid, 'paid'));
+$gridCurMonth  = ($gridYear === $_todayJ['y']) ? $_todayJ['m'] : 0;
+$gridNavQS = fn(int $y) => htmlspecialchars('?' . http_build_query(array_merge($_GET, ['grid_year' => $y])));
+
 require_once '../includes/header.php';
 ?>
 
@@ -109,6 +191,60 @@ require_once '../includes/header.php';
     </div>
     <a href="create.php" class="btn btn-primary"><i class="bi bi-plus-circle me-2"></i><?= __('sale_add') ?></a>
 </div>
+
+<!-- ── Monthly paid-money grid ─────────────────────────────────────────────── -->
+<div class="card mb-3">
+    <div class="card-header py-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <span class="fw-semibold"><i class="bi bi-grid-3x3-gap me-2 text-primary"></i>Paid money by month</span>
+        <div class="d-flex align-items-center gap-2">
+            <span class="text-muted small">Year total: <strong class="text-success">؋ <?= number_format($gridYearTotal, 0) ?></strong></span>
+            <div class="btn-group btn-group-sm" role="group">
+                <a href="<?= $gridNavQS($gridYear - 1) ?>" class="btn btn-light border" title="Previous year"><i class="bi bi-chevron-<?= isRTL() ? 'right' : 'left' ?>"></i></a>
+                <span class="btn btn-light border fw-bold disabled" style="opacity:1;"><?= $gridYear ?> <span class="text-muted fw-normal">هـ.ش</span></span>
+                <a href="<?= $gridNavQS($gridYear + 1) ?>" class="btn btn-light border" title="Next year"><i class="bi bi-chevron-<?= isRTL() ? 'left' : 'right' ?>"></i></a>
+            </div>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="paid-grid">
+            <?php for ($m = 1; $m <= 12; $m++):
+                $cell    = $grid[$m];
+                $isCur   = $m === $gridCurMonth;
+                $span    = $monthRanges[$m];
+                $gLabel  = date('M', strtotime($span[0])) . '–' . date('M Y', strtotime($span[1] . ' -1 day'));
+                $hasData = $cell['paid'] > 0 || $cell['cnt'] > 0;
+            ?>
+            <div class="paid-cell<?= $isCur ? ' is-current' : '' ?><?= !$hasData ? ' is-empty' : '' ?>">
+                <div class="pc-month">
+                    <span class="pc-jm font-pashto"><?= $jMonthNames[$m - 1] ?></span>
+                    <span class="pc-num"><?= $m ?></span>
+                </div>
+                <div class="pc-greg"><?= $gLabel ?></div>
+                <div class="pc-amt">؋ <?= number_format($cell['paid'], 0) ?></div>
+                <div class="pc-cnt"><?= $cell['cnt'] ?> <?= $cell['cnt'] === 1 ? 'payment' : 'payments' ?></div>
+            </div>
+            <?php endfor; ?>
+        </div>
+    </div>
+</div>
+
+<style>
+.paid-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; }
+@media (min-width:576px){ .paid-grid{ grid-template-columns:repeat(3,1fr); } }
+@media (min-width:992px){ .paid-grid{ grid-template-columns:repeat(4,1fr); } }
+@media (min-width:1200px){ .paid-grid{ grid-template-columns:repeat(6,1fr); } }
+.paid-cell { border:1px solid rgba(0,0,0,0.08); border-radius:12px; padding:12px 12px 10px; background:#fff; transition:box-shadow .15s, transform .15s; }
+.paid-cell:hover { box-shadow:0 4px 16px rgba(0,0,0,0.08); transform:translateY(-2px); }
+.paid-cell.is-current { border-color:rgba(13,110,253,0.5); box-shadow:0 0 0 2px rgba(13,110,253,0.12); }
+.paid-cell.is-empty { background:rgba(0,0,0,0.02); }
+.paid-cell.is-empty .pc-amt { color:#adb5bd; }
+.pc-month { display:flex; align-items:baseline; justify-content:space-between; }
+.pc-jm { font-size:1rem; font-weight:700; color:#1C1C1C; }
+.pc-num { font-size:0.7rem; color:#adb5bd; font-weight:600; }
+.pc-greg { font-size:0.68rem; color:#8a8a8a; margin-top:1px; }
+.pc-amt { font-size:1.05rem; font-weight:800; color:#107C10; margin-top:8px; letter-spacing:-0.3px; }
+.pc-cnt { font-size:0.68rem; color:#8a8a8a; margin-top:2px; }
+</style>
 
 <?php
 $salePeriodLabels = [
