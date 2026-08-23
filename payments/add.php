@@ -342,15 +342,12 @@ require_once '../includes/header.php';
                     </div>
 
                     <!-- Loan money flag -->
-                    <div class="mb-3">
-                        <div class="form-check p-3 rounded" style="background:rgba(255,193,7,0.06);border:1px solid rgba(255,193,7,0.35);">
-                            <input class="form-check-input" type="checkbox" name="is_loan" value="1" id="isLoanCheck"
-                                   <?= !empty($_POST['is_loan']) ? 'checked' : '' ?>>
-                            <label class="form-check-label fw-semibold" for="isLoanCheck">
-                                <i class="bi bi-cash-stack text-warning me-1"></i>This money is from a loan (قرض)
-                            </label>
-                            <div class="form-text mb-0">Tick only if the customer paid using borrowed / loan money. Leave off for normal payments. Used to report how much loan money came in over a date range.</div>
-                        </div>
+                    <div class="mb-3 form-check">
+                        <input class="form-check-input" type="checkbox" name="is_loan" value="1" id="isLoanCheck"
+                               <?= !empty($_POST['is_loan']) ? 'checked' : '' ?>>
+                        <label class="form-check-label" for="isLoanCheck">
+                            This money is from a loan (قرض)
+                        </label>
                     </div>
 
                     <!-- Shamsi date picker -->
