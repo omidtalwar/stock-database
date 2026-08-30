@@ -743,7 +743,10 @@ body.pin-locked .debtor-debt .s { filter: blur(7px); user-select: none; pointer-
             <i class="bi bi-bell"></i> Reminders
             <?php if ($reminderCount > 0): ?><span class="badge bg-danger" style="margin-inline-start:auto;"><?= $reminderCount ?></span><?php endif; ?>
         </a>
+        <a href="/summary/index.php"   class="nav-item"><i class="bi bi-clipboard-data"></i> <?= __('nav_summary') ?></a>
+        <?php /* Products hidden for now — re-enable by uncommenting:
         <a href="/products/index.php"  class="nav-item"><i class="bi bi-box-seam"></i> <?= __('nav_products') ?></a>
+        */ ?>
         <a href="/sales/index.php"     class="nav-item"><i class="bi bi-receipt"></i> <?= __('nav_sales') ?></a>
         <a href="/payments/index.php"  class="nav-item"><i class="bi bi-cash-coin"></i> <?= __('nav_payments') ?></a>
         <a href="/stock/index.php"     class="nav-item"><i class="bi bi-archive"></i> <?= __('nav_stock') ?></a>
