@@ -470,7 +470,10 @@ if (!empty($_SESSION['error'])) {
             <i class="bi bi-bell"></i> Reminders
             <?php if ($reminderCount > 0): ?><span class="badge bg-danger" style="margin-inline-start:auto;"><?= $reminderCount ?></span><?php endif; ?>
         </a>
+        <?= navItem('/summary/index.php',   'clipboard-data', __('nav_summary'), $currentDir === 'summary',   '#38BDF8') ?>
+        <?php /* Products hidden for now — re-enable by uncommenting the line below:
         <?= navItem('/products/index.php',  'box-seam',    __('nav_products'),  $currentDir === 'products',  '#34D399') ?>
+        */ ?>
         <?= navItem('/sales/index.php',     'receipt',     __('nav_sales'),     $currentDir === 'sales',     '#FB923C') ?>
         <?= navItem('/payments/index.php',  'cash-coin',   __('nav_payments'),  $currentDir === 'payments',  '#4ADE80') ?>
         <?= navItem('/stock/index.php',     'archive',     __('nav_stock'),     $currentDir === 'stock',     '#22D3EE') ?>

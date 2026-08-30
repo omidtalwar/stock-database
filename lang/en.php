@@ -23,6 +23,7 @@ return [
     'nav_dashboard'     => 'Dashboard',
     'nav_customers'     => 'Customers',
     'nav_products'      => 'Products',
+    'nav_summary'       => 'Summary',
     'nav_sales'         => 'Sales / Invoices',
     'nav_payments'      => 'Payments',
     'nav_stock'         => 'Stock Log',

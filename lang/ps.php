@@ -23,6 +23,7 @@ return [
     'nav_dashboard'     => 'ډشبورډ',
     'nav_customers'     => 'پیرودونکي',
     'nav_products'      => 'توکي',
+    'nav_summary'       => 'لنډیز',
     'nav_sales'         => 'پلورنې / بلونه',
     'nav_payments'      => 'تادیات',
     'nav_stock'         => 'حساب - کابل',
