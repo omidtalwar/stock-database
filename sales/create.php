@@ -15,6 +15,7 @@ foreach ([
     "ALTER TABLE sales ADD COLUMN images        TEXT         NULL",
     "ALTER TABLE sales ADD COLUMN currency      VARCHAR(10)  NULL DEFAULT 'AFN'",
     "ALTER TABLE sales ADD COLUMN exchange_rate DECIMAL(12,4) NULL AFTER currency",
+    "ALTER TABLE payments ADD COLUMN source VARCHAR(20) NULL",
     "ALTER TABLE sale_items ADD COLUMN custom_name VARCHAR(255) NULL",
     "ALTER TABLE sale_items MODIFY product_id   INT          NULL",
     "ALTER TABLE sale_items MODIFY quantity     DECIMAL(10,3) NOT NULL DEFAULT 1",
@@ -127,8 +128,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Record initial payment in payments table so it appears in payment history
             if ($paid_amount > 0) {
                 $pdo->prepare("
-                    INSERT INTO payments (customer_id, sale_id, amount, currency, exchange_rate, amount_afn, notes, payment_date, created_by)
-                    VALUES (?,?,?,?,?,?,?,?,?)
+                    INSERT INTO payments (customer_id, sale_id, amount, currency, exchange_rate, amount_afn, notes, source, payment_date, created_by)
+                    VALUES (?,?,?,?,?,?,?,?,?,?)
                 ")->execute([
                     $customer_id,
                     $saleId,
@@ -137,6 +138,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $allRates[$paid_currency],
                     $paid_amount,
                     null,
+                    'sale',
                     $sale_date,
                     $_SESSION['user_id'],
                 ]);

@@ -13,6 +13,8 @@ try { $pdo->exec("ALTER TABLE payments ADD COLUMN payment_date DATE NULL AFTER n
 try { $pdo->exec("ALTER TABLE payments ADD COLUMN sale_id INT NULL AFTER customer_id"); } catch (\PDOException $e) {}
 // Flag: payment made with borrowed/loan money (for loan-in reporting)
 try { $pdo->exec("ALTER TABLE payments ADD COLUMN is_loan TINYINT(1) NOT NULL DEFAULT 0 AFTER notes"); } catch (\PDOException $e) {}
+// Origin marker: money entered here is 'manual' (vs 'sale' recorded at invoice creation)
+try { $pdo->exec("ALTER TABLE payments ADD COLUMN source VARCHAR(20) NULL"); } catch (\PDOException $e) {}
 
 $allRates    = getAllRates($pdo);
 $settings    = getSettings($pdo);
@@ -137,9 +139,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->beginTransaction();
         try {
             $pdo->prepare("
-                INSERT INTO payments (customer_id, sale_id, amount, currency, exchange_rate, amount_afn, notes, is_loan, payment_date, created_by)
-                VALUES (?,?,?,?,?,?,?,?,?,?)
-            ")->execute([$customer_id, $sale_id, $amount, $currency, $usedRate, $amountAfn, $notes ?: null, $isLoan, $payment_date, $_SESSION['user_id']]);
+                INSERT INTO payments (customer_id, sale_id, amount, currency, exchange_rate, amount_afn, notes, is_loan, source, payment_date, created_by)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)
+            ")->execute([$customer_id, $sale_id, $amount, $currency, $usedRate, $amountAfn, $notes ?: null, $isLoan, 'manual', $payment_date, $_SESSION['user_id']]);
 
             // Reduce customer total debt
             $pdo->prepare("UPDATE customers SET total_debt = GREATEST(0, total_debt - ?) WHERE id = ?")

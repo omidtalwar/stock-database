@@ -9,6 +9,17 @@ $pageTitle = __('nav_summary');
 
 // Ensure columns this page relies on exist.
 try { $pdo->exec("ALTER TABLE payments ADD COLUMN is_loan TINYINT(1) NOT NULL DEFAULT 0 AFTER notes"); } catch (\PDOException $e) {}
+try { $pdo->exec("ALTER TABLE payments ADD COLUMN source VARCHAR(20) NULL"); } catch (\PDOException $e) {}
+// Tag payment origin: 'sale' = auto-recorded when the invoice was created,
+// 'manual' = entered on the Add Payment page. Backfill existing rows once.
+try {
+    $pdo->exec("
+        UPDATE payments p JOIN sales s ON s.id = p.sale_id
+        SET p.source = 'sale'
+        WHERE p.source IS NULL AND ABS(TIMESTAMPDIFF(SECOND, p.created_at, s.created_at)) <= 5
+    ");
+    $pdo->exec("UPDATE payments SET source = 'manual' WHERE source IS NULL");
+} catch (\PDOException $e) {}
 ensureSaleRates($pdo); // freeze invoices to their sale-time rate
 
 $rates = getAllRates($pdo);
@@ -50,13 +61,13 @@ $invoices = $pdo->query("
 // ── Column 2: invoices in range that still have an unpaid balance ──
 $unpaid = array_values(array_filter($invoices, fn($s) => (float)$s['balance'] > 0.01));
 
-// ── Column 3: payments received in range (money customers brought in) ──
+// ── Column 3: money entered via the Add Payment page (excludes paid-at-sale) ──
 $payments = $pdo->query("
     SELECT p.id, p.customer_id, p.amount, COALESCE(p.currency,'AFN') AS currency, p.amount_afn,
            COALESCE(p.is_loan,0) AS is_loan, $payExpr AS d, p.sale_id,
            c.name AS customer_name, c.shop_name
     FROM payments p JOIN customers c ON c.id = p.customer_id
-    WHERE $payCond
+    WHERE $payCond AND COALESCE(p.source,'manual') = 'manual'
     ORDER BY d DESC, p.id DESC
 ")->fetchAll();
 
