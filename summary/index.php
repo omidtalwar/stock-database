@@ -79,14 +79,16 @@ function toOrig(float $afn, string $cur, $rate, array $rates): float {
 }
 
 // Totals per currency for each column.
-$totInv  = ['AFN'=>0.0,'USD'=>0.0,'PKR'=>0.0];
-$totUnp  = ['AFN'=>0.0,'USD'=>0.0,'PKR'=>0.0];
+$totInv     = ['AFN'=>0.0,'USD'=>0.0,'PKR'=>0.0];
+$totInvPaid = ['AFN'=>0.0,'USD'=>0.0,'PKR'=>0.0];
+$totUnp     = ['AFN'=>0.0,'USD'=>0.0,'PKR'=>0.0];
 $totPaid = ['AFN'=>0.0,'USD'=>0.0,'PKR'=>0.0];
 $totLoan = ['AFN'=>0.0,'USD'=>0.0,'PKR'=>0.0];
 
 foreach ($invoices as $s) {
     $cur = $s['currency'];
-    $totInv[$cur] = ($totInv[$cur] ?? 0) + toOrig((float)$s['total_amount'], $cur, $s['exchange_rate'], $rates);
+    $totInv[$cur]     = ($totInv[$cur] ?? 0)     + toOrig((float)$s['total_amount'], $cur, $s['exchange_rate'], $rates);
+    $totInvPaid[$cur] = ($totInvPaid[$cur] ?? 0) + toOrig((float)$s['paid_amount'],  $cur, $s['exchange_rate'], $rates);
 }
 foreach ($unpaid as $s) {
     $cur = $s['currency'];
@@ -153,14 +155,18 @@ require_once '../includes/header.php';
                 <?php if (empty($invoices)): ?>
                 <div class="text-center text-muted py-5 small"><i class="bi bi-inbox d-block fs-3 mb-2 opacity-25"></i>No invoices in this range.</div>
                 <?php else: foreach ($invoices as $s):
-                    $cur  = $s['currency'];
-                    $orig = toOrig((float)$s['total_amount'], $cur, $s['exchange_rate'], $rates); ?>
+                    $cur      = $s['currency'];
+                    $orig     = toOrig((float)$s['total_amount'], $cur, $s['exchange_rate'], $rates);
+                    $paidOrig = toOrig((float)$s['paid_amount'],  $cur, $s['exchange_rate'], $rates); ?>
                 <div class="list-group-item">
                     <div class="d-flex justify-content-between gap-2">
                         <div class="min-w-0">
                             <div class="fw-semibold text-truncate"><?= htmlspecialchars($s['customer_name']) ?></div>
                             <div class="text-muted" style="font-size:0.72rem;">
                                 #<?= $s['bill_no'] ?: str_pad($s['id'],4,'0',STR_PAD_LEFT) ?> · <?= $shortDate($s['d']) ?>
+                            </div>
+                            <div style="font-size:0.72rem;">
+                                <span class="text-success">Paid: <?= $fmt($paidOrig, $cur) ?></span>
                             </div>
                         </div>
                         <div class="text-end text-nowrap">
@@ -173,6 +179,9 @@ require_once '../includes/header.php';
             </div>
             <div class="card-footer bg-white">
                 <?= renderCurTotals($totInv, $CURS, 'Total invoiced') ?>
+                <div class="mt-2 pt-2 border-top">
+                    <?= renderCurTotals($totInvPaid, $CURS, 'Total paid') ?>
+                </div>
             </div>
         </div>
     </div>
