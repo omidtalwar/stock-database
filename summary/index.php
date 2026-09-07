@@ -113,13 +113,165 @@ $rangeQS = $period === 'custom' ? '&date_from=' . urlencode($dateFrom) . '&date_
 $fmt      = fn(float $a, string $c) => formatMoney($a, $c);
 $shortDate = fn($d) => $d ? date('d M Y', strtotime($d)) : '—';
 
+// ── Missions / Goals ─────────────────────────────────────────────────────────
+$pdo->exec("CREATE TABLE IF NOT EXISTS missions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    type VARCHAR(10) NOT NULL DEFAULT 'sale',
+    title VARCHAR(150) NULL,
+    target_amount DECIMAL(14,2) NOT NULL DEFAULT 0,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    created_by INT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $act = $_POST['action'] ?? '';
+    if ($act === 'create_mission' && validateFormToken('mission_create')) {
+        $mType   = in_array($_POST['m_type'] ?? '', ['sale','loan'], true) ? $_POST['m_type'] : 'sale';
+        $mTarget = max(0, (float)($_POST['m_target'] ?? 0));
+        $mTitle  = trim($_POST['m_title'] ?? '');
+        $mPeriod = $_POST['m_period'] ?? 'week';
+        if ($mPeriod === 'month') {
+            $ms = date('Y-m-01'); $me = date('Y-m-t');
+        } elseif ($mPeriod === 'custom') {
+            $ms = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_POST['m_start'] ?? '') ? $_POST['m_start'] : date('Y-m-d');
+            $me = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_POST['m_end'] ?? '') ? $_POST['m_end'] : date('Y-m-d');
+            if ($me < $ms) { [$ms, $me] = [$me, $ms]; }
+        } else { // week (Mon–Sun, matches the app's "This Week" filter)
+            $ms = date('Y-m-d', strtotime('monday this week'));
+            $me = date('Y-m-d', strtotime('sunday this week'));
+        }
+        if ($mTarget > 0) {
+            $pdo->prepare("INSERT INTO missions (type,title,target_amount,start_date,end_date,created_by) VALUES (?,?,?,?,?,?)")
+                ->execute([$mType, $mTitle ?: null, $mTarget, $ms, $me, $_SESSION['user_id'] ?? null]);
+        }
+        header('Location: /summary/index.php'); exit;
+    }
+    if ($act === 'delete_mission') {
+        $mid = (int)($_POST['mission_id'] ?? 0);
+        if ($mid > 0) $pdo->prepare("DELETE FROM missions WHERE id = ?")->execute([$mid]);
+        header('Location: /summary/index.php'); exit;
+    }
+}
+
+// Load missions and compute live progress (all in AFN).
+$missions = $pdo->query("SELECT * FROM missions ORDER BY (end_date >= CURDATE()) DESC, end_date DESC, id DESC")->fetchAll();
+foreach ($missions as &$mn) {
+    if ($mn['type'] === 'loan') {
+        // Money received via the Add Payment page (not invoice paid-at-sale).
+        $st = $pdo->prepare("SELECT COALESCE(SUM(CASE WHEN amount_afn>0 THEN amount_afn ELSE amount END),0)
+                             FROM payments
+                             WHERE COALESCE(source,'manual')='manual'
+                               AND COALESCE(payment_date, DATE(created_at)) BETWEEN ? AND ?");
+    } else {
+        // Sales invoiced in the window.
+        $st = $pdo->prepare("SELECT COALESCE(SUM(total_amount),0)
+                             FROM sales
+                             WHERE COALESCE(sale_date, DATE(created_at)) BETWEEN ? AND ?");
+    }
+    $st->execute([$mn['start_date'], $mn['end_date']]);
+    $mn['achieved'] = (float)$st->fetchColumn();
+    $tgt            = (float)$mn['target_amount'];
+    $mn['pct']      = $tgt > 0 ? min(100, round($mn['achieved'] / $tgt * 100)) : 0;
+    $mn['pct_raw']  = $tgt > 0 ? round($mn['achieved'] / $tgt * 100) : 0;
+    $today          = date('Y-m-d');
+    $totalDays      = max(1, (int)((strtotime($mn['end_date']) - strtotime($mn['start_date'])) / 86400) + 1);
+    $elapsedDays    = min($totalDays, max(0, (int)((strtotime($today) - strtotime($mn['start_date'])) / 86400) + 1));
+    $mn['days_left'] = max(0, (int)((strtotime($mn['end_date']) - strtotime($today)) / 86400));
+    $mn['expired']   = $today > $mn['end_date'];
+    $mn['achieved_goal'] = $mn['achieved'] >= $tgt && $tgt > 0;
+    // Status: achieved / expired / on-track / behind (vs time elapsed pace)
+    $expectedPct = $totalDays > 0 ? ($elapsedDays / $totalDays) * 100 : 0;
+    if ($mn['achieved_goal'])      $mn['status'] = ['Achieved',  '#10B981', 'bi-trophy-fill'];
+    elseif ($mn['expired'])        $mn['status'] = ['Missed',    '#EF4444', 'bi-x-circle'];
+    elseif ($mn['pct_raw'] >= $expectedPct) $mn['status'] = ['On track', '#0EA5E9', 'bi-graph-up-arrow'];
+    else                           $mn['status'] = ['Behind',    '#F59E0B', 'bi-hourglass-split'];
+}
+unset($mn);
+$missionToken = generateFormToken('mission_create');
+
 require_once '../includes/header.php';
 ?>
 
-<div class="page-header">
-    <h4 class="mb-1"><i class="bi bi-clipboard-data me-2 text-primary"></i><?= __('nav_summary') ?></h4>
-    <p class="text-muted small mb-0">Invoices, outstanding balances and money received for the selected range.</p>
+<div class="page-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+    <div>
+        <h4 class="mb-1"><i class="bi bi-clipboard-data me-2 text-primary"></i><?= __('nav_summary') ?></h4>
+        <p class="text-muted small mb-0">Invoices, outstanding balances and money received for the selected range.</p>
+    </div>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#missionModal">
+        <i class="bi bi-bullseye me-2"></i>New Goal
+    </button>
 </div>
+
+<!-- ── Missions / Goals ─────────────────────────────────────────────────────── -->
+<?php if (!empty($missions)): ?>
+<div class="mission-grid mb-4">
+    <?php foreach ($missions as $mn):
+        [$stLabel, $stColor, $stIcon] = $mn['status'];
+        $isLoan  = $mn['type'] === 'loan';
+        $accent  = $isLoan ? '#F59E0B' : '#0067C0';
+        $tgt     = (float)$mn['target_amount'];
+        $remain  = max(0, $tgt - (float)$mn['achieved']);
+        $title   = $mn['title'] ?: ($isLoan ? 'Loan collection goal' : 'Sales goal');
+    ?>
+    <div class="mission-card" style="--accent:<?= $accent ?>;--status:<?= $stColor ?>;">
+        <div class="mc-top">
+            <div class="mc-type" style="background:<?= $accent ?>1a;color:<?= $accent ?>;">
+                <i class="bi <?= $isLoan ? 'bi-cash-stack' : 'bi-receipt' ?>"></i>
+                <?= $isLoan ? 'Loan' : 'Sale' ?>
+            </div>
+            <div class="mc-status" style="color:<?= $stColor ?>;">
+                <i class="bi <?= $stIcon ?>"></i> <?= $stLabel ?>
+            </div>
+            <form method="POST" class="mc-del" onsubmit="return confirm('Delete this goal?');">
+                <input type="hidden" name="action" value="delete_mission">
+                <input type="hidden" name="mission_id" value="<?= (int)$mn['id'] ?>">
+                <button type="submit" title="Delete"><i class="bi bi-x-lg"></i></button>
+            </form>
+        </div>
+
+        <div class="mc-title"><?= htmlspecialchars($title) ?></div>
+        <div class="mc-range">
+            <i class="bi bi-calendar-range me-1"></i><?= $shortDate($mn['start_date']) ?> — <?= $shortDate($mn['end_date']) ?>
+            <?php if (!$mn['expired'] && !$mn['achieved_goal']): ?>
+                · <span style="color:<?= $stColor ?>;"><?= (int)$mn['days_left'] ?> day<?= $mn['days_left']==1?'':'s' ?> left</span>
+            <?php endif; ?>
+        </div>
+
+        <div class="mc-figures">
+            <span class="mc-achieved" data-count="<?= (float)$mn['achieved'] ?>">؋ 0</span>
+            <span class="mc-of">/ ؋ <?= number_format($tgt, 0) ?></span>
+        </div>
+
+        <div class="mc-bar">
+            <div class="mc-fill" style="width:0;" data-pct="<?= (int)$mn['pct'] ?>"></div>
+        </div>
+        <div class="mc-meta">
+            <span class="mc-pct" data-pct="<?= (int)$mn['pct_raw'] ?>">0%</span>
+            <span class="mc-remain">
+                <?php if ($mn['achieved_goal']): ?>
+                    <i class="bi bi-check-circle-fill text-success"></i> Goal reached!
+                <?php else: ?>
+                    ؋ <?= number_format($remain, 0) ?> to go
+                <?php endif; ?>
+            </span>
+        </div>
+    </div>
+    <?php endforeach; ?>
+</div>
+<?php else: ?>
+<div class="card mb-4 border-0" style="background:rgba(0,103,192,0.04);">
+    <div class="card-body text-center py-4">
+        <i class="bi bi-bullseye d-block mb-2 text-primary" style="font-size:1.8rem;opacity:.6;"></i>
+        <div class="fw-semibold mb-1">No goals yet</div>
+        <div class="text-muted small mb-3">Set a weekly sales target or a loan-collection target and track your progress here.</div>
+        <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#missionModal">
+            <i class="bi bi-plus-lg me-1"></i>Create your first goal
+        </button>
+    </div>
+</div>
+<?php endif; ?>
 
 <!-- Period filter -->
 <div class="d-flex align-items-center gap-1 flex-wrap mb-2">
@@ -325,6 +477,145 @@ require_once '../includes/header.php';
         </div>
     </div>
 </div>
+
+<!-- ── Create Goal modal ── -->
+<div class="modal fade" id="missionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST">
+                <input type="hidden" name="action" value="create_mission">
+                <input type="hidden" name="_form_token" value="<?= htmlspecialchars($missionToken) ?>">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-bullseye me-2 text-primary"></i>New Goal</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Type -->
+                    <label class="form-label fw-semibold">Goal type</label>
+                    <div class="row g-2 mb-3" id="goalTypeRow">
+                        <div class="col-6">
+                            <input type="radio" class="btn-check" name="m_type" id="gtSale" value="sale" checked>
+                            <label class="btn btn-outline-primary w-100 py-3" for="gtSale">
+                                <i class="bi bi-receipt d-block fs-4 mb-1"></i>Sales target
+                                <div class="small text-muted">tracked from invoices</div>
+                            </label>
+                        </div>
+                        <div class="col-6">
+                            <input type="radio" class="btn-check" name="m_type" id="gtLoan" value="loan">
+                            <label class="btn btn-outline-warning w-100 py-3" for="gtLoan">
+                                <i class="bi bi-cash-stack d-block fs-4 mb-1"></i>Loan collection
+                                <div class="small text-muted">money via payment page</div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Target amount (؋ AFN)</label>
+                        <input type="number" name="m_target" class="form-control form-control-lg" min="1" step="any" placeholder="e.g. 100000" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Title <span class="text-muted fw-normal small">(optional)</span></label>
+                        <input type="text" name="m_title" class="form-control" placeholder="e.g. This week's sales push">
+                    </div>
+
+                    <label class="form-label fw-semibold">Time frame</label>
+                    <div class="row g-2 mb-2">
+                        <div class="col-4">
+                            <input type="radio" class="btn-check" name="m_period" id="gpWeek" value="week" checked onchange="toggleGoalCustom()">
+                            <label class="btn btn-outline-secondary w-100" for="gpWeek">This week</label>
+                        </div>
+                        <div class="col-4">
+                            <input type="radio" class="btn-check" name="m_period" id="gpMonth" value="month" onchange="toggleGoalCustom()">
+                            <label class="btn btn-outline-secondary w-100" for="gpMonth">This month</label>
+                        </div>
+                        <div class="col-4">
+                            <input type="radio" class="btn-check" name="m_period" id="gpCustom" value="custom" onchange="toggleGoalCustom()">
+                            <label class="btn btn-outline-secondary w-100" for="gpCustom">Custom</label>
+                        </div>
+                    </div>
+                    <div id="goalCustomRange" class="row g-2" style="display:none;">
+                        <div class="col-6">
+                            <label class="form-label small text-muted mb-1">From</label>
+                            <input type="date" name="m_start" class="form-control form-control-sm" value="<?= date('Y-m-d') ?>">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small text-muted mb-1">To</label>
+                            <input type="date" name="m_end" class="form-control form-control-sm" value="<?= date('Y-m-d', strtotime('+7 days')) ?>">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-flag me-1"></i>Set goal</button>
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+.mission-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px; }
+.mission-card {
+    position:relative; background:#fff; border:1px solid rgba(0,0,0,0.07);
+    border-radius:16px; padding:16px 18px 18px; overflow:hidden;
+    box-shadow:0 2px 10px rgba(0,0,0,0.04); transition:box-shadow .2s, transform .2s;
+}
+.mission-card::before { content:''; position:absolute; inset:0 auto 0 0; width:5px; background:var(--accent); }
+.mission-card:hover { box-shadow:0 8px 26px rgba(0,0,0,0.10); transform:translateY(-3px); }
+.mc-top { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+.mc-type { display:inline-flex; align-items:center; gap:5px; font-size:0.72rem; font-weight:700; padding:3px 10px; border-radius:20px; }
+.mc-status { font-size:0.72rem; font-weight:700; display:inline-flex; align-items:center; gap:4px; }
+.mc-del { margin-inline-start:auto; }
+.mc-del button { background:none; border:none; color:#c0c0c0; padding:2px 4px; border-radius:6px; transition:.15s; font-size:.8rem; }
+.mc-del button:hover { color:#EF4444; background:rgba(239,68,68,0.1); }
+.mc-title { font-weight:700; font-size:1rem; line-height:1.2; }
+.mc-range { font-size:0.72rem; color:#8a8a8a; margin-top:3px; }
+.mc-figures { display:flex; align-items:baseline; gap:6px; margin-top:12px; }
+.mc-achieved { font-size:1.5rem; font-weight:800; color:var(--accent); letter-spacing:-.5px; }
+.mc-of { font-size:0.82rem; color:#9a9a9a; font-weight:600; }
+.mc-bar { height:12px; border-radius:20px; background:rgba(0,0,0,0.06); overflow:hidden; margin-top:10px; }
+.mc-fill {
+    height:100%; border-radius:20px; background:linear-gradient(90deg,var(--accent),var(--status));
+    transition:width 1.1s cubic-bezier(.22,1,.36,1); position:relative;
+}
+.mc-fill::after {
+    content:''; position:absolute; inset:0;
+    background:linear-gradient(90deg,transparent,rgba(255,255,255,.45),transparent);
+    background-size:200% 100%; animation:mcShine 2s linear infinite;
+}
+@keyframes mcShine { 0%{background-position:200% 0;} 100%{background-position:-200% 0;} }
+.mc-meta { display:flex; align-items:center; justify-content:space-between; margin-top:8px; }
+.mc-pct { font-weight:800; font-size:1rem; color:var(--status); }
+.mc-remain { font-size:0.74rem; color:#7a7a7a; font-weight:600; }
+</style>
+
+<script>
+function toggleGoalCustom() {
+    var c = document.getElementById('gpCustom');
+    document.getElementById('goalCustomRange').style.display = c && c.checked ? 'flex' : 'none';
+}
+document.addEventListener('DOMContentLoaded', function () {
+    // Animate progress bars + count-up figures.
+    document.querySelectorAll('.mission-card').forEach(function (card) {
+        var fill = card.querySelector('.mc-fill');
+        var pctEl = card.querySelector('.mc-pct');
+        var amtEl = card.querySelector('.mc-achieved');
+        var pct = parseInt(fill.getAttribute('data-pct')) || 0;
+        var pctRaw = parseInt(pctEl.getAttribute('data-pct')) || 0;
+        var amt = parseFloat(amtEl.getAttribute('data-count')) || 0;
+        setTimeout(function () { fill.style.width = pct + '%'; }, 120);
+        var steps = 40, i = 0;
+        var t = setInterval(function () {
+            i++;
+            var k = i / steps;
+            pctEl.textContent = Math.round(pctRaw * k) + '%';
+            amtEl.textContent = '؋ ' + Math.round(amt * k).toLocaleString('en-US');
+            if (i >= steps) { clearInterval(t); pctEl.textContent = pctRaw + '%'; amtEl.textContent = '؋ ' + Math.round(amt).toLocaleString('en-US'); }
+        }, 22);
+    });
+});
+</script>
 
 <?php
 /** Footer block: one line per currency (AFN/USD/PKR). */
