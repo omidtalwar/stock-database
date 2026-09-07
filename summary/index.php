@@ -144,8 +144,8 @@ require_once '../includes/header.php';
 
 <div class="row g-3">
 
-    <!-- ── Column 1: Invoices ── -->
-    <div class="col-lg-4">
+    <!-- ── Column 1: Invoices (total only) ── -->
+    <div class="col-lg-3 col-md-6">
         <div class="card h-100">
             <div class="card-header py-3 d-flex align-items-center justify-content-between">
                 <span class="fw-semibold"><i class="bi bi-receipt me-2 text-primary"></i>Invoices</span>
@@ -155,18 +155,14 @@ require_once '../includes/header.php';
                 <?php if (empty($invoices)): ?>
                 <div class="text-center text-muted py-5 small"><i class="bi bi-inbox d-block fs-3 mb-2 opacity-25"></i>No invoices in this range.</div>
                 <?php else: foreach ($invoices as $s):
-                    $cur      = $s['currency'];
-                    $orig     = toOrig((float)$s['total_amount'], $cur, $s['exchange_rate'], $rates);
-                    $paidOrig = toOrig((float)$s['paid_amount'],  $cur, $s['exchange_rate'], $rates); ?>
+                    $cur  = $s['currency'];
+                    $orig = toOrig((float)$s['total_amount'], $cur, $s['exchange_rate'], $rates); ?>
                 <div class="list-group-item">
                     <div class="d-flex justify-content-between gap-2">
                         <div class="min-w-0">
                             <div class="fw-semibold text-truncate"><?= htmlspecialchars($s['customer_name']) ?></div>
                             <div class="text-muted" style="font-size:0.72rem;">
                                 #<?= $s['bill_no'] ?: str_pad($s['id'],4,'0',STR_PAD_LEFT) ?> · <?= $shortDate($s['d']) ?>
-                            </div>
-                            <div style="font-size:0.72rem;">
-                                <span class="text-success">Paid: <?= $fmt($paidOrig, $cur) ?></span>
                             </div>
                         </div>
                         <div class="text-end text-nowrap">
@@ -179,15 +175,48 @@ require_once '../includes/header.php';
             </div>
             <div class="card-footer bg-white">
                 <?= renderCurTotals($totInv, $CURS, 'Total invoiced') ?>
-                <div class="mt-2 pt-2 border-top">
-                    <?= renderCurTotals($totInvPaid, $CURS, 'Total paid') ?>
-                </div>
             </div>
         </div>
     </div>
 
-    <!-- ── Column 2: Unpaid balances ── -->
-    <div class="col-lg-4">
+    <!-- ── Column 2: Paid (paid amount per invoice) ── -->
+    <?php $paidInvoices = array_values(array_filter($invoices, fn($s) => (float)$s['paid_amount'] > 0.01)); ?>
+    <div class="col-lg-3 col-md-6">
+        <div class="card h-100">
+            <div class="card-header py-3 d-flex align-items-center justify-content-between">
+                <span class="fw-semibold"><i class="bi bi-check2-circle me-2 text-success"></i>Paid</span>
+                <span class="badge bg-success-subtle text-success border border-success-subtle"><?= count($paidInvoices) ?></span>
+            </div>
+            <div class="list-group list-group-flush" style="max-height:480px;overflow-y:auto;">
+                <?php if (empty($paidInvoices)): ?>
+                <div class="text-center text-muted py-5 small"><i class="bi bi-wallet2 d-block fs-3 mb-2 opacity-25"></i>No paid invoices in this range.</div>
+                <?php else: foreach ($paidInvoices as $s):
+                    $cur      = $s['currency'];
+                    $paidOrig = toOrig((float)$s['paid_amount'], $cur, $s['exchange_rate'], $rates); ?>
+                <div class="list-group-item">
+                    <div class="d-flex justify-content-between gap-2">
+                        <div class="min-w-0">
+                            <div class="fw-semibold text-truncate"><?= htmlspecialchars($s['customer_name']) ?></div>
+                            <div class="text-muted" style="font-size:0.72rem;">
+                                #<?= $s['bill_no'] ?: str_pad($s['id'],4,'0',STR_PAD_LEFT) ?> · <?= $shortDate($s['d']) ?>
+                            </div>
+                        </div>
+                        <div class="text-end text-nowrap">
+                            <div class="fw-bold text-success"><?= $fmt($paidOrig, $cur) ?></div>
+                            <?php if ($cur !== 'AFN'): ?><div class="text-muted" style="font-size:0.68rem;">≈ <?= formatAFN((float)$s['paid_amount']) ?></div><?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+                <?php endforeach; endif; ?>
+            </div>
+            <div class="card-footer bg-white">
+                <?= renderCurTotals($totInvPaid, $CURS, 'Total paid') ?>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Column 3: Unpaid balances ── -->
+    <div class="col-lg-3 col-md-6">
         <div class="card h-100">
             <div class="card-header py-3 d-flex align-items-center justify-content-between">
                 <span class="fw-semibold"><i class="bi bi-exclamation-circle me-2 text-danger"></i>Remaining (unpaid)</span>
@@ -221,8 +250,8 @@ require_once '../includes/header.php';
         </div>
     </div>
 
-    <!-- ── Column 3: Money received ── -->
-    <div class="col-lg-4">
+    <!-- ── Column 4: Money received ── -->
+    <div class="col-lg-3 col-md-6">
         <div class="card h-100">
             <div class="card-header py-3 d-flex align-items-center justify-content-between">
                 <span class="fw-semibold"><i class="bi bi-cash-coin me-2 text-success"></i>Money received</span>
@@ -275,12 +304,13 @@ require_once '../includes/header.php';
         <div class="row g-3 text-center">
             <?php
             $summaryCols = [
-                ['Invoiced',       $totInv,  'text-primary'],
-                ['Unpaid',         $totUnp,  'text-danger'],
-                ['Received',       $totPaid, 'text-success'],
+                ['Invoiced',       $totInv,     'text-primary'],
+                ['Paid',           $totInvPaid, 'text-success'],
+                ['Unpaid',         $totUnp,     'text-danger'],
+                ['Received',       $totPaid,    'text-success'],
             ];
             foreach ($summaryCols as [$lbl, $tot, $clr]): ?>
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <div class="p-3 rounded" style="background:rgba(0,0,0,0.02);border:1px solid rgba(0,0,0,0.06);">
                     <div class="text-muted small fw-semibold text-uppercase mb-2"><?= $lbl ?></div>
                     <?php foreach ($CURS as $c): ?>
