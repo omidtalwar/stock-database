@@ -128,7 +128,7 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS missions (
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $act = $_POST['action'] ?? '';
     if ($act === 'create_mission' && validateFormToken('mission_create')) {
-        $mType   = in_array($_POST['m_type'] ?? '', ['sale','loan'], true) ? $_POST['m_type'] : 'sale';
+        $mType   = in_array($_POST['m_type'] ?? '', ['sale','loan','unpaid'], true) ? $_POST['m_type'] : 'sale';
         $mTarget = max(0, (float)($_POST['m_target'] ?? 0));
         $mTitle  = trim($_POST['m_title'] ?? '');
         $mPeriod = $_POST['m_period'] ?? 'week';
@@ -164,6 +164,12 @@ foreach ($missions as &$mn) {
                              FROM payments
                              WHERE COALESCE(source,'manual')='manual'
                                AND COALESCE(payment_date, DATE(created_at)) BETWEEN ? AND ?");
+    } elseif ($mn['type'] === 'unpaid') {
+        // Remaining unpaid balance of invoices in the window (matches the Remaining column).
+        $st = $pdo->prepare("SELECT COALESCE(SUM(balance),0)
+                             FROM sales
+                             WHERE balance > 0.01
+                               AND COALESCE(sale_date, DATE(created_at)) BETWEEN ? AND ?");
     } else {
         // Sales invoiced in the window.
         $st = $pdo->prepare("SELECT COALESCE(SUM(total_amount),0)
@@ -207,19 +213,24 @@ require_once '../includes/header.php';
 <!-- ── Missions / Goals ─────────────────────────────────────────────────────── -->
 <?php if (!empty($missions)): ?>
 <div class="mission-grid mb-4">
-    <?php foreach ($missions as $mn):
+    <?php
+        $typeMeta = [
+            'sale'   => ['#0067C0', 'bi-receipt',    'Sale',   'Sales goal'],
+            'loan'   => ['#F59E0B', 'bi-cash-stack', 'Loan',   'Loan collection goal'],
+            'unpaid' => ['#EF4444', 'bi-exclamation-circle', 'Unpaid', 'Remaining (unpaid) goal'],
+        ];
+        foreach ($missions as $mn):
         [$stLabel, $stColor, $stIcon] = $mn['status'];
-        $isLoan  = $mn['type'] === 'loan';
-        $accent  = $isLoan ? '#F59E0B' : '#0067C0';
+        [$accent, $tIcon, $tLabel, $tDefault] = $typeMeta[$mn['type']] ?? $typeMeta['sale'];
         $tgt     = (float)$mn['target_amount'];
         $remain  = max(0, $tgt - (float)$mn['achieved']);
-        $title   = $mn['title'] ?: ($isLoan ? 'Loan collection goal' : 'Sales goal');
+        $title   = $mn['title'] ?: $tDefault;
     ?>
     <div class="mission-card" style="--accent:<?= $accent ?>;--status:<?= $stColor ?>;">
         <div class="mc-top">
             <div class="mc-type" style="background:<?= $accent ?>1a;color:<?= $accent ?>;">
-                <i class="bi <?= $isLoan ? 'bi-cash-stack' : 'bi-receipt' ?>"></i>
-                <?= $isLoan ? 'Loan' : 'Sale' ?>
+                <i class="bi <?= $tIcon ?>"></i>
+                <?= $tLabel ?>
             </div>
             <div class="mc-status" style="color:<?= $stColor ?>;">
                 <i class="bi <?= $stIcon ?>"></i> <?= $stLabel ?>
@@ -493,18 +504,25 @@ require_once '../includes/header.php';
                     <!-- Type -->
                     <label class="form-label fw-semibold">Goal type</label>
                     <div class="row g-2 mb-3" id="goalTypeRow">
-                        <div class="col-6">
+                        <div class="col-4">
                             <input type="radio" class="btn-check" name="m_type" id="gtSale" value="sale" checked>
-                            <label class="btn btn-outline-primary w-100 py-3" for="gtSale">
+                            <label class="btn btn-outline-primary w-100 py-3 h-100" for="gtSale">
                                 <i class="bi bi-receipt d-block fs-4 mb-1"></i>Sales target
-                                <div class="small text-muted">tracked from invoices</div>
+                                <div class="small text-muted">from invoices</div>
                             </label>
                         </div>
-                        <div class="col-6">
+                        <div class="col-4">
                             <input type="radio" class="btn-check" name="m_type" id="gtLoan" value="loan">
-                            <label class="btn btn-outline-warning w-100 py-3" for="gtLoan">
+                            <label class="btn btn-outline-warning w-100 py-3 h-100" for="gtLoan">
                                 <i class="bi bi-cash-stack d-block fs-4 mb-1"></i>Loan collection
-                                <div class="small text-muted">money via payment page</div>
+                                <div class="small text-muted">via payment page</div>
+                            </label>
+                        </div>
+                        <div class="col-4">
+                            <input type="radio" class="btn-check" name="m_type" id="gtUnpaid" value="unpaid">
+                            <label class="btn btn-outline-danger w-100 py-3 h-100" for="gtUnpaid">
+                                <i class="bi bi-exclamation-circle d-block fs-4 mb-1"></i>Remaining
+                                <div class="small text-muted">unpaid balance</div>
                             </label>
                         </div>
                     </div>
