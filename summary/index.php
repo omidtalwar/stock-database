@@ -128,7 +128,7 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS missions (
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $act = $_POST['action'] ?? '';
     if ($act === 'create_mission' && validateFormToken('mission_create')) {
-        $mType   = in_array($_POST['m_type'] ?? '', ['sale','loan','unpaid'], true) ? $_POST['m_type'] : 'sale';
+        $mType   = in_array($_POST['m_type'] ?? '', ['sale','paid','loan','unpaid'], true) ? $_POST['m_type'] : 'sale';
         $mTarget = max(0, (float)($_POST['m_target'] ?? 0));
         $mTitle  = trim($_POST['m_title'] ?? '');
         $mPeriod = $_POST['m_period'] ?? 'week';
@@ -164,6 +164,11 @@ foreach ($missions as &$mn) {
                              FROM payments
                              WHERE COALESCE(source,'manual')='manual'
                                AND COALESCE(payment_date, DATE(created_at)) BETWEEN ? AND ?");
+    } elseif ($mn['type'] === 'paid') {
+        // Amount already paid on sales invoices in the window.
+        $st = $pdo->prepare("SELECT COALESCE(SUM(paid_amount),0)
+                             FROM sales
+                             WHERE COALESCE(sale_date, DATE(created_at)) BETWEEN ? AND ?");
     } elseif ($mn['type'] === 'unpaid') {
         // Remaining unpaid balance of invoices in the window (matches the Remaining column).
         $st = $pdo->prepare("SELECT COALESCE(SUM(balance),0)
@@ -216,6 +221,7 @@ require_once '../includes/header.php';
     <?php
         $typeMeta = [
             'sale'   => ['#0067C0', 'bi-receipt',    'Sale',   'Sales goal'],
+            'paid'   => ['#10B981', 'bi-wallet2',    'Paid',   'Paid amount goal'],
             'loan'   => ['#F59E0B', 'bi-cash-stack', 'Loan',   'Loan collection goal'],
             'unpaid' => ['#EF4444', 'bi-exclamation-circle', 'Unpaid', 'Remaining (unpaid) goal'],
         ];
@@ -509,6 +515,13 @@ require_once '../includes/header.php';
                             <label class="btn btn-outline-primary w-100 py-3 h-100" for="gtSale">
                                 <i class="bi bi-receipt d-block fs-4 mb-1"></i>Sales target
                                 <div class="small text-muted">from invoices</div>
+                            </label>
+                        </div>
+                        <div class="col-4">
+                            <input type="radio" class="btn-check" name="m_type" id="gtPaid" value="paid">
+                            <label class="btn btn-outline-success w-100 py-3 h-100" for="gtPaid">
+                                <i class="bi bi-wallet2 d-block fs-4 mb-1"></i>Paid amount
+                                <div class="small text-muted">from sales paid</div>
                             </label>
                         </div>
                         <div class="col-4">
