@@ -44,6 +44,8 @@ function tgApi(string $token, string $method, array $params = [], int $timeout =
             CURLOPT_CONNECTTIMEOUT => 4,
         ]);
         $res = curl_exec($ch);
+        $curlError = curl_error($ch);
+        $httpCode  = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
     } else {
         $ctx = stream_context_create(['http' => [
@@ -53,9 +55,19 @@ function tgApi(string $token, string $method, array $params = [], int $timeout =
             'timeout' => $timeout,
         ]]);
         $res = @file_get_contents($url, false, $ctx);
+        $curlError = $res === false ? 'PHP could not connect to Telegram' : '';
+        $httpCode  = 0;
     }
     $j = $res ? json_decode($res, true) : null;
-    return is_array($j) ? $j : ['ok' => false];
+    if (is_array($j)) {
+        $j['_http_code'] = $httpCode;
+        return $j;
+    }
+    return [
+        'ok'          => false,
+        'description' => $curlError !== '' ? $curlError : "Telegram returned no JSON (HTTP {$httpCode})",
+        '_http_code'  => $httpCode,
+    ];
 }
 
 /** Low-level send. Returns true on a transport success. */

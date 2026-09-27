@@ -1,4 +1,5 @@
-﻿<?php
+﻿<!-- Hi smtpg 1500-->
+<?php
 require_once 'includes/session.php';
 requireLogin();
 require_once 'config/db.php';
@@ -725,7 +726,7 @@ body.pin-locked .debtor-debt .s { filter: blur(7px); user-select: none; pointer-
     <div class="sidebar-brand">
         <div class="brand-icon">FZL</div>
         <div>
-            <div class="brand-name">FZL System</div>
+            <div class="brand-name">FZL System FZL</div>
             <div class="brand-sub"><?= __('management_system') ?></div>
         </div>
     </div>
@@ -1191,7 +1192,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').cat
 (function () {
     // Lock button must be wired regardless of whether the PIN card is in the DOM
     document.getElementById('lockDashBtn')?.addEventListener('click', () => {
-        window.location.href = '/dashboard.php?lock=1';
+        window.location.href = '/   .php?lock=1';
     });
 
     const card  = document.getElementById('pinCard');
