@@ -29,6 +29,7 @@ requireLogin();
 require_once '../includes/lang.php';
 require_once '../config/db.php';
 require_once '../includes/currency.php';
+require_once '../includes/customer_debt.php';
 
 // Auto-migrate: add share_token column
 try { $pdo->exec("ALTER TABLE customers ADD COLUMN share_token VARCHAR(64) NULL"); } catch (\PDOException $e) {}
@@ -67,7 +68,7 @@ ensureSaleRates($pdo); // freeze invoices to their sale-time rate
 
 $sales = $pdo->prepare("
     SELECT s.*, u.full_name AS created_by
-    FROM sales s JOIN users u ON u.id = s.created_by
+    FROM sales s LEFT JOIN users u ON u.id = s.created_by
     WHERE s.customer_id = ? ORDER BY s.created_at DESC
 ");
 $sales->execute([$id]);
@@ -77,7 +78,7 @@ $payments = $pdo->prepare("
     SELECT p.*, u.full_name AS created_by,
            s.id AS inv_id, s.bill_no AS inv_bill_no
     FROM payments p
-    JOIN users u ON u.id = p.created_by
+    LEFT JOIN users u ON u.id = p.created_by
     LEFT JOIN sales s ON s.id = p.sale_id
     WHERE p.customer_id = ? ORDER BY COALESCE(p.payment_date, DATE(p.created_at)) DESC, p.created_at DESC
 ");
@@ -88,9 +89,8 @@ $totalSales = array_sum(array_column($sales, 'total_amount'));
 $totalPayments = 0;
 $paysByCur  = ['AFN'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0],'USD'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0],'PKR'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0]];
 $salesByCur = ['AFN'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0],'USD'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0],'PKR'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0]];
-$debtByCur  = ['AFN'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0],'USD'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0],'PKR'=>['orig'=>0.0,'afn'=>0.0,'cnt'=>0]];
 
-// Build sales totals and invoice-level debt first
+// Build sales totals using frozen invoice rates
 foreach ($sales as $s) {
     $sCur  = $s['currency'] ?? 'AFN';
     $sAfn  = (float)$s['total_amount'];
@@ -101,12 +101,6 @@ foreach ($sales as $s) {
         $salesByCur[$sCur]['orig'] += $sOrig;
         $salesByCur[$sCur]['afn']  += $sAfn;
         $salesByCur[$sCur]['cnt']  ++;
-    }
-    $sBal = max(0.0, $sAfn - (float)$s['paid_amount']);
-    if ($sBal > 0.01 && isset($debtByCur[$sCur])) {
-        $debtByCur[$sCur]['orig'] += $sCur === 'AFN' ? $sBal : fromAFN($sBal, $sRate);
-        $debtByCur[$sCur]['afn']  += $sBal;
-        $debtByCur[$sCur]['cnt']  ++;
     }
 }
 
@@ -120,12 +114,9 @@ foreach ($payments as $p) {
         $paysByCur[$cur]['afn']  += $afn;
         $paysByCur[$cur]['cnt']  ++;
     }
-    if (empty($p['inv_id']) && isset($debtByCur[$cur])) {
-        $debtByCur[$cur]['orig'] = max(0, $debtByCur[$cur]['orig'] - (float)$p['amount']);
-        $debtByCur[$cur]['afn']  = max(0, $debtByCur[$cur]['afn']  - $afn);
-        if ($debtByCur[$cur]['orig'] < 0.01) $debtByCur[$cur]['cnt'] = 0;
-    }
 }
+
+$debtByCur = customerDebtByCurrency($sales, $payments, $rates);
 
 // Gregorian (Y-m-d / timestamp) → Afghan Solar Hijri label like 1405/03/21
 function custToShamsi(int $gy, int $gm, int $gd): array {

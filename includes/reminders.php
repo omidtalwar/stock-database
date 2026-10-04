@@ -4,6 +4,9 @@
  * (no payment / no activity) for at least N days. Default threshold: 15 days.
  */
 
+require_once __DIR__ . '/currency.php';
+require_once __DIR__ . '/customer_debt.php';
+
 function ensurePaymentDateColumn(PDO $pdo): void {
     static $done = false;
     if ($done) return;
@@ -19,6 +22,7 @@ function ensurePaymentDateColumn(PDO $pdo): void {
  */
 function overdueCustomers(PDO $pdo, int $days = 15): array {
     ensurePaymentDateColumn($pdo);
+    ensureSaleRates($pdo);
     $stmt = $pdo->prepare("
         SELECT c.*,
                lp.last_payment,
@@ -34,12 +38,32 @@ function overdueCustomers(PDO $pdo, int $days = 15): array {
             SELECT customer_id, MAX(DATE(created_at)) AS last_sale
             FROM sales GROUP BY customer_id
         ) ls ON ls.customer_id = c.id
-        WHERE c.total_debt > 0.01
-          AND DATEDIFF(CURDATE(), COALESCE(lp.last_payment, ls.last_sale, DATE(c.created_at))) >= ?
+        WHERE DATEDIFF(CURDATE(), COALESCE(lp.last_payment, ls.last_sale, DATE(c.created_at))) >= ?
         ORDER BY days_since DESC, c.total_debt DESC
     ");
     $stmt->execute([$days]);
-    return $stmt->fetchAll();
+    $customers = $stmt->fetchAll();
+    if (!$customers) return [];
+    $ids = array_column($customers, 'id');
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    $salesStmt = $pdo->prepare("SELECT * FROM sales WHERE customer_id IN ($placeholders)");
+    $salesStmt->execute($ids);
+    $sales = [];
+    foreach ($salesStmt->fetchAll() as $sale) $sales[$sale['customer_id']][] = $sale;
+    $paymentsStmt = $pdo->prepare("SELECT p.*, s.id AS inv_id FROM payments p
+        LEFT JOIN sales s ON s.id = p.sale_id WHERE p.customer_id IN ($placeholders)");
+    $paymentsStmt->execute($ids);
+    $payments = [];
+    foreach ($paymentsStmt->fetchAll() as $payment) $payments[$payment['customer_id']][] = $payment;
+    $rates = getAllRates($pdo);
+    foreach ($customers as &$customer) {
+        $buckets = customerDebtByCurrency($sales[$customer['id']] ?? [], $payments[$customer['id']] ?? [], $rates);
+        $customer['total_debt'] = array_sum(array_column($buckets, 'afn'));
+    }
+    unset($customer);
+    $customers = array_values(array_filter($customers, fn($c) => $c['total_debt'] > 0.01));
+    usort($customers, fn($a, $b) => ($b['days_since'] <=> $a['days_since']) ?: ($b['total_debt'] <=> $a['total_debt']));
+    return $customers;
 }
 
 /**
@@ -66,26 +90,10 @@ function reminderSummaryMessage(PDO $pdo, int $days = 15): string {
     return $msg;
 }
 
-/** Lightweight count for the sidebar badge. Never throws. */
+/** Sidebar count uses the same balances as the reminder list. Never throws. */
 function overdueCount(PDO $pdo, int $days = 15): int {
     try {
-        ensurePaymentDateColumn($pdo);
-        $stmt = $pdo->prepare("
-            SELECT COUNT(*)
-            FROM customers c
-            LEFT JOIN (
-                SELECT customer_id, MAX(COALESCE(payment_date, DATE(created_at))) AS last_payment
-                FROM payments GROUP BY customer_id
-            ) lp ON lp.customer_id = c.id
-            LEFT JOIN (
-                SELECT customer_id, MAX(DATE(created_at)) AS last_sale
-                FROM sales GROUP BY customer_id
-            ) ls ON ls.customer_id = c.id
-            WHERE c.total_debt > 0.01
-              AND DATEDIFF(CURDATE(), COALESCE(lp.last_payment, ls.last_sale, DATE(c.created_at))) >= ?
-        ");
-        $stmt->execute([$days]);
-        return (int)$stmt->fetchColumn();
+        return count(overdueCustomers($pdo, $days));
     } catch (\Throwable $e) {
         return 0;
     }
