@@ -6,8 +6,10 @@ require_once '../config/db.php';
 require_once '../includes/telegram.php';
 require_once '../includes/period.php';
 require_once 'helpers.php';
+require_once '../accessory-customers/helpers.php';
 
 ensureAccessoriesTables($pdo);
+ensureAccessoryCustomerTables($pdo);
 
 $pageTitle = __('accessories_title');
 
@@ -147,6 +149,19 @@ $summary = [
     'amount' => array_sum(array_map(fn($o) => (float)$o['remaining_amount'], $owners)),
 ];
 
+// ── Accessory Customers (separate module) shown here as a quick list ──
+$accCustomers = $pdo->query("
+    SELECT c.*,
+           COUNT(t.id) AS txn_count,
+           COALESCE(SUM(t.cloth_weight), 0)  AS total_cloth,
+           COALESCE(SUM(t.demand_weight), 0) AS total_demand,
+           MAX(COALESCE(t.txn_date, DATE(t.created_at))) AS last_txn_date
+    FROM accessory_customers c
+    LEFT JOIN accessory_customer_txns t ON t.customer_id = c.id
+    GROUP BY c.id
+    ORDER BY c.created_at DESC, c.name ASC
+")->fetchAll();
+
 $formToken = generateFormToken('accessory_owner');
 $deleteToken = generateFormToken('accessory_owner_delete');
 
@@ -270,6 +285,77 @@ require_once '../includes/header.php';
                                 </button>
                             </form>
                         </div>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+                <?php endif; ?>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card mt-4">
+    <div class="card-header py-3 d-flex align-items-center justify-content-between gap-2 flex-wrap">
+        <span class="fw-semibold"><i class="bi bi-person-badge me-2" style="color:#DB2777;"></i><?= __('nav_acc_customers') ?></span>
+        <div class="d-flex align-items-center gap-2">
+            <span class="text-muted small"><?= count($accCustomers) ?> customer(s)</span>
+            <a href="/accessory-customers/index.php" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-box-arrow-up-right me-1"></i>Open
+            </a>
+            <a href="/accessory-customers/index.php" class="btn btn-sm btn-primary">
+                <i class="bi bi-person-plus me-1"></i>Add Customer
+            </a>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Customer</th>
+                    <th class="d-none d-md-table-cell">Phone</th>
+                    <th class="text-end">Bills</th>
+                    <th class="text-end">Cloth Wt</th>
+                    <th class="text-end">Demand Wt</th>
+                    <th class="d-none d-lg-table-cell">Last Bill</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php if (empty($accCustomers)): ?>
+                <tr>
+                    <td colspan="7" class="text-center text-muted py-5">
+                        No accessory customers yet.
+                        <a href="/accessory-customers/index.php">Add the first customer</a> to start adding bills.
+                    </td>
+                </tr>
+                <?php else: ?>
+                <?php foreach ($accCustomers as $c): ?>
+                <tr>
+                    <td>
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="text-white fw-bold d-flex align-items-center justify-content-center"
+                                 style="width:34px;height:34px;border-radius:8px;background:#DB2777;flex-shrink:0;">
+                                <?= strtoupper(substr($c['name'], 0, 1)) ?>
+                            </div>
+                            <div>
+                                <div class="fw-semibold"><?= htmlspecialchars($c['name']) ?></div>
+                                <?php if ($c['notes']): ?>
+                                <div class="text-muted small"><?= htmlspecialchars($c['notes']) ?></div>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="d-none d-md-table-cell"><?= htmlspecialchars($c['phone'] ?? '') ?></td>
+                    <td class="text-end"><?= number_format((int)$c['txn_count']) ?></td>
+                    <td class="text-end fw-semibold"><?= number_format((float)$c['total_cloth'], 2) ?></td>
+                    <td class="text-end fw-semibold" style="color:#7C3AED;"><?= number_format((float)$c['total_demand'], 2) ?></td>
+                    <td class="d-none d-lg-table-cell text-muted small">
+                        <?= $c['last_txn_date'] ? htmlspecialchars(accCustShamsiDate($c['last_txn_date'])) : '-' ?>
+                    </td>
+                    <td class="text-end">
+                        <a href="/accessory-customers/customer.php?id=<?= $c['id'] ?>" class="btn btn-sm btn-light" title="Open customer">
+                            <i class="bi bi-box-arrow-in-right"></i>
+                        </a>
                     </td>
                 </tr>
                 <?php endforeach; ?>
