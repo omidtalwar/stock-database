@@ -5,17 +5,19 @@ require_once '../includes/lang.php';
 require_once '../config/db.php';
 require_once '../includes/telegram.php';
 require_once '../includes/period.php';
+require_once '../accessories/helpers.php';
 require_once 'helpers.php';
 
+ensureAccessoriesTables($pdo);       // makes sure accessory_owners exists
 ensureAccessoryCustomerTables($pdo);
 
 $id = (int)($_GET['id'] ?? 0);
-$stmt = $pdo->prepare("SELECT * FROM customers WHERE id = ?");
+$stmt = $pdo->prepare("SELECT * FROM accessory_owners WHERE id = ?");
 $stmt->execute([$id]);
 $customer = $stmt->fetch();
 
 if (!$customer) {
-    $_SESSION['error'] = 'Customer not found.';
+    $_SESSION['error'] = 'Accessory owner not found.';
     header('Location: index.php'); exit;
 }
 

@@ -4,8 +4,10 @@ requireLogin();
 require_once '../includes/lang.php';
 require_once '../config/db.php';
 require_once '../includes/period.php';
+require_once '../accessories/helpers.php';
 require_once 'helpers.php';
 
+ensureAccessoriesTables($pdo);       // makes sure accessory_owners exists
 ensureAccessoryCustomerTables($pdo);
 
 $pageTitle = __('nav_acc_customers');
@@ -14,36 +16,34 @@ $q = trim($_GET['q'] ?? '');
 $where = '';
 $params = [];
 if ($q !== '') {
-    $where = "WHERE c.name LIKE ? OR c.phone LIKE ? OR c.shop_name LIKE ?";
-    $params = ['%' . $q . '%', '%' . $q . '%', '%' . $q . '%'];
+    $where = "WHERE o.name LIKE ? OR o.phone LIKE ?";
+    $params = ['%' . $q . '%', '%' . $q . '%'];
 }
 
 // ── Time-period filter (Today / Week / Month / All / Custom) ──
 $pf    = periodResolve();                                             // default: All Time
 $condT = periodCond("COALESCE(t.txn_date, DATE(t.created_at))", $pf); // accessory bills
 
-// List the registered (main) customers, one row per NAME (duplicate customer
-// records with the same name are merged); attach their accessory-bill stats.
-$customersStmt = $pdo->prepare("
-    SELECT MIN(c.id) AS id, c.name,
-           MAX(c.phone) AS phone, MAX(c.shop_name) AS shop_name,
+// List the Accessory Owners; attach their cloth/demand-bill stats.
+$ownersStmt = $pdo->prepare("
+    SELECT o.id, o.name, o.phone,
            COUNT(t.id) AS txn_count,
            COALESCE(SUM(t.cloth_weight), 0)  AS total_cloth,
            COALESCE(SUM(t.demand_weight), 0) AS total_demand,
            MAX(COALESCE(t.txn_date, DATE(t.created_at))) AS last_txn_date
-    FROM customers c
-    LEFT JOIN accessory_customer_txns t ON t.customer_id = c.id AND ($condT)
+    FROM accessory_owners o
+    LEFT JOIN accessory_customer_txns t ON t.customer_id = o.id AND ($condT)
     $where
-    GROUP BY c.name
-    ORDER BY c.name ASC
+    GROUP BY o.id
+    ORDER BY o.name ASC
 ");
-$customersStmt->execute($params);
-$customers = $customersStmt->fetchAll();
+$ownersStmt->execute($params);
+$owners = $ownersStmt->fetchAll();
 
 $summary = [
-    'customers' => count($customers),
-    'cloth'     => array_sum(array_map(fn($c) => (float)$c['total_cloth'], $customers)),
-    'demand'    => array_sum(array_map(fn($c) => (float)$c['total_demand'], $customers)),
+    'owners'  => count($owners),
+    'cloth'   => array_sum(array_map(fn($o) => (float)$o['total_cloth'], $owners)),
+    'demand'  => array_sum(array_map(fn($o) => (float)$o['total_demand'], $owners)),
 ];
 
 require_once '../includes/header.php';
@@ -52,10 +52,10 @@ require_once '../includes/header.php';
 <div class="page-header d-flex align-items-center justify-content-between">
     <div>
         <h4 class="mb-1"><?= __('nav_acc_customers') ?></h4>
-        <p class="text-muted small mb-0">Record accessory bills (cloth &amp; demand weight) for your registered customers</p>
+        <p class="text-muted small mb-0">Record cloth &amp; demand-weight bills for your accessory owners</p>
     </div>
-    <a href="/customers/add.php" class="btn btn-primary">
-        <i class="bi bi-person-plus me-2"></i><?= __('cust_add') ?>
+    <a href="/accessories/index.php" class="btn btn-primary">
+        <i class="bi bi-person-plus me-2"></i>Add Owner
     </a>
 </div>
 
@@ -66,8 +66,8 @@ require_once '../includes/header.php';
     <div class="col-12 col-lg-4">
         <div class="card border-0" style="background:rgba(244,114,182,0.12);">
             <div class="card-body">
-                <div class="text-muted small fw-semibold text-uppercase">Customers</div>
-                <div class="fs-4 fw-bold" style="color:#DB2777;"><?= number_format($summary['customers']) ?></div>
+                <div class="text-muted small fw-semibold text-uppercase">Owners</div>
+                <div class="fs-4 fw-bold" style="color:#DB2777;"><?= number_format($summary['owners']) ?></div>
             </div>
         </div>
     </div>
@@ -91,25 +91,24 @@ require_once '../includes/header.php';
 
 <div class="card">
     <div class="card-header py-3 d-flex align-items-center justify-content-between gap-2 flex-wrap">
-        <span class="fw-semibold"><i class="bi bi-people me-2 text-primary"></i>Customers</span>
+        <span class="fw-semibold"><i class="bi bi-people me-2 text-primary"></i>Accessory Owners</span>
         <div class="d-flex align-items-center gap-2">
             <form method="GET" class="d-flex gap-1">
                 <input type="text" name="q" class="form-control form-control-sm" style="min-width:200px;"
-                       placeholder="Search name, phone or shop…" value="<?= htmlspecialchars($q) ?>">
+                       placeholder="Search name or phone…" value="<?= htmlspecialchars($q) ?>">
                 <button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-search"></i></button>
                 <?php if ($q !== ''): ?>
                 <a href="index.php" class="btn btn-sm btn-light" title="Clear"><i class="bi bi-x-lg"></i></a>
                 <?php endif; ?>
             </form>
-            <span class="text-muted small"><?= count($customers) ?> shown</span>
+            <span class="text-muted small"><?= count($owners) ?> shown</span>
         </div>
     </div>
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
             <thead>
                 <tr>
-                    <th>Customer</th>
-                    <th class="d-none d-md-table-cell">Shop</th>
+                    <th>Owner</th>
                     <th class="d-none d-md-table-cell">Phone</th>
                     <th class="text-end">Bills</th>
                     <th class="text-end">Cloth Wt</th>
@@ -119,38 +118,37 @@ require_once '../includes/header.php';
                 </tr>
             </thead>
             <tbody>
-                <?php if (empty($customers)): ?>
+                <?php if (empty($owners)): ?>
                 <tr>
-                    <td colspan="8" class="text-center text-muted py-5">
+                    <td colspan="7" class="text-center text-muted py-5">
                         <?php if ($q !== ''): ?>
-                        No customers match "<?= htmlspecialchars($q) ?>".
+                        No owners match "<?= htmlspecialchars($q) ?>".
                         <?php else: ?>
-                        No customers registered yet. <a href="/customers/add.php">Add a customer</a> first.
+                        No accessory owners yet. <a href="/accessories/index.php">Register an owner</a> first.
                         <?php endif; ?>
                     </td>
                 </tr>
                 <?php else: ?>
-                <?php foreach ($customers as $customer): ?>
+                <?php foreach ($owners as $owner): ?>
                 <tr>
                     <td>
                         <div class="d-flex align-items-center gap-2">
                             <div class="text-white fw-bold d-flex align-items-center justify-content-center"
                                  style="width:34px;height:34px;border-radius:8px;background:#DB2777;flex-shrink:0;">
-                                <?= strtoupper(substr($customer['name'], 0, 1)) ?>
+                                <?= strtoupper(substr($owner['name'], 0, 1)) ?>
                             </div>
-                            <div class="fw-semibold"><?= htmlspecialchars($customer['name']) ?></div>
+                            <div class="fw-semibold"><?= htmlspecialchars($owner['name']) ?></div>
                         </div>
                     </td>
-                    <td class="d-none d-md-table-cell"><?= htmlspecialchars($customer['shop_name'] ?? '') ?></td>
-                    <td class="d-none d-md-table-cell"><?= htmlspecialchars($customer['phone'] ?? '') ?></td>
-                    <td class="text-end"><?= number_format((int)$customer['txn_count']) ?></td>
-                    <td class="text-end fw-semibold"><?= number_format((float)$customer['total_cloth'], 2) ?></td>
-                    <td class="text-end fw-semibold" style="color:#7C3AED;"><?= number_format((float)$customer['total_demand'], 2) ?></td>
+                    <td class="d-none d-md-table-cell"><?= htmlspecialchars($owner['phone'] ?? '') ?></td>
+                    <td class="text-end"><?= number_format((int)$owner['txn_count']) ?></td>
+                    <td class="text-end fw-semibold"><?= number_format((float)$owner['total_cloth'], 2) ?></td>
+                    <td class="text-end fw-semibold" style="color:#7C3AED;"><?= number_format((float)$owner['total_demand'], 2) ?></td>
                     <td class="d-none d-lg-table-cell text-muted small">
-                        <?= $customer['last_txn_date'] ? htmlspecialchars(accCustShamsiDate($customer['last_txn_date'])) : '-' ?>
+                        <?= $owner['last_txn_date'] ? htmlspecialchars(accCustShamsiDate($owner['last_txn_date'])) : '-' ?>
                     </td>
                     <td>
-                        <a href="customer.php?id=<?= $customer['id'] ?>" class="btn btn-sm btn-primary" title="Add / view accessory bills">
+                        <a href="customer.php?id=<?= $owner['id'] ?>" class="btn btn-sm btn-primary" title="Add / view bills">
                             <i class="bi bi-receipt me-1"></i>Bills
                         </a>
                     </td>

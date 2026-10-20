@@ -149,19 +149,17 @@ $summary = [
     'amount' => array_sum(array_map(fn($o) => (float)$o['remaining_amount'], $owners)),
 ];
 
-// ── Accessory Customers quick list: registered customers who have accessory bills ──
-// Merged by name so a repeated customer name shows only once.
+// ── Accessory Customers quick list: accessory owners who have cloth/demand bills ──
 $accCustomers = $pdo->query("
-    SELECT MIN(c.id) AS id, c.name,
-           MAX(c.phone) AS phone, MAX(c.shop_name) AS shop_name,
+    SELECT o.id, o.name, o.phone,
            COUNT(t.id) AS txn_count,
            COALESCE(SUM(t.cloth_weight), 0)  AS total_cloth,
            COALESCE(SUM(t.demand_weight), 0) AS total_demand,
            MAX(COALESCE(t.txn_date, DATE(t.created_at))) AS last_txn_date
-    FROM customers c
-    JOIN accessory_customer_txns t ON t.customer_id = c.id
-    GROUP BY c.name
-    ORDER BY last_txn_date DESC, c.name ASC
+    FROM accessory_owners o
+    JOIN accessory_customer_txns t ON t.customer_id = o.id
+    GROUP BY o.id
+    ORDER BY last_txn_date DESC, o.name ASC
 ")->fetchAll();
 
 $formToken = generateFormToken('accessory_owner');
@@ -300,12 +298,9 @@ require_once '../includes/header.php';
     <div class="card-header py-3 d-flex align-items-center justify-content-between gap-2 flex-wrap">
         <span class="fw-semibold"><i class="bi bi-person-badge me-2" style="color:#DB2777;"></i><?= __('nav_acc_customers') ?></span>
         <div class="d-flex align-items-center gap-2">
-            <span class="text-muted small"><?= count($accCustomers) ?> customer(s)</span>
+            <span class="text-muted small"><?= count($accCustomers) ?> owner(s)</span>
             <a href="/accessory-customers/index.php" class="btn btn-sm btn-outline-primary">
                 <i class="bi bi-box-arrow-up-right me-1"></i>Open
-            </a>
-            <a href="/customers/add.php" class="btn btn-sm btn-primary">
-                <i class="bi bi-person-plus me-1"></i>Add Customer
             </a>
         </div>
     </div>
@@ -313,7 +308,7 @@ require_once '../includes/header.php';
         <table class="table table-hover align-middle mb-0">
             <thead>
                 <tr>
-                    <th>Customer</th>
+                    <th>Owner</th>
                     <th class="d-none d-md-table-cell">Phone</th>
                     <th class="text-end">Bills</th>
                     <th class="text-end">Cloth Wt</th>
@@ -327,7 +322,7 @@ require_once '../includes/header.php';
                 <tr>
                     <td colspan="7" class="text-center text-muted py-5">
                         No accessory bills recorded yet.
-                        <a href="/accessory-customers/index.php">Open the customers list</a> to start data entry.
+                        <a href="/accessory-customers/index.php">Open the owners list</a> to start data entry.
                     </td>
                 </tr>
                 <?php else: ?>
@@ -339,12 +334,7 @@ require_once '../includes/header.php';
                                  style="width:34px;height:34px;border-radius:8px;background:#DB2777;flex-shrink:0;">
                                 <?= strtoupper(substr($c['name'], 0, 1)) ?>
                             </div>
-                            <div>
-                                <div class="fw-semibold"><?= htmlspecialchars($c['name']) ?></div>
-                                <?php if (!empty($c['shop_name'])): ?>
-                                <div class="text-muted small"><?= htmlspecialchars($c['shop_name']) ?></div>
-                                <?php endif; ?>
-                            </div>
+                            <div class="fw-semibold"><?= htmlspecialchars($c['name']) ?></div>
                         </div>
                     </td>
                     <td class="d-none d-md-table-cell"><?= htmlspecialchars($c['phone'] ?? '') ?></td>

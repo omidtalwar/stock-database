@@ -3,14 +3,16 @@
 /**
  * Accessory Customers module helpers.
  *
- * Customers are the SAME people registered in the main `customers` table —
- * this module just records accessory bills against them. Each transaction
- * stores: Bill number · Date · Item name · Cloth weight · Demand weight.
+ * The "customers" here are the Accessory Owners registered in the Accessories
+ * module (the accessory_owners table). This module records cloth/demand-weight
+ * bills against them. Each transaction stores:
+ *   Bill number · Date · Item name · Cloth weight · Demand weight.
  * No money/amount is tracked here (see the Accessories owners module for that).
  */
 
 function ensureAccessoryCustomerTables(PDO $pdo): void {
-    // Transactions reference the main customers table (shared customer identity).
+    // Transactions reference the accessory_owners table (the people shown in
+    // the Accessories module).
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS accessory_customer_txns (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -27,38 +29,40 @@ function ensureAccessoryCustomerTables(PDO $pdo): void {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
 
-    // Migrate the first build, which linked txns to a separate accessory_customers
-    // table. Drop that foreign key so bills can be recorded against main customers.
+    // Drop any foreign key left over from earlier builds (which linked txns to
+    // accessory_customers, then to the main customers table).
     try {
-        $oldFk = $pdo->query("
-            SELECT CONSTRAINT_NAME
+        $fks = $pdo->query("
+            SELECT DISTINCT CONSTRAINT_NAME
             FROM information_schema.KEY_COLUMN_USAGE
             WHERE TABLE_SCHEMA = DATABASE()
               AND TABLE_NAME = 'accessory_customer_txns'
-              AND REFERENCED_TABLE_NAME = 'accessory_customers'
-            LIMIT 1
-        ")->fetchColumn();
-        if ($oldFk) {
-            $pdo->exec("ALTER TABLE accessory_customer_txns DROP FOREIGN KEY `$oldFk`");
+              AND REFERENCED_TABLE_NAME IS NOT NULL
+        ")->fetchAll(PDO::FETCH_COLUMN);
+        foreach ($fks as $fk) {
+            $pdo->exec("ALTER TABLE accessory_customer_txns DROP FOREIGN KEY `$fk`");
         }
     } catch (\Throwable $e) {
         // Non-fatal: logical referencing by customer_id still works.
     }
 
-    // Link to main customers with ON DELETE CASCADE, if not already linked.
+    // Link to accessory_owners with ON DELETE CASCADE, if available and not yet linked.
     try {
-        $hasFk = $pdo->query("
-            SELECT COUNT(*)
-            FROM information_schema.KEY_COLUMN_USAGE
+        $hasOwners = (int)$pdo->query("
+            SELECT COUNT(*) FROM information_schema.TABLES
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'accessory_owners'
+        ")->fetchColumn();
+        $hasFk = (int)$pdo->query("
+            SELECT COUNT(*) FROM information_schema.KEY_COLUMN_USAGE
             WHERE TABLE_SCHEMA = DATABASE()
               AND TABLE_NAME = 'accessory_customer_txns'
-              AND REFERENCED_TABLE_NAME = 'customers'
+              AND REFERENCED_TABLE_NAME = 'accessory_owners'
         ")->fetchColumn();
-        if ((int)$hasFk === 0) {
+        if ($hasOwners > 0 && $hasFk === 0) {
             $pdo->exec("
                 ALTER TABLE accessory_customer_txns
-                ADD CONSTRAINT fk_acc_cust_txn_main
-                FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+                ADD CONSTRAINT fk_acc_cust_txn_owner
+                FOREIGN KEY (customer_id) REFERENCES accessory_owners(id) ON DELETE CASCADE
             ");
         }
     } catch (\Throwable $e) {
