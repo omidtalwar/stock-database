@@ -28,6 +28,7 @@ return [
     'nav_payments'      => 'تادیات',
     'nav_stock'         => 'حساب - کابل',
     'nav_accessories'   => 'Accessories',
+    'nav_acc_customers' => 'د اکسسوري مشتریان',
     'nav_wholesale'     => 'د مال عمده پلور',
     'nav_warehouse'     => 'د کالا ګدام',
     'nav_users'         => 'د کاربرانو مدیریت',

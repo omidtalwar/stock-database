@@ -28,6 +28,7 @@ return [
     'nav_payments'      => 'Payments',
     'nav_stock'         => 'Stock Log',
     'nav_accessories'   => 'Accessories',
+    'nav_acc_customers' => 'Accessory Customers',
     'nav_wholesale'     => 'Wholesale',
     'nav_warehouse'     => 'Cloths Warehouse',
     'nav_users'         => 'User Management',

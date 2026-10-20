@@ -478,6 +478,7 @@ if (!empty($_SESSION['error'])) {
         <?= navItem('/payments/index.php',  'cash-coin',   __('nav_payments'),  $currentDir === 'payments',  '#4ADE80') ?>
         <?= navItem('/stock/index.php',     'archive',     __('nav_stock'),     $currentDir === 'stock',     '#22D3EE') ?>
         <?= navItem('/accessories/index.php', 'gem',        __('nav_accessories'), $currentDir === 'accessories', '#A78BFA') ?>
+        <?= navItem('/accessory-customers/index.php', 'person-badge', __('nav_acc_customers'), $currentDir === 'accessory-customers', '#F472B6') ?>
         <?= navItem('/wholesale/index.php', 'boxes',       __('nav_wholesale'), $currentDir === 'wholesale', '#14B8A6') ?>
         <?= navItem('/warehouse/index.php', 'basket3',     __('nav_warehouse'), $currentDir === 'warehouse', '#6366F1') ?>
 
