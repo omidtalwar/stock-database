@@ -150,15 +150,17 @@ $summary = [
 ];
 
 // ── Accessory Customers quick list: registered customers who have accessory bills ──
+// Merged by name so a repeated customer name shows only once.
 $accCustomers = $pdo->query("
-    SELECT c.id, c.name, c.phone, c.shop_name,
+    SELECT MIN(c.id) AS id, c.name,
+           MAX(c.phone) AS phone, MAX(c.shop_name) AS shop_name,
            COUNT(t.id) AS txn_count,
            COALESCE(SUM(t.cloth_weight), 0)  AS total_cloth,
            COALESCE(SUM(t.demand_weight), 0) AS total_demand,
            MAX(COALESCE(t.txn_date, DATE(t.created_at))) AS last_txn_date
     FROM customers c
     JOIN accessory_customer_txns t ON t.customer_id = c.id
-    GROUP BY c.id
+    GROUP BY c.name
     ORDER BY last_txn_date DESC, c.name ASC
 ")->fetchAll();
 

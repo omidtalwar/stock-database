@@ -22,9 +22,11 @@ if ($q !== '') {
 $pf    = periodResolve();                                             // default: All Time
 $condT = periodCond("COALESCE(t.txn_date, DATE(t.created_at))", $pf); // accessory bills
 
-// List the registered (main) customers; attach their accessory-bill stats.
+// List the registered (main) customers, one row per NAME (duplicate customer
+// records with the same name are merged); attach their accessory-bill stats.
 $customersStmt = $pdo->prepare("
-    SELECT c.id, c.name, c.phone, c.shop_name,
+    SELECT MIN(c.id) AS id, c.name,
+           MAX(c.phone) AS phone, MAX(c.shop_name) AS shop_name,
            COUNT(t.id) AS txn_count,
            COALESCE(SUM(t.cloth_weight), 0)  AS total_cloth,
            COALESCE(SUM(t.demand_weight), 0) AS total_demand,
@@ -32,7 +34,7 @@ $customersStmt = $pdo->prepare("
     FROM customers c
     LEFT JOIN accessory_customer_txns t ON t.customer_id = c.id AND ($condT)
     $where
-    GROUP BY c.id
+    GROUP BY c.name
     ORDER BY c.name ASC
 ");
 $customersStmt->execute($params);
