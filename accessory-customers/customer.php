@@ -10,7 +10,7 @@ require_once 'helpers.php';
 ensureAccessoryCustomerTables($pdo);
 
 $id = (int)($_GET['id'] ?? 0);
-$stmt = $pdo->prepare("SELECT * FROM accessory_customers WHERE id = ?");
+$stmt = $pdo->prepare("SELECT * FROM customers WHERE id = ?");
 $stmt->execute([$id]);
 $customer = $stmt->fetch();
 

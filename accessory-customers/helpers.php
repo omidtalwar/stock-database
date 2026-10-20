@@ -3,25 +3,14 @@
 /**
  * Accessory Customers module helpers.
  *
- * A customer is a parent record. Each customer owns any number of
- * transactions, where one transaction stores:
- *   Bill number · Date · Item name · Cloth weight · Demand weight
+ * Customers are the SAME people registered in the main `customers` table —
+ * this module just records accessory bills against them. Each transaction
+ * stores: Bill number · Date · Item name · Cloth weight · Demand weight.
  * No money/amount is tracked here (see the Accessories owners module for that).
  */
 
 function ensureAccessoryCustomerTables(PDO $pdo): void {
-    $pdo->exec("
-        CREATE TABLE IF NOT EXISTS accessory_customers (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            name VARCHAR(150) NOT NULL,
-            phone VARCHAR(40) NULL,
-            notes TEXT NULL,
-            created_by INT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            INDEX idx_accessory_customers_name (name)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    ");
-
+    // Transactions reference the main customers table (shared customer identity).
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS accessory_customer_txns (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -34,12 +23,47 @@ function ensureAccessoryCustomerTables(PDO $pdo): void {
             notes TEXT NULL,
             created_by INT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            INDEX idx_accessory_customer_txns_customer (customer_id),
-            CONSTRAINT fk_accessory_customer_txns_customer
-                FOREIGN KEY (customer_id) REFERENCES accessory_customers(id)
-                ON DELETE CASCADE
+            INDEX idx_accessory_customer_txns_customer (customer_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+
+    // Migrate the first build, which linked txns to a separate accessory_customers
+    // table. Drop that foreign key so bills can be recorded against main customers.
+    try {
+        $oldFk = $pdo->query("
+            SELECT CONSTRAINT_NAME
+            FROM information_schema.KEY_COLUMN_USAGE
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = 'accessory_customer_txns'
+              AND REFERENCED_TABLE_NAME = 'accessory_customers'
+            LIMIT 1
+        ")->fetchColumn();
+        if ($oldFk) {
+            $pdo->exec("ALTER TABLE accessory_customer_txns DROP FOREIGN KEY `$oldFk`");
+        }
+    } catch (\Throwable $e) {
+        // Non-fatal: logical referencing by customer_id still works.
+    }
+
+    // Link to main customers with ON DELETE CASCADE, if not already linked.
+    try {
+        $hasFk = $pdo->query("
+            SELECT COUNT(*)
+            FROM information_schema.KEY_COLUMN_USAGE
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = 'accessory_customer_txns'
+              AND REFERENCED_TABLE_NAME = 'customers'
+        ")->fetchColumn();
+        if ((int)$hasFk === 0) {
+            $pdo->exec("
+                ALTER TABLE accessory_customer_txns
+                ADD CONSTRAINT fk_acc_cust_txn_main
+                FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+            ");
+        }
+    } catch (\Throwable $e) {
+        // Non-fatal: keep logical referencing even if the FK can't be added.
+    }
 }
 
 /**

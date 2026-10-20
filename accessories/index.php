@@ -149,17 +149,17 @@ $summary = [
     'amount' => array_sum(array_map(fn($o) => (float)$o['remaining_amount'], $owners)),
 ];
 
-// ── Accessory Customers (separate module) shown here as a quick list ──
+// ── Accessory Customers quick list: registered customers who have accessory bills ──
 $accCustomers = $pdo->query("
-    SELECT c.*,
+    SELECT c.id, c.name, c.phone, c.shop_name,
            COUNT(t.id) AS txn_count,
            COALESCE(SUM(t.cloth_weight), 0)  AS total_cloth,
            COALESCE(SUM(t.demand_weight), 0) AS total_demand,
            MAX(COALESCE(t.txn_date, DATE(t.created_at))) AS last_txn_date
-    FROM accessory_customers c
-    LEFT JOIN accessory_customer_txns t ON t.customer_id = c.id
+    FROM customers c
+    JOIN accessory_customer_txns t ON t.customer_id = c.id
     GROUP BY c.id
-    ORDER BY c.created_at DESC, c.name ASC
+    ORDER BY last_txn_date DESC, c.name ASC
 ")->fetchAll();
 
 $formToken = generateFormToken('accessory_owner');
@@ -302,7 +302,7 @@ require_once '../includes/header.php';
             <a href="/accessory-customers/index.php" class="btn btn-sm btn-outline-primary">
                 <i class="bi bi-box-arrow-up-right me-1"></i>Open
             </a>
-            <a href="/accessory-customers/index.php" class="btn btn-sm btn-primary">
+            <a href="/customers/add.php" class="btn btn-sm btn-primary">
                 <i class="bi bi-person-plus me-1"></i>Add Customer
             </a>
         </div>
@@ -324,8 +324,8 @@ require_once '../includes/header.php';
                 <?php if (empty($accCustomers)): ?>
                 <tr>
                     <td colspan="7" class="text-center text-muted py-5">
-                        No accessory customers yet.
-                        <a href="/accessory-customers/index.php">Add the first customer</a> to start adding bills.
+                        No accessory bills recorded yet.
+                        <a href="/accessory-customers/index.php">Open the customers list</a> to start data entry.
                     </td>
                 </tr>
                 <?php else: ?>
@@ -339,8 +339,8 @@ require_once '../includes/header.php';
                             </div>
                             <div>
                                 <div class="fw-semibold"><?= htmlspecialchars($c['name']) ?></div>
-                                <?php if ($c['notes']): ?>
-                                <div class="text-muted small"><?= htmlspecialchars($c['notes']) ?></div>
+                                <?php if (!empty($c['shop_name'])): ?>
+                                <div class="text-muted small"><?= htmlspecialchars($c['shop_name']) ?></div>
                                 <?php endif; ?>
                             </div>
                         </div>
