@@ -42,6 +42,7 @@ $owners = $ownersStmt->fetchAll();
 
 $summary = [
     'owners'  => count($owners),
+    'bills'   => array_sum(array_map(fn($o) => (int)$o['txn_count'], $owners)),
     'tan'     => array_sum(array_map(fn($o) => (float)$o['total_tan'], $owners)),
     'demand'  => array_sum(array_map(fn($o) => (float)$o['total_demand'], $owners)),
 ];
@@ -63,7 +64,7 @@ require_once '../includes/header.php';
 <?= periodBar($pf, ['q' => $q]) ?>
 
 <div class="row g-3 mb-4">
-    <div class="col-12 col-lg-4">
+    <div class="col-6 col-lg-3">
         <div class="card border-0" style="background:rgba(244,114,182,0.12);">
             <div class="card-body">
                 <div class="text-muted small fw-semibold text-uppercase">Owners</div>
@@ -71,7 +72,15 @@ require_once '../includes/header.php';
             </div>
         </div>
     </div>
-    <div class="col-6 col-lg-4">
+    <div class="col-6 col-lg-3">
+        <div class="card border-0" style="background:rgba(251,146,60,0.14);">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold text-uppercase">Total Bills</div>
+                <div class="fs-4 fw-bold" style="color:#C2410C;"><?= number_format($summary['bills']) ?></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
         <div class="card border-0" style="background:rgba(34,211,238,0.12);">
             <div class="card-body">
                 <div class="text-muted small fw-semibold text-uppercase">Total Tan Quantity</div>
@@ -79,7 +88,7 @@ require_once '../includes/header.php';
             </div>
         </div>
     </div>
-    <div class="col-6 col-lg-4">
+    <div class="col-6 col-lg-3">
         <div class="card border-0" style="background:rgba(124,58,237,0.12);">
             <div class="card-body">
                 <div class="text-muted small fw-semibold text-uppercase">Total Demand Weight</div>
@@ -156,6 +165,19 @@ require_once '../includes/header.php';
                 <?php endforeach; ?>
                 <?php endif; ?>
             </tbody>
+            <?php if (!empty($owners)): ?>
+            <tfoot>
+                <tr class="table-light fw-bold">
+                    <td>Total</td>
+                    <td class="d-none d-md-table-cell"></td>
+                    <td class="text-end"><?= number_format($summary['bills']) ?></td>
+                    <td class="text-end"><?= number_format($summary['tan'], 2) ?></td>
+                    <td class="text-end" style="color:#7C3AED;"><?= number_format($summary['demand'], 2) ?></td>
+                    <td class="d-none d-lg-table-cell"></td>
+                    <td></td>
+                </tr>
+            </tfoot>
+            <?php endif; ?>
         </table>
     </div>
 </div>
