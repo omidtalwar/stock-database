@@ -153,7 +153,7 @@ $summary = [
 $accCustomers = $pdo->query("
     SELECT o.id, o.name, o.phone,
            COUNT(t.id) AS txn_count,
-           COALESCE(SUM(t.cloth_weight), 0)  AS total_cloth,
+           COALESCE(SUM(t.tan_quantity), 0)  AS total_tan,
            COALESCE(SUM(t.demand_weight), 0) AS total_demand,
            MAX(COALESCE(t.txn_date, DATE(t.created_at))) AS last_txn_date
     FROM accessory_owners o
@@ -311,7 +311,7 @@ require_once '../includes/header.php';
                     <th>Owner</th>
                     <th class="d-none d-md-table-cell">Phone</th>
                     <th class="text-end">Bills</th>
-                    <th class="text-end">Cloth Wt</th>
+                    <th class="text-end">Tan Qty</th>
                     <th class="text-end">Demand Wt</th>
                     <th class="d-none d-lg-table-cell">Last Bill</th>
                     <th></th>
@@ -339,7 +339,7 @@ require_once '../includes/header.php';
                     </td>
                     <td class="d-none d-md-table-cell"><?= htmlspecialchars($c['phone'] ?? '') ?></td>
                     <td class="text-end"><?= number_format((int)$c['txn_count']) ?></td>
-                    <td class="text-end fw-semibold"><?= number_format((float)$c['total_cloth'], 2) ?></td>
+                    <td class="text-end fw-semibold"><?= number_format((float)$c['total_tan'], 2) ?></td>
                     <td class="text-end fw-semibold" style="color:#7C3AED;"><?= number_format((float)$c['total_demand'], 2) ?></td>
                     <td class="d-none d-lg-table-cell text-muted small">
                         <?= $c['last_txn_date'] ? htmlspecialchars(accCustShamsiDate($c['last_txn_date'])) : '-' ?>

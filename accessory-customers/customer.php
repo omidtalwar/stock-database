@@ -51,23 +51,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $billNo       = trim($_POST['bill_no'] ?? '') ?: null;
     $itemName     = trim($_POST['item_name'] ?? '');
-    $clothWeight  = accCustDecimalOrNull($_POST['cloth_weight'] ?? null);
+    $tanQty       = accCustDecimalOrNull($_POST['tan_quantity'] ?? null);
     $demandWeight = accCustDecimalOrNull($_POST['demand_weight'] ?? null);
     $notes        = trim($_POST['notes'] ?? '') ?: null;
 
+    $photo = accessorySaveSinglePhoto('bill_photo');   // reused from accessories/helpers.php
+
     if ($itemName === '') {
         $_SESSION['error'] = 'Item name is required.';
+    } elseif ($photo['error'] !== null) {
+        $_SESSION['error'] = $photo['error'];
     } else {
         $stmt = $pdo->prepare("
             INSERT INTO accessory_customer_txns
-                (customer_id, txn_date, bill_no, item_name, cloth_weight, demand_weight, notes, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (customer_id, txn_date, bill_no, item_name, tan_quantity, demand_weight, bill_photo, notes, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
-        $stmt->execute([$id, $date, $billNo, $itemName, $clothWeight, $demandWeight, $notes, $_SESSION['user_id'] ?? null]);
+        $stmt->execute([$id, $date, $billNo, $itemName, $tanQty, $demandWeight, $photo['file'], $notes, $_SESSION['user_id'] ?? null]);
         tgNotify("🧾 <b>Accessory bill added</b>\nCustomer: " . tgEsc($customer['name'])
             . "\nItem: " . tgEsc($itemName)
             . ($billNo ? "\nBill: " . tgEsc($billNo) : '')
-            . ($clothWeight !== null ? "\nCloth: <b>" . number_format($clothWeight, 2) . "</b>" : '')
+            . ($tanQty !== null ? "\nTan Qty: <b>" . number_format($tanQty, 2) . "</b>" : '')
             . ($demandWeight !== null ? "\nDemand: <b>" . number_format($demandWeight, 2) . "</b>" : '')
             . "\nBy: " . tgActor(), 'acc_customer');
         $_SESSION['success'] = 'Transaction saved.';
@@ -91,7 +95,7 @@ $txns = $txnStmt->fetchAll();
 
 $totals = [
     'count'  => count($txns),
-    'cloth'  => array_sum(array_map(fn($t) => (float)$t['cloth_weight'], $txns)),
+    'tan'    => array_sum(array_map(fn($t) => (float)$t['tan_quantity'], $txns)),
     'demand' => array_sum(array_map(fn($t) => (float)$t['demand_weight'], $txns)),
 ];
 
@@ -134,8 +138,8 @@ require_once '../includes/header.php';
     <div class="col-4">
         <div class="card border-0" style="background:rgba(34,211,238,0.12);">
             <div class="card-body">
-                <div class="text-muted small fw-semibold text-uppercase">Cloth Weight</div>
-                <div class="fs-4 fw-bold" style="color:#0E7490;"><?= number_format($totals['cloth'], 2) ?></div>
+                <div class="text-muted small fw-semibold text-uppercase">Tan Quantity</div>
+                <div class="fs-4 fw-bold" style="color:#0E7490;"><?= number_format($totals['tan'], 2) ?></div>
             </div>
         </div>
     </div>
@@ -161,8 +165,9 @@ require_once '../includes/header.php';
                     <th>تاریخ / Date</th>
                     <th>بل / Bill No</th>
                     <th>جنس / Item Name</th>
-                    <th class="text-end">Cloth Weight</th>
+                    <th class="text-end">Tan Quantity</th>
                     <th class="text-end">Demand Weight</th>
+                    <th>Bill Image</th>
                     <th class="d-none d-md-table-cell">Note</th>
                     <th></th>
                 </tr>
@@ -170,7 +175,7 @@ require_once '../includes/header.php';
             <tbody>
                 <?php if (empty($txns)): ?>
                 <tr>
-                    <td colspan="7" class="text-center text-muted py-5">No bills yet. Add the first bill for this customer.</td>
+                    <td colspan="8" class="text-center text-muted py-5">No bills yet. Add the first bill for this customer.</td>
                 </tr>
                 <?php else: ?>
                 <?php foreach ($txns as $t): ?>
@@ -178,8 +183,15 @@ require_once '../includes/header.php';
                     <td class="text-muted small"><?= htmlspecialchars(accCustShamsiDate($t['txn_date'])) ?></td>
                     <td><?= htmlspecialchars($t['bill_no'] ?? '') ?: '—' ?></td>
                     <td class="fw-semibold"><?= htmlspecialchars($t['item_name']) ?></td>
-                    <td class="text-end"><?= $t['cloth_weight'] !== null ? number_format((float)$t['cloth_weight'], 2) : '-' ?></td>
+                    <td class="text-end"><?= $t['tan_quantity'] !== null ? number_format((float)$t['tan_quantity'], 2) : '-' ?></td>
                     <td class="text-end" style="color:#7C3AED;"><?= $t['demand_weight'] !== null ? number_format((float)$t['demand_weight'], 2) : '-' ?></td>
+                    <td>
+                        <?php if (!empty($t['bill_photo'])): ?>
+                        <a href="/uploads/accessory-bills/<?= htmlspecialchars($t['bill_photo']) ?>" target="_blank" title="View bill image">
+                            <img src="/uploads/accessory-bills/<?= htmlspecialchars($t['bill_photo']) ?>" alt="bill" style="height:34px;width:34px;object-fit:cover;border-radius:6px;border:1px solid rgba(0,0,0,.1);">
+                        </a>
+                        <?php else: ?><span class="text-muted">-</span><?php endif; ?>
+                    </td>
                     <td class="d-none d-md-table-cell text-muted small"><?= htmlspecialchars($t['notes'] ?? '') ?></td>
                     <td class="text-end">
                         <form method="POST" class="d-inline" onsubmit="return confirm('Delete this bill? This cannot be undone.');">
@@ -197,9 +209,9 @@ require_once '../includes/header.php';
             <tfoot>
                 <tr class="table-light fw-bold">
                     <td colspan="3" class="text-end">ټول / Total</td>
-                    <td class="text-end"><?= number_format($totals['cloth'], 2) ?></td>
+                    <td class="text-end"><?= number_format($totals['tan'], 2) ?></td>
                     <td class="text-end" style="color:#7C3AED;"><?= number_format($totals['demand'], 2) ?></td>
-                    <td colspan="2"></td>
+                    <td colspan="3"></td>
                 </tr>
             </tfoot>
             <?php endif; ?>
@@ -209,7 +221,7 @@ require_once '../includes/header.php';
 
 <div class="modal fade" id="txnModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
-        <form method="POST" class="modal-content">
+        <form method="POST" enctype="multipart/form-data" class="modal-content">
             <input type="hidden" name="_form_token" value="<?= htmlspecialchars($formToken) ?>">
             <div class="modal-header">
                 <h5 class="modal-title">Add Bill — <?= htmlspecialchars($customer['name']) ?></h5>
@@ -226,12 +238,20 @@ require_once '../includes/header.php';
                         <input type="text" name="bill_no" class="form-control" placeholder="Bill #">
                     </div>
                     <div class="col-6">
-                        <label class="form-label fw-semibold">Cloth Weight</label>
-                        <input type="number" step="0.01" min="0" name="cloth_weight" class="form-control">
+                        <label class="form-label fw-semibold">Tan Quantity</label>
+                        <input type="number" step="any" min="0" name="tan_quantity" class="form-control" placeholder="e.g. 12.5">
                     </div>
                     <div class="col-6">
                         <label class="form-label fw-semibold">Demand Weight</label>
-                        <input type="number" step="0.01" min="0" name="demand_weight" class="form-control">
+                        <input type="number" step="any" min="0" name="demand_weight" class="form-control">
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold"><i class="bi bi-image me-1 text-primary"></i>Bill Image</label>
+                    <input type="file" name="bill_photo" id="txnPhoto" accept="image/*" class="form-control">
+                    <div id="txnPhotoPreview" class="mt-2 text-center" style="display:none;">
+                        <img src="" alt="preview" style="max-height:160px;max-width:100%;border-radius:8px;border:1px solid rgba(0,0,0,.1);">
+                        <div><button type="button" id="txnPhotoClear" class="btn btn-sm btn-link text-danger p-0 mt-1">Remove image</button></div>
                     </div>
                 </div>
                 <div class="mb-3">
@@ -305,6 +325,28 @@ function syncTxnShamsi() {
         '≡ ' + g.y + '/' + String(g.m).padStart(2,'0') + '/' + String(g.d).padStart(2,'0') + ' (Gregorian)';
 }
 syncTxnShamsi();
+
+(function () {
+    const input   = document.getElementById('txnPhoto');
+    const preview = document.getElementById('txnPhotoPreview');
+    const img     = preview ? preview.querySelector('img') : null;
+    const clear   = document.getElementById('txnPhotoClear');
+    if (!input || !preview || !img) return;
+
+    input.addEventListener('change', function () {
+        const file = input.files && input.files[0];
+        if (!file || !file.type.startsWith('image/')) { preview.style.display = 'none'; img.src = ''; return; }
+        const reader = new FileReader();
+        reader.onload = e => { img.src = e.target.result; preview.style.display = ''; };
+        reader.readAsDataURL(file);
+    });
+
+    clear?.addEventListener('click', function () {
+        input.value = '';
+        img.src = '';
+        preview.style.display = 'none';
+    });
+})();
 </script>
 
 <?php require_once '../includes/footer.php'; ?>

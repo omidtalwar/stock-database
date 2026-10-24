@@ -28,7 +28,7 @@ $condT = periodCond("COALESCE(t.txn_date, DATE(t.created_at))", $pf); // accesso
 $ownersStmt = $pdo->prepare("
     SELECT o.id, o.name, o.phone,
            COUNT(t.id) AS txn_count,
-           COALESCE(SUM(t.cloth_weight), 0)  AS total_cloth,
+           COALESCE(SUM(t.tan_quantity), 0)  AS total_tan,
            COALESCE(SUM(t.demand_weight), 0) AS total_demand,
            MAX(COALESCE(t.txn_date, DATE(t.created_at))) AS last_txn_date
     FROM accessory_owners o
@@ -42,7 +42,7 @@ $owners = $ownersStmt->fetchAll();
 
 $summary = [
     'owners'  => count($owners),
-    'cloth'   => array_sum(array_map(fn($o) => (float)$o['total_cloth'], $owners)),
+    'tan'     => array_sum(array_map(fn($o) => (float)$o['total_tan'], $owners)),
     'demand'  => array_sum(array_map(fn($o) => (float)$o['total_demand'], $owners)),
 ];
 
@@ -74,8 +74,8 @@ require_once '../includes/header.php';
     <div class="col-6 col-lg-4">
         <div class="card border-0" style="background:rgba(34,211,238,0.12);">
             <div class="card-body">
-                <div class="text-muted small fw-semibold text-uppercase">Total Cloth Weight</div>
-                <div class="fs-4 fw-bold" style="color:#0E7490;"><?= number_format($summary['cloth'], 2) ?></div>
+                <div class="text-muted small fw-semibold text-uppercase">Total Tan Quantity</div>
+                <div class="fs-4 fw-bold" style="color:#0E7490;"><?= number_format($summary['tan'], 2) ?></div>
             </div>
         </div>
     </div>
@@ -111,7 +111,7 @@ require_once '../includes/header.php';
                     <th>Owner</th>
                     <th class="d-none d-md-table-cell">Phone</th>
                     <th class="text-end">Bills</th>
-                    <th class="text-end">Cloth Wt</th>
+                    <th class="text-end">Tan Qty</th>
                     <th class="text-end">Demand Wt</th>
                     <th class="d-none d-lg-table-cell">Last Bill</th>
                     <th><?= __('field_actions') ?></th>
@@ -142,7 +142,7 @@ require_once '../includes/header.php';
                     </td>
                     <td class="d-none d-md-table-cell"><?= htmlspecialchars($owner['phone'] ?? '') ?></td>
                     <td class="text-end"><?= number_format((int)$owner['txn_count']) ?></td>
-                    <td class="text-end fw-semibold"><?= number_format((float)$owner['total_cloth'], 2) ?></td>
+                    <td class="text-end fw-semibold"><?= number_format((float)$owner['total_tan'], 2) ?></td>
                     <td class="text-end fw-semibold" style="color:#7C3AED;"><?= number_format((float)$owner['total_demand'], 2) ?></td>
                     <td class="d-none d-lg-table-cell text-muted small">
                         <?= $owner['last_txn_date'] ? htmlspecialchars(accCustShamsiDate($owner['last_txn_date'])) : '-' ?>
