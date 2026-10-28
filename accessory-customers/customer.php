@@ -93,6 +93,32 @@ $txnStmt = $pdo->prepare("
 $txnStmt->execute([$id]);
 $txns = $txnStmt->fetchAll();
 
+// Cross-link: which of these bill numbers also exist as bills in the Accessories
+// owner system (accessory_stock_entries)? Matched ones are highlighted green and
+// link to where they were entered.
+$linkedBills = [];
+$billNos = array_values(array_unique(array_filter(
+    array_map(fn($t) => trim((string)$t['bill_no']), $txns),
+    fn($b) => $b !== ''
+)));
+if (!empty($billNos)) {
+    $ph = implode(',', array_fill(0, count($billNos), '?'));
+    $linkStmt = $pdo->prepare("
+        SELECT e.bill_no, o.id AS owner_id, o.name AS owner_name
+        FROM accessory_stock_entries e
+        JOIN accessory_owners o ON o.id = e.owner_id
+        WHERE TRIM(e.bill_no) IN ($ph)
+        ORDER BY e.id
+    ");
+    $linkStmt->execute($billNos);
+    foreach ($linkStmt->fetchAll() as $r) {
+        $key = trim((string)$r['bill_no']);
+        if (!isset($linkedBills[$key])) {
+            $linkedBills[$key] = ['owner_id' => (int)$r['owner_id'], 'owner_name' => $r['owner_name']];
+        }
+    }
+}
+
 $totals = [
     'count'  => count($txns),
     'tan'    => array_sum(array_map(fn($t) => (float)$t['tan_quantity'], $txns)),
@@ -181,7 +207,23 @@ require_once '../includes/header.php';
                 <?php foreach ($txns as $t): ?>
                 <tr>
                     <td class="text-muted small"><?= htmlspecialchars(accCustShamsiDate($t['txn_date'])) ?></td>
-                    <td><?= htmlspecialchars($t['bill_no'] ?? '') ?: '—' ?></td>
+                    <td>
+                        <?php
+                        $bn = trim((string)($t['bill_no'] ?? ''));
+                        if ($bn === ''):
+                            echo '—';
+                        elseif (isset($linkedBills[$bn])):
+                            $lk = $linkedBills[$bn];
+                        ?>
+                        <a href="/accessories/owner.php?id=<?= $lk['owner_id'] ?>" target="_blank" rel="noopener"
+                           class="text-success fw-bold text-decoration-none"
+                           title="Also in accessories bills — <?= htmlspecialchars($lk['owner_name']) ?>">
+                            <i class="bi bi-check-circle-fill me-1"></i><?= htmlspecialchars($bn) ?>
+                        </a>
+                        <?php else: ?>
+                        <?= htmlspecialchars($bn) ?>
+                        <?php endif; ?>
+                    </td>
                     <td class="fw-semibold"><?= htmlspecialchars($t['item_name']) ?></td>
                     <td class="text-end"><?= $t['tan_quantity'] !== null ? number_format((float)$t['tan_quantity'], 2) : '-' ?></td>
                     <td class="text-end" style="color:#7C3AED;"><?= $t['demand_weight'] !== null ? number_format((float)$t['demand_weight'], 2) : '-' ?></td>
