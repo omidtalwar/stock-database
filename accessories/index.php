@@ -133,14 +133,16 @@ $owners = $ownersStmt->fetchAll();
 // Remaining stock per owner = opening + added - issued, summed across the four categories,
 // minus tan quantity brought back on accessory customer bills.
 // Total Amount = bills + previous added; Remaining owed = Total Amount - paid.
-$returnedTan = accessoryReturnedTan($pdo, null, periodCond("d", $pf));
+// Columns shown: Opening + Added − Issued − Returned = Stock. "Added" is the
+// stock-in qty before returns (matched returns were deducted from stock-ins).
+$returnedTan = accessoryReturnedBreakdown($pdo, null, periodCond("d", $pf));
 foreach ($owners as &$o) {
-    $o['remaining'] =
-        ((float)$o['opening_original'] + (float)$o['added_original'] - (float)$o['issued_original']) +
-        ((float)$o['opening_coffee']   + (float)$o['added_coffee']   - (float)$o['issued_coffee']) +
-        ((float)$o['opening_pes']       + (float)$o['added_pes']       - (float)$o['issued_pes']) +
-        ((float)$o['opening_plastic']   + (float)$o['added_plastic']   - (float)$o['issued_plastic'])
-        - ($returnedTan[(int)$o['id']] ?? 0);
+    $ret = $returnedTan[(int)$o['id']] ?? ['linked' => 0, 'unlinked' => 0];
+    $o['col_opening']  = (float)$o['opening_original'] + (float)$o['opening_coffee'] + (float)$o['opening_pes'] + (float)$o['opening_plastic'];
+    $o['col_added']    = (float)$o['added_original'] + (float)$o['added_coffee'] + (float)$o['added_pes'] + (float)$o['added_plastic'] + $ret['linked'];
+    $o['col_issued']   = (float)$o['issued_original'] + (float)$o['issued_coffee'] + (float)$o['issued_pes'] + (float)$o['issued_plastic'];
+    $o['col_returned'] = $ret['linked'] + $ret['unlinked'];
+    $o['remaining']    = $o['col_opening'] + $o['col_added'] - $o['col_issued'] - $o['col_returned'];
     $o['total_amount'] = (float)$o['total_amount'] + (float)$o['pay_charged'];
     $o['remaining_amount'] = $o['total_amount'] - (float)$o['pay_paid'];
 }
@@ -233,7 +235,11 @@ require_once '../includes/header.php';
                     <th>Owner</th>
                     <th class="d-none d-md-table-cell">Phone</th>
                     <th class="text-end">Entries</th>
-                    <th class="text-end">Stock</th>
+                    <th class="text-end" title="Opening stock">Opening</th>
+                    <th class="text-end" title="Stock added (add-stock history)">+ Added</th>
+                    <th class="text-end" title="Issued on bills / entries">− Issued</th>
+                    <th class="text-end" title="Tan quantity brought back on accessory customer bills">− Tan Returned</th>
+                    <th class="text-end" title="Opening + Added − Issued − Tan Returned">= Stock</th>
                     <th class="text-end">Remaining ؋</th>
                     <th class="d-none d-lg-table-cell">Last Entry</th>
                     <th><?= __('field_actions') ?></th>
@@ -242,7 +248,7 @@ require_once '../includes/header.php';
             <tbody>
                 <?php if (empty($owners)): ?>
                 <tr>
-                    <td colspan="7" class="text-center text-muted py-5">
+                    <td colspan="11" class="text-center text-muted py-5">
                         <?php if ($q !== ''): ?>
                         No owners match "<?= htmlspecialchars($q) ?>".
                         <?php else: ?>
@@ -269,7 +275,17 @@ require_once '../includes/header.php';
                     </td>
                     <td class="d-none d-md-table-cell"><?= htmlspecialchars($owner['phone'] ?? '') ?></td>
                     <td class="text-end"><?= number_format((int)$owner['entry_count']) ?></td>
-                    <td class="text-end fw-semibold <?= $owner['remaining'] < 0 ? 'text-danger' : '' ?>"><?= number_format((float)$owner['remaining'], 2) ?></td>
+                    <td class="text-end text-muted"><?= number_format($owner['col_opening'], 2) ?></td>
+                    <td class="text-end text-primary"><?= number_format($owner['col_added'], 2) ?></td>
+                    <td class="text-end text-danger"><?= number_format($owner['col_issued'], 2) ?></td>
+                    <td class="text-end text-danger">
+                        <?php if ($owner['col_returned'] > 0): ?>
+                        <a href="/accessory-customers/customer.php?id=<?= $owner['id'] ?>" class="text-danger text-decoration-none" title="View accessory customer bills">
+                            <?= number_format($owner['col_returned'], 2) ?>
+                        </a>
+                        <?php else: ?>0.00<?php endif; ?>
+                    </td>
+                    <td class="text-end fw-bold <?= $owner['remaining'] < 0 ? 'text-danger' : 'text-success' ?>"><?= number_format((float)$owner['remaining'], 2) ?></td>
                     <td class="text-end fw-bold <?= $owner['remaining_amount'] < 0 ? 'text-danger' : 'text-success' ?>">؋ <?= number_format((float)$owner['remaining_amount'], 2) ?></td>
                     <td class="d-none d-lg-table-cell text-muted small">
                         <?= $owner['last_entry_date'] ? htmlspecialchars(accessoryShamsiDate($owner['last_entry_date'])) : '-' ?>

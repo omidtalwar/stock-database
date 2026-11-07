@@ -214,21 +214,68 @@ function accessoryAddColumnIfMissing(PDO $pdo, string $table, string $column, st
  * $cond is an optional SQL date condition on column `d`.
  */
 function accessoryReturnedTan(PDO $pdo, ?int $ownerId = null, string $cond = '1=1'): array {
+    return array_map(fn($r) => $r['unlinked'], accessoryReturnedBreakdown($pdo, $ownerId, $cond));
+}
+
+/**
+ * Returned tan per owner, split into:
+ *   linked   — already subtracted from a matching add-stock bill's quantity
+ *   unlinked — no matching add-stock bill; subtracted from total stock
+ * $cond is an optional SQL date condition on column `d`.
+ */
+function accessoryReturnedBreakdown(PDO $pdo, ?int $ownerId = null, string $cond = '1=1'): array {
     $out = [];
     try {
         $sql = "
-            SELECT customer_id, COALESCE(SUM(tan_quantity), 0) AS tan
-            FROM (SELECT customer_id, tan_quantity, stockin_id,
+            SELECT customer_id,
+                   COALESCE(SUM(CASE WHEN stockin_id IS NULL THEN tan_quantity ELSE 0 END), 0) AS unlinked,
+                   COALESCE(SUM(CASE WHEN stockin_id IS NOT NULL THEN stockin_deducted ELSE 0 END), 0) AS linked
+            FROM (SELECT customer_id, tan_quantity, stockin_id, stockin_deducted,
                          COALESCE(txn_date, DATE(created_at)) AS d
                   FROM accessory_customer_txns) t
-            WHERE stockin_id IS NULL AND tan_quantity IS NOT NULL AND ($cond)"
+            WHERE ($cond)"
             . ($ownerId !== null ? " AND customer_id = ?" : '') . "
             GROUP BY customer_id";
         $stmt = $pdo->prepare($sql);
         $stmt->execute($ownerId !== null ? [$ownerId] : []);
-        foreach ($stmt->fetchAll() as $r) $out[(int)$r['customer_id']] = (float)$r['tan'];
+        foreach ($stmt->fetchAll() as $r) {
+            $out[(int)$r['customer_id']] = ['unlinked' => (float)$r['unlinked'], 'linked' => (float)$r['linked']];
+        }
     } catch (\Throwable $e) {
         // accessory_customer_txns not created/migrated yet — nothing returned.
+    }
+    return $out;
+}
+
+/**
+ * All-time stock breakdown per owner:
+ *   opening, added (as originally added, before returns), issued,
+ *   returned (all tan brought back), stock = opening + added - issued - returned.
+ */
+function accessoryOwnerStock(PDO $pdo): array {
+    $out = [];
+    $rows = $pdo->query("
+        SELECT o.id,
+               (o.opening_original + o.opening_coffee + o.opening_pes + o.opening_plastic) AS opening,
+               COALESCE((SELECT SUM(quantity) FROM accessory_stock_ins si WHERE si.owner_id = o.id), 0) AS added,
+               COALESCE((SELECT SUM(COALESCE(original_size,0) + COALESCE(coffee_size,0) + COALESCE(pes_size,0) + COALESCE(plastic_size,0))
+                         FROM accessory_stock_entries e WHERE e.owner_id = o.id), 0) AS issued
+        FROM accessory_owners o
+    ")->fetchAll();
+    $ret = accessoryReturnedBreakdown($pdo);
+    foreach ($rows as $r) {
+        $id = (int)$r['id'];
+        $linked   = $ret[$id]['linked']   ?? 0;
+        $unlinked = $ret[$id]['unlinked'] ?? 0;
+        $added    = (float)$r['added'] + $linked;          // stock-in qty before returns
+        $returned = $linked + $unlinked;
+        $out[$id] = [
+            'opening'  => (float)$r['opening'],
+            'added'    => $added,
+            'issued'   => (float)$r['issued'],
+            'returned' => $returned,
+            'stock'    => (float)$r['opening'] + $added - (float)$r['issued'] - $returned,
+        ];
     }
     return $out;
 }
