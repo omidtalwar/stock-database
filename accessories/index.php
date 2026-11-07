@@ -166,6 +166,7 @@ $accCustomers = $pdo->query("
     GROUP BY o.id
     ORDER BY last_txn_date DESC, o.name ASC
 ")->fetchAll();
+$accDelivered = accessoryCustomerDelivered($pdo);
 
 $formToken = generateFormToken('accessory_owner');
 $deleteToken = generateFormToken('accessory_owner_delete');
@@ -330,7 +331,7 @@ require_once '../includes/header.php';
                     <th>Owner</th>
                     <th class="d-none d-md-table-cell">Phone</th>
                     <th class="text-end">Bills</th>
-                    <th class="text-end">Tan Qty</th>
+                    <th class="text-end" title="Tan quantity still with the customer (total − delivered back)">Tan Qty Left</th>
                     <th class="text-end">Demand Wt</th>
                     <th class="d-none d-lg-table-cell">Last Bill</th>
                     <th></th>
@@ -358,7 +359,13 @@ require_once '../includes/header.php';
                     </td>
                     <td class="d-none d-md-table-cell"><?= htmlspecialchars($c['phone'] ?? '') ?></td>
                     <td class="text-end"><?= number_format((int)$c['txn_count']) ?></td>
-                    <td class="text-end fw-semibold"><?= number_format((float)$c['total_tan'], 2) ?></td>
+                    <?php $cDel = $accDelivered[(int)$c['id']] ?? 0; $cLeft = (float)$c['total_tan'] - $cDel; ?>
+                    <td class="text-end fw-semibold" title="Total <?= number_format((float)$c['total_tan'], 2) ?> − Delivered <?= number_format($cDel, 2) ?>">
+                        <?= number_format($cLeft, 2) ?>
+                        <?php if ($cDel > 0): ?>
+                        <div class="small fw-normal text-muted">of <?= number_format((float)$c['total_tan'], 2) ?></div>
+                        <?php endif; ?>
+                    </td>
                     <td class="text-end fw-semibold" style="color:#7C3AED;"><?= number_format((float)$c['total_demand'], 2) ?></td>
                     <td class="d-none d-lg-table-cell text-muted small">
                         <?= $c['last_txn_date'] ? htmlspecialchars(accCustShamsiDate($c['last_txn_date'])) : '-' ?>

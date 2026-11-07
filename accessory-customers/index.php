@@ -40,6 +40,14 @@ $ownersStmt = $pdo->prepare("
 $ownersStmt->execute($params);
 $owners = $ownersStmt->fetchAll();
 
+// Tan Qty shown = total tan − delivered back (same bill-no rule as customer.php).
+$deliveredByOwner = accessoryCustomerDelivered($pdo, $condT);
+foreach ($owners as &$o) {
+    $o['delivered'] = $deliveredByOwner[(int)$o['id']] ?? 0;
+    $o['tan_left']  = (float)$o['total_tan'] - $o['delivered'];
+}
+unset($o);
+
 // Each owner's stock left in Accessories (all time), shown next to Tan Qty.
 $ownerStock = accessoryOwnerStock($pdo);
 
@@ -47,7 +55,8 @@ $summary = [
     'stock'   => array_sum(array_map(fn($o) => $ownerStock[(int)$o['id']]['stock'] ?? 0, $owners)),
     'owners'  => count($owners),
     'bills'   => array_sum(array_map(fn($o) => (int)$o['txn_count'], $owners)),
-    'tan'     => array_sum(array_map(fn($o) => (float)$o['total_tan'], $owners)),
+    'tan'     => array_sum(array_map(fn($o) => (float)$o['tan_left'], $owners)),
+    'tan_all' => array_sum(array_map(fn($o) => (float)$o['total_tan'], $owners)),
     'demand'  => array_sum(array_map(fn($o) => (float)$o['total_demand'], $owners)),
 ];
 
@@ -87,8 +96,11 @@ require_once '../includes/header.php';
     <div class="col-6 col-lg-3">
         <div class="card border-0" style="background:rgba(34,211,238,0.12);">
             <div class="card-body">
-                <div class="text-muted small fw-semibold text-uppercase">Total Tan Quantity</div>
+                <div class="text-muted small fw-semibold text-uppercase">Remaining Tan Quantity</div>
                 <div class="fs-4 fw-bold" style="color:#0E7490;"><?= number_format($summary['tan'], 2) ?></div>
+                <?php if ($summary['tan_all'] != $summary['tan']): ?>
+                <div class="text-muted small">of <?= number_format($summary['tan_all'], 2) ?> · <?= number_format($summary['tan_all'] - $summary['tan'], 2) ?> delivered</div>
+                <?php endif; ?>
             </div>
         </div>
     </div>
@@ -124,7 +136,7 @@ require_once '../includes/header.php';
                     <th>Owner</th>
                     <th class="d-none d-md-table-cell">Phone</th>
                     <th class="text-end">Bills</th>
-                    <th class="text-end">Tan Qty</th>
+                    <th class="text-end" title="Tan quantity still with the customer (total − delivered back)">Tan Qty Left</th>
                     <th class="text-end">Demand Wt</th>
                     <th class="text-end" title="Owner's stock left in Accessories (after tan returned)">Stock Left</th>
                     <th class="d-none d-lg-table-cell">Last Bill</th>
@@ -156,7 +168,13 @@ require_once '../includes/header.php';
                     </td>
                     <td class="d-none d-md-table-cell"><?= htmlspecialchars($owner['phone'] ?? '') ?></td>
                     <td class="text-end"><?= number_format((int)$owner['txn_count']) ?></td>
-                    <td class="text-end fw-semibold"><?= number_format((float)$owner['total_tan'], 2) ?></td>
+                    <td class="text-end fw-semibold <?= $owner['tan_left'] > 0.001 ? '' : ($owner['total_tan'] > 0 ? 'text-success' : '') ?>"
+                        title="Total <?= number_format((float)$owner['total_tan'], 2) ?> − Delivered <?= number_format($owner['delivered'], 2) ?>">
+                        <?= number_format($owner['tan_left'], 2) ?>
+                        <?php if ($owner['delivered'] > 0): ?>
+                        <div class="small fw-normal text-muted">of <?= number_format((float)$owner['total_tan'], 2) ?></div>
+                        <?php endif; ?>
+                    </td>
                     <td class="text-end fw-semibold" style="color:#7C3AED;"><?= number_format((float)$owner['total_demand'], 2) ?></td>
                     <?php $st = $ownerStock[(int)$owner['id']] ?? null; ?>
                     <td class="text-end">

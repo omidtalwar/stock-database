@@ -280,6 +280,33 @@ function accessoryOwnerStock(PDO $pdo): array {
     return $out;
 }
 
+/**
+ * Delivered back per owner: تعداد on the owner's Accessories bills whose bill no
+ * matches one of their accessory customer bills. $condT is an optional SQL date
+ * condition on the customer bills (alias t).
+ */
+function accessoryCustomerDelivered(PDO $pdo, string $condT = '1=1'): array {
+    $out = [];
+    try {
+        $rows = $pdo->query("
+            SELECT t.customer_id, SUM(e.qty) AS delivered
+            FROM (SELECT DISTINCT t.customer_id, TRIM(t.bill_no) AS bn
+                  FROM accessory_customer_txns t
+                  WHERE t.bill_no IS NOT NULL AND TRIM(t.bill_no) <> '' AND ($condT)) t
+            JOIN (SELECT owner_id, TRIM(bill_no) AS bn, SUM(quantity) AS qty
+                  FROM accessory_stock_entries
+                  WHERE bill_no IS NOT NULL
+                  GROUP BY owner_id, TRIM(bill_no)) e
+              ON e.owner_id = t.customer_id AND e.bn = t.bn
+            GROUP BY t.customer_id
+        ")->fetchAll();
+        foreach ($rows as $r) $out[(int)$r['customer_id']] = (float)$r['delivered'];
+    } catch (\Throwable $e) {
+        // accessory_customer_txns not created yet — nothing delivered.
+    }
+    return $out;
+}
+
 function decimalOrNull($value): ?float {
     $value = trim((string)$value);
     return $value === '' ? null : (float)$value;
