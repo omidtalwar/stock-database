@@ -533,16 +533,6 @@ require_once '../includes/header.php';
             </tbody>
         </table>
     </div>
-    <?php if ($returnedTanTotal > 0): ?>
-    <div class="card-footer d-flex flex-wrap justify-content-between gap-2 small">
-        <a href="/accessory-customers/customer.php?id=<?= $id ?>" class="text-decoration-none text-danger">
-            <i class="bi bi-arrow-return-left me-1"></i>Tan returned (accessory customer bills): −<?= number_format($returnedTanTotal, 2) ?>
-        </a>
-        <span class="fw-bold <?= $stockTotalRemaining < 0 ? 'text-danger' : 'text-success' ?>">
-            Total remaining: <?= number_format($stockTotalRemaining, 2) ?>
-        </span>
-    </div>
-    <?php endif; ?>
 </div>
 
 <?php foreach ($balances as $key => $b): ?>
