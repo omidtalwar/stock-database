@@ -258,6 +258,7 @@ $_bsIcons = 'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-
     --w11-text:       #1C1C1C;
     --w11-muted:      #605E5C;
     --w11-sidebar:    260px;
+    --w11-sidebar-w:  260px;
     --w11-green:      #107C10;
     --w11-red:        #C42B1C;
     --w11-amber:      #9D5D00;
@@ -283,69 +284,10 @@ body { font-family: 'Segoe UI Variable', 'Noto Naskh Arabic', 'Segoe UI', system
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 10px; }
 
-/* ── Sidebar ── */
-.sidebar {
-    width: var(--w11-sidebar); min-height: 100vh;
-    background: rgba(243,243,243,0.7);
-    backdrop-filter: blur(30px) saturate(200%);
-    -webkit-backdrop-filter: blur(30px) saturate(200%);
-    <?= isRTL() ? 'border-left' : 'border-right' ?>: 1px solid var(--w11-border);
-    display: flex; flex-direction: column;
-    position: fixed; top: 0; <?= $_side ?>: 0; z-index: 200;
-    transition: transform .25s ease;
-}
-.sidebar-brand {
-    padding: 20px 20px 14px;
-    display: flex; align-items: center; gap: 12px;
-    border-bottom: 1px solid var(--w11-border);
-}
-.brand-icon {
-    width: 36px; height: 36px;
-    background: linear-gradient(135deg, #0067C0, #003E92);
-    border-radius: 8px;
-    display: flex; align-items: center; justify-content: center;
-    color: #fff; font-weight: 900; font-size: 1rem; letter-spacing: 1px;
-    box-shadow: 0 2px 8px rgba(0,103,192,0.35); flex-shrink: 0;
-}
-.brand-name { font-weight: 700; font-size: 1rem; color: var(--w11-text); }
-.brand-sub  { font-size: 0.7rem; color: var(--w11-muted); }
-.sidebar-nav { flex: 1; padding: 8px 10px; overflow-y: auto; }
-.nav-section {
-    font-size: 0.68rem; font-weight: 600;
-    <?php if (!isRTL()): ?>text-transform: uppercase; letter-spacing: .8px;<?php endif; ?>
-    color: var(--w11-muted); padding: 12px 10px 4px;
-}
-.nav-item {
-    display: flex; align-items: center; gap: 10px;
-    padding: 8px 10px; border-radius: var(--w11-radius-sm);
-    color: var(--w11-text); text-decoration: none; font-size: 0.875rem;
-    transition: background .15s ease, color .15s ease; margin-bottom: 1px;
-}
-.nav-item i { width: 20px; font-size: 1rem; flex-shrink: 0; }
-.nav-item:hover { background: rgba(0,0,0,0.055); color: var(--w11-text); }
-.nav-item.active { background: var(--w11-blue-light); color: var(--w11-blue); font-weight: 600; }
-.nav-item.active i { color: var(--w11-blue); }
-.sidebar-footer {
-    padding: 12px 14px; border-top: 1px solid var(--w11-border);
-    display: flex; align-items: center; gap: 10px;
-}
-.avatar {
-    width: 32px; height: 32px; border-radius: 8px;
-    display: flex; align-items: center; justify-content: center;
-    font-weight: 700; font-size: 0.8rem; color: #fff; flex-shrink: 0;
-}
-.avatar-admin  { background: linear-gradient(135deg,#C42B1C,#8B1E14); }
-.avatar-assist { background: linear-gradient(135deg,#0067C0,#004A8F); }
-.footer-name   { font-weight: 600; font-size: 0.8rem; line-height: 1.2; }
-.footer-role   { font-size: 0.68rem; color: var(--w11-muted); }
-.logout-btn {
-    <?= $_ = isRTL() ? 'margin-right' : 'margin-left' ?>: auto;
-    width: 28px; height: 28px; border-radius: 6px;
-    background: transparent; border: none; color: var(--w11-muted);
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; transition: background .15s, color .15s; text-decoration: none; font-size: 1rem;
-}
-.logout-btn:hover { background: rgba(196,43,28,0.1); color: var(--w11-red); }
+<?php require __DIR__ . '/includes/sidebar-styles.php'; ?>
+/* Reminder count badge (this page has no Bootstrap CSS) */
+.sidebar .badge { display: inline-block; padding: .3em .6em; font-size: .7rem; font-weight: 700; line-height: 1; color: #fff; border-radius: 999px; }
+.sidebar .badge.bg-danger { background: #DC3545; }
 
 /* ── Main ── */
 .main { <?= $_ms ?>: var(--w11-sidebar); flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
@@ -597,7 +539,7 @@ body { font-family: 'Segoe UI Variable', 'Noto Naskh Arabic', 'Segoe UI', system
 
 @media (max-width: 768px) {
     .sidebar { transform: translateX(<?= isRTL() ? '100%' : '-100%' ?>); }
-    .sidebar.open { transform: translateX(0); }
+    .sidebar.open { transform: translateX(0); box-shadow: <?= isRTL() ? '-4px' : '4px' ?> 0 32px rgba(0,0,0,0.45); }
     .main { <?= $_ms ?>: 0; }
     .hamburger { display: flex; align-items: center; justify-content: center; }
     .bottom-grid { grid-template-columns: 1fr; }
@@ -721,61 +663,7 @@ body.pin-locked .debtor-debt .s { filter: blur(7px); user-select: none; pointer-
 </div>
 <?php endif; ?>
 
-<!-- ── Sidebar ── -->
-<aside class="sidebar" id="sidebar">
-    <div class="sidebar-brand">
-        <div class="brand-icon">FZL</div>
-        <div>
-            <div class="brand-name">FZL System FZL</div>
-            <div class="brand-sub"><?= __('management_system') ?></div>
-        </div>
-    </div>
-
-    <nav class="sidebar-nav">
-        <div class="nav-section"><?= __('nav_main') ?></div>
-        <a href="/dashboard.php" class="nav-item active">
-            <i class="bi bi-grid-1x2"></i> <?= __('nav_dashboard') ?>
-        </a>
-
-        <div class="nav-section"><?= __('nav_business') ?></div>
-        <a href="/customers/index.php" class="nav-item"><i class="bi bi-people"></i> <?= __('nav_customers') ?></a>
-        <?php require_once __DIR__ . '/includes/reminders.php'; $reminderCount = isset($pdo) ? overdueCount($pdo) : 0; ?>
-        <a href="/reminders/index.php" class="nav-item" style="display:flex;align-items:center;">
-            <i class="bi bi-bell"></i> Reminders
-            <?php if ($reminderCount > 0): ?><span class="badge bg-danger" style="margin-inline-start:auto;"><?= $reminderCount ?></span><?php endif; ?>
-        </a>
-        <a href="/summary/index.php"   class="nav-item"><i class="bi bi-clipboard-data"></i> <?= __('nav_summary') ?></a>
-        <?php /* Products hidden for now — re-enable by uncommenting:
-        <a href="/products/index.php"  class="nav-item"><i class="bi bi-box-seam"></i> <?= __('nav_products') ?></a>
-        */ ?>
-        <a href="/sales/index.php"     class="nav-item"><i class="bi bi-receipt"></i> <?= __('nav_sales') ?></a>
-        <a href="/payments/index.php"  class="nav-item"><i class="bi bi-cash-coin"></i> <?= __('nav_payments') ?></a>
-        <a href="/stock/index.php"     class="nav-item"><i class="bi bi-archive"></i> <?= __('nav_stock') ?></a>
-        <a href="/accessories/index.php" class="nav-item"><i class="bi bi-gem"></i> <?= __('nav_accessories') ?></a>
-        <a href="/wholesale/index.php" class="nav-item"><i class="bi bi-boxes"></i> <?= __('nav_wholesale') ?></a>
-        <a href="/warehouse/index.php" class="nav-item"><i class="bi bi-basket3"></i> <?= __('nav_warehouse') ?></a>
-
-        <?php if (isAdmin()): ?>
-        <div class="nav-section"><?= __('nav_admin') ?></div>
-        <a href="/admin/users.php"    class="nav-item"><i class="bi bi-person-gear"></i> <?= __('nav_users') ?></a>
-        <a href="/admin/reports.php"  class="nav-item"><i class="bi bi-bar-chart"></i> <?= __('nav_reports') ?></a>
-        <a href="/admin/settings.php" class="nav-item"><i class="bi bi-currency-exchange"></i> <?= __('nav_exchange') ?></a>
-        <?php endif; ?>
-    </nav>
-
-    <div class="sidebar-footer">
-        <div class="avatar <?= $user['role'] === 'admin' ? 'avatar-admin' : 'avatar-assist' ?>">
-            <?= strtoupper(substr($user['full_name'], 0, 1)) ?>
-        </div>
-        <div>
-            <div class="footer-name"><?= htmlspecialchars($user['full_name']) ?></div>
-            <div class="footer-role"><?= ucfirst($user['role']) ?></div>
-        </div>
-        <a href="/auth/logout.php" class="logout-btn" title="<?= __('sign_out') ?>">
-            <i class="bi bi-box-arrow-<?= isRTL() ? 'left' : 'right' ?>"></i>
-        </a>
-    </div>
-</aside>
+<?php require __DIR__ . '/includes/sidebar.php'; ?>
 
 <!-- ── Main ── -->
 <div class="main">

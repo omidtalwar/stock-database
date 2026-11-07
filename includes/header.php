@@ -10,10 +10,6 @@ $_bsCSS = isRTL()
     ? 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.rtl.min.css'
     : 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css';
 
-function navItem(string $href, string $icon, string $label, bool $active, string $clr = '#818CF8'): string {
-    $cls = $active ? 'nav-item active' : 'nav-item';
-    return "<a href=\"$href\" class=\"$cls\" style=\"--item-clr:{$clr}\"><i class=\"bi bi-$icon\"></i> $label</a>";
-}
 ?>
 <!DOCTYPE html>
 <html lang="<?= currentLang() ?>" dir="<?= $_dir ?>">
@@ -77,135 +73,7 @@ body { font-family: 'Segoe UI Variable', 'Noto Naskh Arabic', 'Segoe UI', system
 ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 10px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.28); }
 
-/* ── Sidebar ── */
-.sidebar {
-    width: var(--w11-sidebar-w);
-    height: 100vh;
-    position: fixed;
-    top: 0;
-    <?= isRTL() ? 'right' : 'left' ?>: 0;
-    background: linear-gradient(165deg, #0F0E17 0%, #1B1047 55%, #0D1B3E 100%);
-    <?= isRTL() ? 'border-left' : 'border-right' ?>: 1px solid rgba(255,255,255,0.07);
-    display: flex;
-    flex-direction: column;
-    z-index: 300;
-    transition: transform .25s ease;
-    overflow-y: auto;
-    overflow-x: hidden;
-}
-/* Animated rainbow top bar */
-.sidebar::before {
-    content: '';
-    display: block;
-    height: 3px;
-    flex-shrink: 0;
-    background: linear-gradient(90deg, #818CF8, #C084FC, #22D3EE, #4ADE80, #FB923C, #F87171, #818CF8);
-    background-size: 300% 100%;
-    animation: sidebarRainbow 5s linear infinite;
-}
-@keyframes sidebarRainbow {
-    0%   { background-position: 0% 50%; }
-    100% { background-position: 300% 50%; }
-}
-
-.sidebar-brand {
-    padding: 14px 18px 14px;
-    display: flex;
-    align-items: center;
-    gap: 11px;
-    border-bottom: 1px solid rgba(255,255,255,0.08);
-    flex-shrink: 0;
-}
-.brand-icon {
-    width: 36px; height: 36px;
-    background: linear-gradient(135deg, #818CF8 0%, #C084FC 100%);
-    border-radius: 8px;
-    display: flex; align-items: center; justify-content: center;
-    color: #fff; font-weight: 900; font-size: 0.95rem; letter-spacing: 1px;
-    box-shadow: 0 2px 12px rgba(129,140,248,0.55);
-    flex-shrink: 0;
-}
-.brand-name { font-weight: 700; font-size: 0.95rem; color: #fff; line-height: 1.2; }
-.brand-sub  { font-size: 0.68rem; color: rgba(255,255,255,0.42); }
-
-.sidebar-nav { flex: 1; padding: 8px 10px; }
-
-.nav-section {
-    font-size: 0.67rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: .8px;
-    color: rgba(255,255,255,0.28);
-    padding: 12px 10px 4px;
-}
-
-.nav-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 10px;
-    border-radius: var(--w11-radius-sm);
-    color: rgba(255,255,255,0.65);
-    text-decoration: none;
-    font-size: 0.875rem;
-    transition: background .15s ease, color .15s ease;
-    margin-bottom: 1px;
-    position: relative;
-}
-.nav-item i {
-    width: 20px; font-size: 1rem; flex-shrink: 0;
-    color: var(--item-clr, rgba(255,255,255,0.38));
-    transition: color .15s, transform .15s;
-}
-.nav-item:hover { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.95); }
-.nav-item:hover i { color: var(--item-clr, rgba(255,255,255,0.85)); transform: scale(1.12); }
-.nav-item.active {
-    background: rgba(255,255,255,0.08);
-    color: #fff;
-    font-weight: 600;
-}
-.nav-item.active::before {
-    content: '';
-    position: absolute;
-    left: 0; top: 18%; bottom: 18%;
-    width: 3px; border-radius: 0 2px 2px 0;
-    background: var(--item-clr, #818CF8);
-    box-shadow: 0 0 8px var(--item-clr, #818CF8);
-}
-[dir="rtl"] .nav-item.active::before { left: auto; right: 0; border-radius: 2px 0 0 2px; }
-.nav-item.active i {
-    color: var(--item-clr, #818CF8);
-    filter: drop-shadow(0 0 5px var(--item-clr));
-}
-
-.sidebar-footer {
-    padding: 12px 14px;
-    border-top: 1px solid rgba(255,255,255,0.08);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-shrink: 0;
-    background: rgba(0,0,0,0.18);
-}
-.s-avatar {
-    width: 32px; height: 32px; border-radius: 8px;
-    display: flex; align-items: center; justify-content: center;
-    font-weight: 800; font-size: 0.8rem; color: #fff; flex-shrink: 0;
-}
-.s-avatar.admin     { background: linear-gradient(135deg,#F87171,#C42B1C); box-shadow: 0 2px 8px rgba(248,113,113,0.4); }
-.s-avatar.assistant { background: linear-gradient(135deg,#60A5FA,#0067C0); box-shadow: 0 2px 8px rgba(96,165,250,0.4); }
-.s-name { font-weight: 600; font-size: 0.8rem; line-height: 1.2; color: rgba(255,255,255,0.88); }
-.s-role { font-size: 0.67rem; color: rgba(255,255,255,0.42); }
-.s-logout {
-    <?= isRTL() ? 'margin-right' : 'margin-left' ?>: auto;
-    width: 28px; height: 28px; border-radius: 6px;
-    background: transparent; border: none;
-    color: rgba(255,255,255,0.35);
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; text-decoration: none; font-size: 1rem;
-    transition: background .15s, color .15s;
-}
-.s-logout:hover { background: rgba(248,113,113,0.15); color: #F87171; }
+<?php require __DIR__ . '/sidebar-styles.php'; ?>
 
 /* ── Layout ── */
 .main-wrap {
@@ -447,62 +315,7 @@ if (!empty($_SESSION['error'])) {
 
 <div class="sidebar-overlay" id="overlay"></div>
 
-<!-- ── Sidebar ── -->
-<aside class="sidebar" id="sidebar">
-    <div class="sidebar-brand">
-        <div class="brand-icon">FZL</div>
-        <div>
-            <div class="brand-name">FZL System</div>
-            <div class="brand-sub"><?= __('management_system') ?></div>
-        </div>
-    </div>
-
-    <nav class="sidebar-nav">
-        <div class="nav-section"><?= __('nav_main') ?></div>
-        <?php if (isAdmin()): ?>
-        <?= navItem('/dashboard.php', 'grid-1x2', __('nav_dashboard'), $currentPage === 'dashboard', '#818CF8') ?>
-        <?php endif; ?>
-
-        <div class="nav-section"><?= __('nav_business') ?></div>
-        <?= navItem('/customers/index.php', 'people',      __('nav_customers'), $currentDir === 'customers', '#C084FC') ?>
-        <?php require_once __DIR__ . '/reminders.php'; $reminderCount = isset($pdo) ? overdueCount($pdo) : 0; ?>
-        <a href="/reminders/index.php" class="nav-item <?= $currentDir === 'reminders' ? 'active' : '' ?>" style="--item-clr:#F87171;display:flex;align-items:center;">
-            <i class="bi bi-bell"></i> Reminders
-            <?php if ($reminderCount > 0): ?><span class="badge bg-danger" style="margin-inline-start:auto;"><?= $reminderCount ?></span><?php endif; ?>
-        </a>
-        <?= navItem('/summary/index.php',   'clipboard-data', __('nav_summary'), $currentDir === 'summary',   '#38BDF8') ?>
-        <?php /* Products hidden for now — re-enable by uncommenting the line below:
-        <?= navItem('/products/index.php',  'box-seam',    __('nav_products'),  $currentDir === 'products',  '#34D399') ?>
-        */ ?>
-        <?= navItem('/sales/index.php',     'receipt',     __('nav_sales'),     $currentDir === 'sales',     '#FB923C') ?>
-        <?= navItem('/payments/index.php',  'cash-coin',   __('nav_payments'),  $currentDir === 'payments',  '#4ADE80') ?>
-        <?= navItem('/stock/index.php',     'archive',     __('nav_stock'),     $currentDir === 'stock',     '#22D3EE') ?>
-        <?= navItem('/accessories/index.php', 'gem',        __('nav_accessories'), $currentDir === 'accessories', '#A78BFA') ?>
-        <?= navItem('/accessory-customers/index.php', 'person-badge', __('nav_acc_customers'), $currentDir === 'accessory-customers', '#F472B6') ?>
-        <?= navItem('/wholesale/index.php', 'boxes',       __('nav_wholesale'), $currentDir === 'wholesale', '#14B8A6') ?>
-        <?= navItem('/warehouse/index.php', 'basket3',     __('nav_warehouse'), $currentDir === 'warehouse', '#6366F1') ?>
-
-        <?php if (isAdmin()): ?>
-        <div class="nav-section"><?= __('nav_admin') ?></div>
-        <?= navItem('/admin/users.php',    'person-gear',       __('nav_users'),    $currentDir === 'admin' && $currentPage === 'users',     '#F87171') ?>
-        <?= navItem('/admin/reports.php',  'bar-chart',         __('nav_reports'),  $currentDir === 'admin' && $currentPage === 'reports',   '#60A5FA') ?>
-        <?= navItem('/admin/settings.php', 'currency-exchange', __('nav_exchange'), $currentDir === 'admin' && $currentPage === 'settings',  '#FBBF24') ?>
-        <?php endif; ?>
-    </nav>
-
-    <div class="sidebar-footer">
-        <div class="s-avatar <?= $user['role'] ?>">
-            <?= strtoupper(substr($user['full_name'], 0, 1)) ?>
-        </div>
-        <div style="min-width:0;">
-            <div class="s-name text-truncate"><?= htmlspecialchars($user['full_name']) ?></div>
-            <div class="s-role"><?= ucfirst($user['role']) ?></div>
-        </div>
-        <a href="/auth/logout.php" class="s-logout" title="<?= __('sign_out') ?>">
-            <i class="bi bi-box-arrow-<?= isRTL() ? 'left' : 'right' ?>"></i>
-        </a>
-    </div>
-</aside>
+<?php require __DIR__ . '/sidebar.php'; ?>
 
 <!-- ── Main wrap ── -->
 <div class="main-wrap">
