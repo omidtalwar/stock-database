@@ -334,6 +334,24 @@ foreach ($stockInRowsStmt->fetchAll() as $row) {
     }
 }
 
+// Tan quantity returned through Accessory Customer bills, per stock-in row
+// (already subtracted from accessory_stock_ins.quantity).
+$returnedByStockIn = [];
+try {
+    $retStmt = $pdo->prepare("
+        SELECT stockin_id, SUM(stockin_deducted) AS returned
+        FROM accessory_customer_txns
+        WHERE customer_id = ? AND stockin_id IS NOT NULL
+        GROUP BY stockin_id
+    ");
+    $retStmt->execute([$id]);
+    foreach ($retStmt->fetchAll() as $row) {
+        $returnedByStockIn[(int)$row['stockin_id']] = (float)$row['returned'];
+    }
+} catch (\Throwable $e) {
+    // accessory_customer_txns not created/migrated yet — nothing returned.
+}
+
 // Per-category stock = opening + added - issued.
 $balances = [
     'original' => ['label' => 'اصلي چیکو', 'opening' => (float)$owner['opening_original'], 'issued' => $totals['original']],
@@ -529,7 +547,14 @@ require_once '../includes/header.php';
                             <tr>
                                 <td class="text-muted small"><?= htmlspecialchars(accessoryShamsiDate($si['in_date'])) ?></td>
                                 <td class="text-muted small"><?= htmlspecialchars($si['bill_no'] ?? '') ?: '-' ?></td>
-                                <td class="text-end fw-semibold text-primary">+<?= number_format((float)$si['quantity'], 2) ?></td>
+                                <td class="text-end fw-semibold text-primary">
+                                    +<?= number_format((float)$si['quantity'], 2) ?>
+                                    <?php if (!empty($returnedByStockIn[(int)$si['id']])): ?>
+                                    <div class="small fw-normal text-success" title="Returned via accessory customer bill">
+                                        <i class="bi bi-arrow-return-left"></i> −<?= number_format($returnedByStockIn[(int)$si['id']], 2) ?> returned
+                                    </div>
+                                    <?php endif; ?>
+                                </td>
                                 <td class="text-muted small"><?= htmlspecialchars($si['notes'] ?? '') ?></td>
                                 <td>
                                     <?php if (!empty($si['bill_photo'])): ?>

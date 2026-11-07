@@ -42,6 +42,12 @@ function ensureAccessoryCustomerTables(PDO $pdo): void {
     }
     accCustAddColumnIfMissing($pdo, 'accessory_customer_txns', 'bill_photo', "VARCHAR(255) NULL AFTER demand_weight");
 
+    // Returned items: the accessory_stock_ins row (same bill no) whose quantity
+    // was reduced by this bill's tan quantity, and how much was taken off, so
+    // deleting the bill can put it back.
+    accCustAddColumnIfMissing($pdo, 'accessory_customer_txns', 'stockin_id', "INT NULL AFTER bill_photo");
+    accCustAddColumnIfMissing($pdo, 'accessory_customer_txns', 'stockin_deducted', "DECIMAL(12,2) NULL AFTER stockin_id");
+
     // Drop any foreign key left over from earlier builds (which linked txns to
     // accessory_customers, then to the main customers table).
     try {

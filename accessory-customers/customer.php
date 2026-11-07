@@ -31,8 +31,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
     }
     $tid = (int)($_POST['txn_id'] ?? 0);
     if ($tid > 0) {
+        $pdo->beginTransaction();
+        $stmt = $pdo->prepare("SELECT stockin_id, stockin_deducted FROM accessory_customer_txns WHERE customer_id = ? AND id = ? FOR UPDATE");
+        $stmt->execute([$id, $tid]);
+        $old = $stmt->fetch();
+        // Put the returned tan quantity back on the matched add-stock bill.
+        if ($old && $old['stockin_id'] && (float)$old['stockin_deducted'] > 0) {
+            $stmt = $pdo->prepare("UPDATE accessory_stock_ins SET quantity = quantity + ? WHERE id = ? AND owner_id = ?");
+            $stmt->execute([(float)$old['stockin_deducted'], (int)$old['stockin_id'], $id]);
+        }
         $stmt = $pdo->prepare("DELETE FROM accessory_customer_txns WHERE customer_id = ? AND id = ?");
         $stmt->execute([$id, $tid]);
+        $pdo->commit();
         tgNotify("🗑 <b>Accessory bill deleted</b>\nCustomer: " . tgEsc($customer['name']) . "\nBy: " . tgActor(), 'acc_customer');
         $_SESSION['success'] = 'Transaction deleted.';
     }
@@ -62,19 +72,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($photo['error'] !== null) {
         $_SESSION['error'] = $photo['error'];
     } else {
+        $pdo->beginTransaction();
+
+        // Items coming back: if this bill no matches one of this owner's
+        // add-stock bills, take the tan quantity off that bill's quantity.
+        $stockIn = null;
+        if ($billNo !== null && $tanQty !== null && $tanQty > 0) {
+            $stmt = $pdo->prepare("
+                SELECT id, quantity FROM accessory_stock_ins
+                WHERE owner_id = ? AND TRIM(bill_no) = ?
+                ORDER BY (quantity >= ?) DESC, id DESC
+                LIMIT 1
+                FOR UPDATE
+            ");
+            $stmt->execute([$id, $billNo, $tanQty]);
+            $stockIn = $stmt->fetch() ?: null;
+        }
+
+        if ($stockIn && $tanQty > (float)$stockIn['quantity'] + 0.0001) {
+            $pdo->rollBack();
+            $_SESSION['error'] = 'Bill ' . $billNo . ' has only ' . number_format((float)$stockIn['quantity'], 2)
+                . ' left in add-stock history, but Tan Quantity is ' . number_format($tanQty, 2) . '. Nothing was saved.';
+            header('Location: customer.php?id=' . $id); exit;
+        }
+
+        if ($stockIn) {
+            $stmt = $pdo->prepare("UPDATE accessory_stock_ins SET quantity = quantity - ? WHERE id = ?");
+            $stmt->execute([$tanQty, (int)$stockIn['id']]);
+        }
+
         $stmt = $pdo->prepare("
             INSERT INTO accessory_customer_txns
-                (customer_id, txn_date, bill_no, item_name, tan_quantity, demand_weight, bill_photo, notes, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (customer_id, txn_date, bill_no, item_name, tan_quantity, demand_weight, bill_photo, stockin_id, stockin_deducted, notes, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
-        $stmt->execute([$id, $date, $billNo, $itemName, $tanQty, $demandWeight, $photo['file'], $notes, $_SESSION['user_id'] ?? null]);
+        $stmt->execute([$id, $date, $billNo, $itemName, $tanQty, $demandWeight, $photo['file'],
+            $stockIn ? (int)$stockIn['id'] : null, $stockIn ? $tanQty : null,
+            $notes, $_SESSION['user_id'] ?? null]);
+        $pdo->commit();
+
+        $leftAfter = $stockIn ? (float)$stockIn['quantity'] - $tanQty : null;
         tgNotify("🧾 <b>Accessory bill added</b>\nCustomer: " . tgEsc($customer['name'])
             . "\nItem: " . tgEsc($itemName)
             . ($billNo ? "\nBill: " . tgEsc($billNo) : '')
             . ($tanQty !== null ? "\nTan Qty: <b>" . number_format($tanQty, 2) . "</b>" : '')
             . ($demandWeight !== null ? "\nDemand: <b>" . number_format($demandWeight, 2) . "</b>" : '')
+            . ($stockIn ? "\nAdd-stock bill left: <b>" . number_format($leftAfter, 2) . "</b>" : '')
             . "\nBy: " . tgActor(), 'acc_customer');
-        $_SESSION['success'] = 'Transaction saved.';
+        $_SESSION['success'] = $stockIn
+            ? 'Transaction saved. ' . number_format($tanQty, 2) . ' taken off add-stock bill ' . $billNo
+                . ' (' . number_format($leftAfter, 2) . ' left).'
+            : 'Transaction saved.';
         header('Location: customer.php?id=' . $id); exit;
     }
     header('Location: customer.php?id=' . $id); exit;
@@ -111,7 +159,15 @@ if (!empty($billNos)) {
         ORDER BY e.id
     ");
     $linkStmt->execute($billNos);
-    foreach ($linkStmt->fetchAll() as $r) {
+    $linkRows = $linkStmt->fetchAll();
+    // Also this owner's add-stock bills (where returned tan quantity is deducted).
+    $siStmt = $pdo->prepare("
+        SELECT bill_no, owner_id, ? AS owner_name FROM accessory_stock_ins
+        WHERE owner_id = ? AND TRIM(bill_no) IN ($ph)
+    ");
+    $siStmt->execute(array_merge([$customer['name'], $id], $billNos));
+    $linkRows = array_merge($siStmt->fetchAll(), $linkRows);
+    foreach ($linkRows as $r) {
         $key = trim((string)$r['bill_no']);
         if (!isset($linkedBills[$key])) {
             $linkedBills[$key] = ['owner_id' => (int)$r['owner_id'], 'owner_name' => $r['owner_name']];
@@ -225,7 +281,12 @@ require_once '../includes/header.php';
                         <?php endif; ?>
                     </td>
                     <td class="fw-semibold"><?= htmlspecialchars($t['item_name']) ?></td>
-                    <td class="text-end"><?= $t['tan_quantity'] !== null ? number_format((float)$t['tan_quantity'], 2) : '-' ?></td>
+                    <td class="text-end">
+                        <?= $t['tan_quantity'] !== null ? number_format((float)$t['tan_quantity'], 2) : '-' ?>
+                        <?php if (!empty($t['stockin_id'])): ?>
+                        <i class="bi bi-arrow-return-left text-success ms-1" title="Taken off add-stock bill <?= htmlspecialchars($t['bill_no'] ?? '') ?>"></i>
+                        <?php endif; ?>
+                    </td>
                     <td class="text-end" style="color:#7C3AED;"><?= $t['demand_weight'] !== null ? number_format((float)$t['demand_weight'], 2) : '-' ?></td>
                     <td>
                         <?php if (!empty($t['bill_photo'])): ?>
