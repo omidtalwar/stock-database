@@ -175,11 +175,50 @@ if (!empty($billNos)) {
     }
 }
 
+// Delivered back: bills entered on this owner's Accessories page (Add Bill)
+// with the same bill no. Their تعداد (quantity) is taken off the tan quantity
+// here. If several customer bills share a bill no, the oldest is filled first.
+$delivered = [];   // txn id => delivered qty
+if (!empty($billNos)) {
+    $dStmt = $pdo->prepare("
+        SELECT TRIM(bill_no) AS bn, SUM(quantity) AS qty
+        FROM accessory_stock_entries
+        WHERE owner_id = ? AND TRIM(bill_no) IN ($ph)
+        GROUP BY TRIM(bill_no)
+    ");
+    $dStmt->execute(array_merge([$id], $billNos));
+    $pool = [];
+    foreach ($dStmt->fetchAll() as $r) $pool[$r['bn']] = (float)$r['qty'];
+
+    if ($pool) {
+        $aStmt = $pdo->prepare("
+            SELECT id, TRIM(bill_no) AS bn, tan_quantity
+            FROM accessory_customer_txns
+            WHERE customer_id = ? AND TRIM(bill_no) IN ($ph)
+            ORDER BY COALESCE(txn_date, DATE(created_at)), id
+        ");
+        $aStmt->execute(array_merge([$id], $billNos));
+        $all = $aStmt->fetchAll();
+        $lastOf = [];
+        foreach ($all as $r) $lastOf[$r['bn']] = (int)$r['id'];
+        foreach ($all as $r) {
+            $left = $pool[$r['bn']] ?? 0;
+            if ($left <= 0) continue;
+            // The newest bill with this number takes any extra delivered qty.
+            $take = $lastOf[$r['bn']] === (int)$r['id'] ? $left : min($left, (float)$r['tan_quantity']);
+            $delivered[(int)$r['id']] = $take;
+            $pool[$r['bn']] = $left - $take;
+        }
+    }
+}
+
 $totals = [
-    'count'  => count($txns),
-    'tan'    => array_sum(array_map(fn($t) => (float)$t['tan_quantity'], $txns)),
-    'demand' => array_sum(array_map(fn($t) => (float)$t['demand_weight'], $txns)),
+    'count'     => count($txns),
+    'tan'       => array_sum(array_map(fn($t) => (float)$t['tan_quantity'], $txns)),
+    'delivered' => array_sum(array_map(fn($t) => $delivered[(int)$t['id']] ?? 0, $txns)),
+    'demand'    => array_sum(array_map(fn($t) => (float)$t['demand_weight'], $txns)),
 ];
+$totals['remaining'] = $totals['tan'] - $totals['delivered'];
 
 $todayShamsi  = accCustToShamsi((int)date('Y'), (int)date('n'), (int)date('j'));
 $jMonths      = accCustShamsiMonths();
@@ -233,6 +272,22 @@ require_once '../includes/header.php';
             </div>
         </div>
     </div>
+    <div class="col-6">
+        <div class="card border-0" style="background:rgba(16,124,16,0.10);">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold text-uppercase">Delivered back</div>
+                <div class="fs-4 fw-bold text-success"><?= number_format($totals['delivered'], 2) ?></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6">
+        <div class="card border-0" style="background:rgba(196,43,28,0.08);">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold text-uppercase">Remaining tan</div>
+                <div class="fs-4 fw-bold <?= $totals['remaining'] > 0 ? 'text-danger' : 'text-success' ?>"><?= number_format($totals['remaining'], 2) ?></div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <div class="card">
@@ -248,6 +303,9 @@ require_once '../includes/header.php';
                     <th>بل / Bill No</th>
                     <th>جنس / Item Name</th>
                     <th class="text-end">Tan Quantity</th>
+                    <th class="text-end" title="تعداد entered on the owner's Accessories bill with the same bill no">Delivered</th>
+                    <th class="text-end">Remaining</th>
+                    <th class="text-center">Status</th>
                     <th class="text-end">Demand Weight</th>
                     <th>Bill Image</th>
                     <th class="d-none d-md-table-cell">Note</th>
@@ -257,7 +315,7 @@ require_once '../includes/header.php';
             <tbody>
                 <?php if (empty($txns)): ?>
                 <tr>
-                    <td colspan="8" class="text-center text-muted py-5">No bills yet. Add the first bill for this customer.</td>
+                    <td colspan="11" class="text-center text-muted py-5">No bills yet. Add the first bill for this customer.</td>
                 </tr>
                 <?php else: ?>
                 <?php foreach ($txns as $t): ?>
@@ -287,6 +345,22 @@ require_once '../includes/header.php';
                         <i class="bi bi-arrow-return-left text-success ms-1" title="Taken off add-stock bill <?= htmlspecialchars($t['bill_no'] ?? '') ?>"></i>
                         <?php endif; ?>
                     </td>
+                    <?php
+                    $tTan  = (float)$t['tan_quantity'];
+                    $tDel  = $delivered[(int)$t['id']] ?? 0;
+                    $tLeft = $tTan - $tDel;
+                    ?>
+                    <td class="text-end text-success"><?= $tDel > 0 ? number_format($tDel, 2) : '-' ?></td>
+                    <td class="text-end fw-semibold <?= $tLeft > 0.001 ? 'text-danger' : 'text-success' ?>"><?= number_format($tLeft, 2) ?></td>
+                    <td class="text-center">
+                        <?php if ($tDel > 0 && $tLeft <= 0.001): ?>
+                        <span class="badge bg-success"><i class="bi bi-check2-square me-1"></i>Delivered</span>
+                        <?php elseif ($tDel > 0): ?>
+                        <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split me-1"></i>Partial</span>
+                        <?php else: ?>
+                        <span class="badge bg-light text-muted border"><i class="bi bi-square me-1"></i>Pending</span>
+                        <?php endif; ?>
+                    </td>
                     <td class="text-end" style="color:#7C3AED;"><?= $t['demand_weight'] !== null ? number_format((float)$t['demand_weight'], 2) : '-' ?></td>
                     <td>
                         <?php if (!empty($t['bill_photo'])): ?>
@@ -313,6 +387,9 @@ require_once '../includes/header.php';
                 <tr class="table-light fw-bold">
                     <td colspan="3" class="text-end">ټول / Total</td>
                     <td class="text-end"><?= number_format($totals['tan'], 2) ?></td>
+                    <td class="text-end text-success"><?= number_format($totals['delivered'], 2) ?></td>
+                    <td class="text-end <?= $totals['remaining'] > 0.001 ? 'text-danger' : 'text-success' ?>"><?= number_format($totals['remaining'], 2) ?></td>
+                    <td></td>
                     <td class="text-end" style="color:#7C3AED;"><?= number_format($totals['demand'], 2) ?></td>
                     <td colspan="3"></td>
                 </tr>

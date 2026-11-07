@@ -169,6 +169,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $rates = $_POST['rate'] ?? [];
     $notes = $_POST['notes'] ?? [];
 
+    // Returned items: if this bill no is an Accessory Customer bill for this
+    // owner, an empty جنس is filled with that bill's item name.
+    $custItemName = '';
+    if ($billNo !== null) {
+        try {
+            $stmt = $pdo->prepare("
+                SELECT item_name FROM accessory_customer_txns
+                WHERE customer_id = ? AND TRIM(bill_no) = ?
+                ORDER BY id DESC LIMIT 1
+            ");
+            $stmt->execute([$id, $billNo]);
+            $custItemName = (string)($stmt->fetchColumn() ?: '');
+        } catch (\Throwable $e) { /* accessory customer tables not set up yet */ }
+    }
+
     $rows = [];
     $rowCount = max(
         count($itemNames),
@@ -198,6 +213,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$hasAnyValue) {
             continue;
         }
+
+        if ($itemName === '' && $custItemName !== '') $itemName = $custItemName;
 
         if ($itemName === '' || $quantity <= 0) {
             $_SESSION['error'] = 'Every filled row needs quantity and item name.';
@@ -249,7 +266,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             . ($billNo ? "\nBill: " . tgEsc($billNo) : '')
             . ($billTotal > 0 ? "\nTotal: <b>؋ " . number_format($billTotal, 2) . "</b>" : '')
             . "\nBy: " . tgActor(), 'acc_bill');
-        $_SESSION['success'] = count($rows) . ' accessory row(s) saved.';
+        $_SESSION['success'] = count($rows) . ' accessory row(s) saved.'
+            . ($custItemName !== '' ? ' Bill ' . $billNo . ' marked as delivered back on the Accessory Customer page.' : '');
         header('Location: owner.php?id=' . $id); exit;
     }
 }
