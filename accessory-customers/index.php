@@ -48,11 +48,7 @@ foreach ($owners as &$o) {
 }
 unset($o);
 
-// Each owner's stock left in Accessories (all time), shown next to Tan Qty.
-$ownerStock = accessoryOwnerStock($pdo);
-
 $summary = [
-    'stock'   => array_sum(array_map(fn($o) => $ownerStock[(int)$o['id']]['stock'] ?? 0, $owners)),
     'owners'  => count($owners),
     'bills'   => array_sum(array_map(fn($o) => (int)$o['txn_count'], $owners)),
     'tan'     => array_sum(array_map(fn($o) => (float)$o['tan_left'], $owners)),
@@ -138,7 +134,6 @@ require_once '../includes/header.php';
                     <th class="text-end">Bills</th>
                     <th class="text-end" title="Tan quantity still with the customer (total − delivered back)">Tan Qty Left</th>
                     <th class="text-end">Demand Wt</th>
-                    <th class="text-end" title="Owner's stock left in Accessories (after tan returned)">Stock Left</th>
                     <th class="d-none d-lg-table-cell">Last Bill</th>
                     <th><?= __('field_actions') ?></th>
                 </tr>
@@ -146,7 +141,7 @@ require_once '../includes/header.php';
             <tbody>
                 <?php if (empty($owners)): ?>
                 <tr>
-                    <td colspan="8" class="text-center text-muted py-5">
+                    <td colspan="7" class="text-center text-muted py-5">
                         <?php if ($q !== ''): ?>
                         No owners match "<?= htmlspecialchars($q) ?>".
                         <?php else: ?>
@@ -176,15 +171,6 @@ require_once '../includes/header.php';
                         <?php endif; ?>
                     </td>
                     <td class="text-end fw-semibold" style="color:#7C3AED;"><?= number_format((float)$owner['total_demand'], 2) ?></td>
-                    <?php $st = $ownerStock[(int)$owner['id']] ?? null; ?>
-                    <td class="text-end">
-                        <?php if ($st): ?>
-                        <a href="/accessories/owner.php?id=<?= $owner['id'] ?>" class="fw-bold text-decoration-none <?= $st['stock'] < 0 ? 'text-danger' : 'text-success' ?>"
-                           title="Opening <?= number_format($st['opening'], 2) ?> + Added <?= number_format($st['added'], 2) ?> − Issued <?= number_format($st['issued'], 2) ?> − Tan returned <?= number_format($st['returned'], 2) ?>">
-                            <?= number_format($st['stock'], 2) ?>
-                        </a>
-                        <?php else: ?>-<?php endif; ?>
-                    </td>
                     <td class="d-none d-lg-table-cell text-muted small">
                         <?= $owner['last_txn_date'] ? htmlspecialchars(accCustShamsiDate($owner['last_txn_date'])) : '-' ?>
                     </td>
@@ -205,7 +191,6 @@ require_once '../includes/header.php';
                     <td class="text-end"><?= number_format($summary['bills']) ?></td>
                     <td class="text-end"><?= number_format($summary['tan'], 2) ?></td>
                     <td class="text-end" style="color:#7C3AED;"><?= number_format($summary['demand'], 2) ?></td>
-                    <td class="text-end text-success"><?= number_format($summary['stock'], 2) ?></td>
                     <td class="d-none d-lg-table-cell"></td>
                     <td></td>
                 </tr>
