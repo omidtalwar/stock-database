@@ -130,14 +130,17 @@ $ownersStmt = $pdo->prepare("
 $ownersStmt->execute($params);
 $owners = $ownersStmt->fetchAll();
 
-// Remaining stock per owner = opening + added - issued, summed across the four categories.
+// Remaining stock per owner = opening + added - issued, summed across the four categories,
+// minus tan quantity brought back on accessory customer bills.
 // Total Amount = bills + previous added; Remaining owed = Total Amount - paid.
+$returnedTan = accessoryReturnedTan($pdo, null, periodCond("d", $pf));
 foreach ($owners as &$o) {
     $o['remaining'] =
         ((float)$o['opening_original'] + (float)$o['added_original'] - (float)$o['issued_original']) +
         ((float)$o['opening_coffee']   + (float)$o['added_coffee']   - (float)$o['issued_coffee']) +
         ((float)$o['opening_pes']       + (float)$o['added_pes']       - (float)$o['issued_pes']) +
-        ((float)$o['opening_plastic']   + (float)$o['added_plastic']   - (float)$o['issued_plastic']);
+        ((float)$o['opening_plastic']   + (float)$o['added_plastic']   - (float)$o['issued_plastic'])
+        - ($returnedTan[(int)$o['id']] ?? 0);
     $o['total_amount'] = (float)$o['total_amount'] + (float)$o['pay_charged'];
     $o['remaining_amount'] = $o['total_amount'] - (float)$o['pay_paid'];
 }

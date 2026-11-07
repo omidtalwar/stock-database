@@ -207,6 +207,32 @@ function accessoryAddColumnIfMissing(PDO $pdo, string $table, string $column, st
     }
 }
 
+/**
+ * Tan quantity brought back on Accessory Customer bills that did NOT match an
+ * add-stock bill, per owner. (Matched ones were already subtracted from
+ * accessory_stock_ins.quantity.) This comes off the owner's remaining stock.
+ * $cond is an optional SQL date condition on column `d`.
+ */
+function accessoryReturnedTan(PDO $pdo, ?int $ownerId = null, string $cond = '1=1'): array {
+    $out = [];
+    try {
+        $sql = "
+            SELECT customer_id, COALESCE(SUM(tan_quantity), 0) AS tan
+            FROM (SELECT customer_id, tan_quantity, stockin_id,
+                         COALESCE(txn_date, DATE(created_at)) AS d
+                  FROM accessory_customer_txns) t
+            WHERE stockin_id IS NULL AND tan_quantity IS NOT NULL AND ($cond)"
+            . ($ownerId !== null ? " AND customer_id = ?" : '') . "
+            GROUP BY customer_id";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($ownerId !== null ? [$ownerId] : []);
+        foreach ($stmt->fetchAll() as $r) $out[(int)$r['customer_id']] = (float)$r['tan'];
+    } catch (\Throwable $e) {
+        // accessory_customer_txns not created/migrated yet — nothing returned.
+    }
+    return $out;
+}
+
 function decimalOrNull($value): ?float {
     $value = trim((string)$value);
     return $value === '' ? null : (float)$value;

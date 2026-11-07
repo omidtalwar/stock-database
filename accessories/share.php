@@ -184,6 +184,14 @@ tfoot td:first-child { text-align:left; }
                 <tr><td>Remaining</td><?php foreach ($balances as $b): ?><td class="<?= $b['remaining'] < 0 ? 'neg' : 'pos' ?>"><?= number_format($b['remaining'], 2) ?></td><?php endforeach; ?></tr>
             </tfoot>
         </table>
+        <?php $returnedTanTotal = accessoryReturnedTan($pdo, $id)[$id] ?? 0; ?>
+        <?php if ($returnedTanTotal > 0): ?>
+        <?php $stockTotalRemaining = array_sum(array_column($balances, 'remaining')) - $returnedTanTotal; ?>
+        <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-top:8px;font-size:.85rem;">
+            <span class="neg">Tan returned: −<?= number_format($returnedTanTotal, 2) ?></span>
+            <strong class="<?= $stockTotalRemaining < 0 ? 'neg' : 'pos' ?>">Total remaining: <?= number_format($stockTotalRemaining, 2) ?></strong>
+        </div>
+        <?php endif; ?>
     </div>
 
     <!-- Bills -->

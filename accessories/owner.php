@@ -365,6 +365,11 @@ foreach ($balances as $key => &$b) {
 }
 unset($b);
 
+// Tan brought back on accessory customer bills without a matching add-stock
+// bill — comes off the total stock (it has no category).
+$returnedTanTotal = accessoryReturnedTan($pdo, $id, periodCond("d", $pf))[$id] ?? 0;
+$stockTotalRemaining = array_sum(array_column($balances, 'remaining')) - $returnedTanTotal;
+
 $stockInToken = generateFormToken('accessory_stockin_' . $id);
 $todayShamsi  = accessoryToShamsi((int)date('Y'), (int)date('n'), (int)date('j'));
 $jMonths      = accessoryShamsiMonths();
@@ -510,6 +515,16 @@ require_once '../includes/header.php';
             </tbody>
         </table>
     </div>
+    <?php if ($returnedTanTotal > 0): ?>
+    <div class="card-footer d-flex flex-wrap justify-content-between gap-2 small">
+        <a href="/accessory-customers/customer.php?id=<?= $id ?>" class="text-decoration-none text-danger">
+            <i class="bi bi-arrow-return-left me-1"></i>Tan returned (accessory customer bills): −<?= number_format($returnedTanTotal, 2) ?>
+        </a>
+        <span class="fw-bold <?= $stockTotalRemaining < 0 ? 'text-danger' : 'text-success' ?>">
+            Total remaining: <?= number_format($stockTotalRemaining, 2) ?>
+        </span>
+    </div>
+    <?php endif; ?>
 </div>
 
 <?php foreach ($balances as $key => $b): ?>
